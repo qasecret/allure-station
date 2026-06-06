@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
-import type { TrendPoint } from "@allure-station/shared";
+import type { Run, TrendPoint } from "@allure-station/shared";
 import { api } from "../main.js";
 
 export function Project() {
@@ -17,14 +17,27 @@ export function Project() {
   const { data: runs = [] } = useQuery({
     queryKey: ["runs", id],
     queryFn: () => api.listRuns(id),
-    refetchInterval: (q) => (q.state.data?.some((r) => r.status === "generating") ? 1500 : false),
   });
 
   const { data: trends = [] } = useQuery({
     queryKey: ["trends", id],
     queryFn: () => api.listTrends(id),
-    refetchInterval: () => (runs.some((r) => r.status === "generating") ? 1500 : false),
   });
+
+  // Live updates over SSE replace polling: upsert the run on every lifecycle event,
+  // and refresh trends once a run reaches a terminal status.
+  useEffect(() => {
+    const unsub = api.subscribeRuns(id, (event) => {
+      qc.setQueryData<Run[]>(["runs", id], (prev = []) => {
+        const next = prev.filter((r) => r.id !== event.run.id);
+        return [event.run, ...next].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      });
+      if (event.run.status === "ready" || event.run.status === "failed") {
+        qc.invalidateQueries({ queryKey: ["trends", id] });
+      }
+    });
+    return unsub;
+  }, [id, qc]);
 
   const upload = useMutation({
     mutationFn: async () => {
