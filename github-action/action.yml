@@ -51,7 +51,10 @@ runs:
       run: |
         set -euo pipefail
         base="${URL%/}"
+        # Build auth args as an array; expand with the ${arr[@]+...} guard so an empty array is safe
+        # under `set -u` on older bash (<4.4 / macOS system bash) — the common open-project path.
         auth=(); [ -n "$TOKEN" ] && auth=(-H "Authorization: Bearer $TOKEN")
+        AUTH=("${auth[@]+"${auth[@]}"}")
 
         # Collect result files into curl -F args.
         shopt -s nullglob
@@ -60,21 +63,21 @@ runs:
         if [ ${#curlfiles[@]} -eq 0 ]; then echo "::error::no result files in $RESULTS"; exit 1; fi
 
         # Upload → stages a pending run; capture its id.
-        resp=$(curl -fsS "${auth[@]}" "${curlfiles[@]}" "$base/api/projects/$PROJECT/send-results")
+        resp=$(curl -fsS "${AUTH[@]+"${AUTH[@]}"}" "${curlfiles[@]}" "$base/api/projects/$PROJECT/send-results")
         run_id=$(echo "$resp" | jq -r .runId)
         echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
         report_url="$base/api/projects/$PROJECT/runs/$run_id/report/index.html"
         echo "report-url=$report_url" >> "$GITHUB_OUTPUT"
-        echo "Uploaded $(( ${#curlfiles[@]} )) file(s); run $run_id"
+        echo "Uploaded ${#curlfiles[@]} file(s); run $run_id"
 
-        # Trigger generation (fire-and-forget; returns 202 generating).
-        curl -fsS -X POST "${auth[@]}" "$base/api/projects/$PROJECT/generate" >/dev/null
+        # Generate THIS run specifically (?runId) so concurrent uploads don't claim each other's run.
+        curl -fsS -X POST "${AUTH[@]+"${AUTH[@]}"}" "$base/api/projects/$PROJECT/generate?runId=$run_id" >/dev/null
 
         status="generating"
         if [ "$WAIT" = "true" ]; then
           deadline=$(( $(date +%s) + TIMEOUT ))
           while :; do
-            status=$(curl -fsS "${auth[@]}" "$base/api/projects/$PROJECT/runs/$run_id" | jq -r .status)
+            status=$(curl -fsS "${AUTH[@]+"${AUTH[@]}"}" "$base/api/projects/$PROJECT/runs/$run_id" | jq -r .status)
             [ "$status" = "ready" ]  && { echo "✅ report ready: $report_url"; break; }
             [ "$status" = "failed" ] && { echo "::error::generation failed for run $run_id"; break; }
             if [ "$(date +%s)" -ge "$deadline" ]; then echo "::warning::timed out after ${TIMEOUT}s (status=$status)"; break; fi

@@ -46,22 +46,25 @@ publish-allure:
   before_script: [ "apk add --no-cache curl jq" ]
   script:
     - |
+      set -eu; shopt -s nullglob
       BASE="https://allure.example.com"; PROJECT="my-app"
-      AUTH="Authorization: Bearer $ALLURE_TOKEN"
+      AUTH="Authorization: Bearer $ALLURE_TOKEN"   # omit -H "$AUTH" entirely for an open project
       FILES=(); for f in allure-results/*; do FILES+=(-F "files=@$f"); done
       RUN=$(curl -fsS -H "$AUTH" "${FILES[@]}" "$BASE/api/projects/$PROJECT/send-results" | jq -r .runId)
-      curl -fsS -X POST -H "$AUTH" "$BASE/api/projects/$PROJECT/generate"
+      curl -fsS -X POST -H "$AUTH" "$BASE/api/projects/$PROJECT/generate?runId=$RUN"
       until [ "$(curl -fsS -H "$AUTH" "$BASE/api/projects/$PROJECT/runs/$RUN" | jq -r .status)" != "generating" ]; do sleep 3; done
 ```
 
 ### Jenkins (shell step)
 
 ```bash
-BASE="https://allure.example.com"; PROJECT="my-app"
-RUN=$(curl -fsS -H "Authorization: Bearer $ALLURE_TOKEN" $(printf ' -F files=@%s' allure-results/*) \
-  "$BASE/api/projects/$PROJECT/send-results" | jq -r .runId)
-curl -fsS -X POST -H "Authorization: Bearer $ALLURE_TOKEN" "$BASE/api/projects/$PROJECT/generate"
-while [ "$(curl -fsS -H "Authorization: Bearer $ALLURE_TOKEN" "$BASE/api/projects/$PROJECT/runs/$RUN" | jq -r .status)" = "generating" ]; do sleep 3; done
+set -eu; shopt -s nullglob
+BASE="https://allure.example.com"; PROJECT="my-app"; AUTH="Authorization: Bearer $ALLURE_TOKEN"
+FILES=(); for f in allure-results/*; do FILES+=(-F "files=@$f"); done
+[ ${#FILES[@]} -gt 0 ] || { echo "no results"; exit 1; }
+RUN=$(curl -fsS -H "$AUTH" "${FILES[@]}" "$BASE/api/projects/$PROJECT/send-results" | jq -r .runId)
+curl -fsS -X POST -H "$AUTH" "$BASE/api/projects/$PROJECT/generate?runId=$RUN"
+while [ "$(curl -fsS -H "$AUTH" "$BASE/api/projects/$PROJECT/runs/$RUN" | jq -r .status)" = "generating" ]; do sleep 3; done
 ```
 
 (Omit the `Authorization` header for open projects — see the [auth section](../README.md#authentication-scoped-api-tokens).)

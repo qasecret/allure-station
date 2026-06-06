@@ -160,6 +160,31 @@ describe("send-results + generate", () => {
     await app.close();
   });
 
+  it("POST /generate?runId targets a specific pending run (concurrency-safe)", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "tg" } });
+    // Two pending runs; older one is NOT the newest, so default would pick the newer.
+    await deps.runs.create("tg", "older", "R", "2026-06-06T00:00:01.000Z");
+    await deps.runs.create("tg", "newer", "R", "2026-06-06T00:00:02.000Z");
+
+    // Target the older run explicitly.
+    const gen = await app.inject({ method: "POST", url: "/api/projects/tg/generate?runId=older" });
+    expect(gen.statusCode).toBe(202);
+    expect(gen.json().id).toBe("older");
+    expect(gen.json().status).toBe("generating");
+
+    // Unknown run id → 404; a non-pending (now generating) run → 409.
+    expect((await app.inject({ method: "POST", url: "/api/projects/tg/generate?runId=nope" })).statusCode).toBe(404);
+    expect((await app.inject({ method: "POST", url: "/api/projects/tg/generate?runId=older" })).statusCode).toBe(409);
+    // A run from another project is rejected (404, not generated here).
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "tg2" } });
+    await deps.runs.create("tg2", "foreign", "R", deps.now());
+    expect((await app.inject({ method: "POST", url: "/api/projects/tg/generate?runId=foreign" })).statusCode).toBe(404);
+    await deps.queue.onIdle();
+    await app.close();
+  });
+
   it("second POST /generate returns 409 after first succeeds (no pending run)", async () => {
     const deps = await makeTestDeps();
     const app = buildApp(deps);

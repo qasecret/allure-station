@@ -31,16 +31,26 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
     return reply.code(202).send({ runId: run.id, files: count });
   });
 
-  // Claim and enqueue the most recent pending run. Returns 202 with the generating run immediately.
-  // Callers must poll GET /projects/:id/runs/:runId for terminal status (ready/failed).
+  // Claim and enqueue a pending run. With ?runId=<id> a SPECIFIC pending run is generated (CI passes
+  // the id it got from send-results, so concurrent uploads to the same project don't claim each
+  // other's run); without it, the most recent pending run. Returns 202; poll GET /runs/:id for status.
   app.post("/projects/:projectId/generate", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
+    const { runId } = req.query as { runId?: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
     if ((await authorizeProjectWrite(deps, projectId, req.headers.authorization)) === "unauthorized") {
       return reply.code(401).send({ error: "unauthorized" });
     }
-    const pending = await deps.runs.findPendingByProject(projectId);
-    if (!pending) return reply.code(409).send({ error: "no pending run to generate" });
+    let pending;
+    if (runId) {
+      const run = await deps.runs.get(runId);
+      if (!run || run.projectId !== projectId) return reply.code(404).send({ error: "run not found" });
+      if (run.status !== "pending") return reply.code(409).send({ error: `run is not pending (status: ${run.status})` });
+      pending = run;
+    } else {
+      pending = await deps.runs.findPendingByProject(projectId);
+      if (!pending) return reply.code(409).send({ error: "no pending run to generate" });
+    }
     const startedAt = deps.now();
     if (!(await deps.runs.claimPending(pending.id, startedAt))) return reply.code(409).send({ error: "run is already being generated" });
     try {
