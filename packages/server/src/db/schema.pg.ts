@@ -18,3 +18,16 @@ export const runs = pgTable("runs", {
   byProject: index("idx_runs_project").on(t.projectId),
   byProjectStatusCreated: index("idx_runs_project_status_created").on(t.projectId, t.status, t.createdAt),
 }));
+
+export const testResults = pgTable("test_results", {
+  id: text("id").primaryKey(),
+  runId: text("run_id").notNull().references(() => runs.id, { onDelete: "cascade" }),
+  historyId: text("history_id"),
+  name: text("name").notNull(),
+  fullName: text("full_name"),
+  status: text("status").notNull(),
+  duration: text("duration"),
+  flaky: text("flaky").notNull(),
+}, (t) => ({
+  byRun: index("idx_test_results_run").on(t.runId),
+}));

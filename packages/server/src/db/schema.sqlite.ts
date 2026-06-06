@@ -17,3 +17,16 @@ export const runs = sqliteTable("runs", {
 }, (t) => ({
   byProjectStatusCreated: index("idx_runs_project_status_created").on(t.projectId, t.status, t.createdAt),
 }));
+
+export const testResults = sqliteTable("test_results", {
+  id: text("id").primaryKey(),
+  runId: text("run_id").notNull().references(() => runs.id, { onDelete: "cascade" }),
+  historyId: text("history_id"),
+  name: text("name").notNull(),
+  fullName: text("full_name"),
+  status: text("status").notNull(), // passed|failed|broken|skipped|unknown
+  duration: text("duration"),        // ms, stringified | null
+  flaky: text("flaky").notNull(),    // "true" | "false"
+}, (t) => ({
+  byRun: index("idx_test_results_run").on(t.runId),
+}));
