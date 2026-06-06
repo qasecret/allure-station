@@ -101,8 +101,9 @@ describe("send-results + generate", () => {
     expect(htmlResp.headers["content-type"]).toContain("text/html");
 
     // Find a .js file in the generated report and verify its content-type
-    const reportDir = await deps.storage.resolveLocalPath(`mime/runs/${runId}/report`);
+    const { dir: reportDir, dispose } = await deps.storage.materializeDir(`mime/runs/${runId}/report`);
     const allFiles = await readdir(reportDir, { recursive: true });
+    await dispose();
     const jsFile = (allFiles as string[]).find((f) => f.endsWith(".js"));
     expect(jsFile, "expected at least one .js file in the generated report").toBeTruthy();
     const jsResp = await app.inject({ method: "GET", url: `/api/projects/mime/runs/${runId}/report/${jsFile}` });

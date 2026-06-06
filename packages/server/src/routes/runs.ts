@@ -25,13 +25,24 @@ export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
     return run;
   });
 
-  // Serve generated report assets straight from storage.
-  // reply.sendFile handles MIME via @fastify/static's bundled mime package,
-  // rejects path-traversal attempts itself, and 404s on missing files.
   app.get("/projects/:projectId/runs/:runId/report/*", async (req, reply) => {
     const { projectId, runId } = req.params as { projectId: string; runId: string };
     const rel = (req.params as Record<string, string>)["*"] || "index.html";
-    const base = await deps.storage.resolveLocalPath(`${projectId}/runs/${runId}/report`);
-    return reply.sendFile(rel, base);
+    if (rel.split("/").some((seg) => seg === "..")) return reply.code(400).send({ error: "bad path" });
+
+    const run = await deps.runs.get(runId);
+    if (!run || run.projectId !== projectId || run.status !== "ready") {
+      return reply.code(404).send({ error: "not found" });
+    }
+    try {
+      const obj = await deps.storage.readStream(`${projectId}/runs/${runId}/report/${rel}`);
+      if (obj.contentType) reply.header("content-type", obj.contentType);
+      if (obj.contentLength != null) reply.header("content-length", String(obj.contentLength));
+      return reply.send(obj.body);
+    } catch (err) {
+      const e = err as { code?: string; name?: string };
+      if (e.code === "ENOENT" || e.name === "NoSuchKey") return reply.code(404).send({ error: "not found" });
+      throw err;
+    }
   });
 }

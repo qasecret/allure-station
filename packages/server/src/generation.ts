@@ -8,33 +8,28 @@ import type { AppDeps } from "./app.js";
  * push it back to storage, and update the run row. Returns when done.
  */
 export async function runGeneration(deps: AppDeps, projectId: string, runId: string): Promise<void> {
+  const resultsKey = `${projectId}/runs/${runId}/results`;
   const jobDir = join(deps.workDir, runId);
   const outDir = join(jobDir, "report");
-
+  let materialized: { dir: string; dispose(): Promise<void> } | undefined;
   try {
-    const resultsKey = `${projectId}/runs/${runId}/results`;
-    if (!(await deps.storage.exists(resultsKey))) {
-      throw new Error(`no results staged for run ${runId}`);
-    }
-    const resultsDir = await deps.storage.resolveLocalPath(resultsKey);
+    if (!(await deps.storage.exists(resultsKey))) throw new Error(`no results staged for run ${runId}`);
+    materialized = await deps.storage.materializeDir(resultsKey);
     await mkdir(jobDir, { recursive: true });
-
     const run = await deps.runs.get(runId);
     const { stats } = await generateReport({
-      resultsDirs: [resultsDir],
+      resultsDirs: [materialized.dir],
       outputDir: outDir,
       reportName: run?.reportName ?? "Allure Report",
       dumps: [],
     });
-
-    const tmpKey = `${projectId}/runs/${runId}/.report.tmp`;
-    await deps.storage.putDir(tmpKey, outDir);
-    await deps.storage.move(tmpKey, `${projectId}/runs/${runId}/report`);
+    await deps.storage.putDir(`${projectId}/runs/${runId}/report`, outDir); // direct to final prefix
     await deps.runs.markReady(runId, stats, deps.now());
   } catch (err) {
     await deps.runs.markFailed(runId, deps.now());
     throw err;
   } finally {
+    await materialized?.dispose();
     await rm(jobDir, { recursive: true, force: true });
   }
 }
