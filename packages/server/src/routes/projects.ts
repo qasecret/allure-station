@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { createProjectSchema, projectIdSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { parsePage } from "./pagination.js";
+import { authorizeProjectWrite } from "../auth.js";
 
 export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.post("/projects", async (req, reply) => {
@@ -38,6 +39,9 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
   app.delete("/projects/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!(await deps.projects.get(id))) return reply.code(404).send({ error: "not found" });
+    if ((await authorizeProjectWrite(deps, id, req.headers.authorization)) === "unauthorized") {
+      return reply.code(401).send({ error: "unauthorized" });
+    }
     await deps.projects.remove(id);
     try {
       await deps.storage.remove(`${id}`); // best-effort artifact cleanup

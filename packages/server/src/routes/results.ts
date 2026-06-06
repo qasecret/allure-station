@@ -1,12 +1,16 @@
 import { basename } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { AppDeps } from "../app.js";
+import { authorizeProjectWrite } from "../auth.js";
 
 export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void {
   // Upload result files; stages them in storage under a new pending run.
   app.post("/projects/:projectId/send-results", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
+    if ((await authorizeProjectWrite(deps, projectId, req.headers.authorization)) === "unauthorized") {
+      return reply.code(401).send({ error: "unauthorized" });
+    }
 
     const runId = deps.newId();
     const run = await deps.runs.create(projectId, runId, "Allure Report", deps.now());
@@ -32,6 +36,9 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
   app.post("/projects/:projectId/generate", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
+    if ((await authorizeProjectWrite(deps, projectId, req.headers.authorization)) === "unauthorized") {
+      return reply.code(401).send({ error: "unauthorized" });
+    }
     const pending = await deps.runs.findPendingByProject(projectId);
     if (!pending) return reply.code(409).send({ error: "no pending run to generate" });
     const startedAt = deps.now();

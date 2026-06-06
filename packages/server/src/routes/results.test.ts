@@ -4,25 +4,12 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { buildApp } from "../app.js";
 import { makeTestDeps } from "../test-helpers.js";
+import { multipart } from "../test-multipart.js";
 import type { JobQueue } from "@allure-station/worker";
 
 const fixturesDir = fileURLToPath(
   new URL("../../../worker/test/fixtures/allure-results", import.meta.url),
 );
-
-async function multipart(files: { field: string; filename: string; data: Buffer }[]) {
-  const boundary = "----asboundary";
-  const chunks: Buffer[] = [];
-  for (const f of files) {
-    chunks.push(Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="${f.field}"; filename="${f.filename}"\r\n` +
-      `Content-Type: application/json\r\n\r\n`));
-    chunks.push(f.data);
-    chunks.push(Buffer.from("\r\n"));
-  }
-  chunks.push(Buffer.from(`--${boundary}--\r\n`));
-  return { body: Buffer.concat(chunks), headers: { "content-type": `multipart/form-data; boundary=${boundary}` } };
-}
 
 describe("send-results + generate", () => {
   it("ingests results, generates a report, and serves index.html", async () => {
