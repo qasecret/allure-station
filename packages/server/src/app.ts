@@ -13,6 +13,7 @@ import { registerProjectRoutes } from "./routes/projects.js";
 import { registerResultRoutes } from "./routes/results.js";
 import { registerRunRoutes } from "./routes/runs.js";
 import { registerEventRoutes } from "./routes/events.js";
+import { registerCompareRoutes } from "./routes/compare.js";
 
 export interface AppDeps {
   projects: ProjectRepository;
@@ -43,6 +44,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       registerResultRoutes(api, deps);
       registerRunRoutes(api, deps);
       registerEventRoutes(api, deps);
+      registerCompareRoutes(api, deps);
     },
     { prefix: "/api" },
   );
