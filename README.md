@@ -10,6 +10,26 @@ docker compose -f docker/docker-compose.yml up
 
 The service listens on port `5050`. Reports and results are stored in the `allure-data` named volume by default (local filesystem).
 
+## CI integration
+
+Push results from any pipeline with the reusable **[GitHub Action](github-action/)** (upload → generate → wait), which fails the job if generation fails:
+
+```yaml
+- uses: qasecret/allure-station/github-action@v1
+  with:
+    url: https://allure.example.com
+    project: my-app
+    token: ${{ secrets.ALLURE_TOKEN }}   # only if the project is token-protected
+```
+
+The action README also has copy-paste **GitLab CI** and **Jenkins** recipes (the same three HTTP calls).
+
+Embed a live **status badge** (latest run, public) in your project README:
+
+```markdown
+![tests](https://allure.example.com/api/projects/my-app/badge.svg)
+```
+
 ## Authentication (scoped API tokens)
 
 Auth is **opt-in per project**. A project with no tokens is fully open (zero-config dev mode). The moment a project has at least one token, its **write** endpoints require a bearer token scoped to that project:
