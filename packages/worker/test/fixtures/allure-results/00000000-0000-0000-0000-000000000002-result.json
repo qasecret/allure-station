@@ -1,0 +1,12 @@
+{
+  "uuid": "00000000-0000-0000-0000-000000000002",
+  "historyId": "case-fail",
+  "name": "failing test",
+  "fullName": "suite#failing test",
+  "status": "failed",
+  "stage": "finished",
+  "statusDetails": { "message": "boom" },
+  "start": 1717632000000,
+  "stop": 1717632002000,
+  "labels": [{ "name": "suite", "value": "smoke" }]
+}

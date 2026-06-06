@@ -1,0 +1,11 @@
+{
+  "uuid": "00000000-0000-0000-0000-000000000001",
+  "historyId": "case-pass",
+  "name": "passing test",
+  "fullName": "suite#passing test",
+  "status": "passed",
+  "stage": "finished",
+  "start": 1717632000000,
+  "stop": 1717632001000,
+  "labels": [{ "name": "suite", "value": "smoke" }]
+}
