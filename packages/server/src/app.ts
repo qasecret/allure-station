@@ -26,10 +26,15 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify({ logger: false });
   app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024, files: 5000 } });
   app.decorate("deps", deps);
-  registerMetaRoutes(app, deps);
-  registerProjectRoutes(app, deps);
-  registerResultRoutes(app, deps);
-  registerRunRoutes(app, deps);
+  app.register(
+    async (api) => {
+      registerMetaRoutes(api, deps);
+      registerProjectRoutes(api, deps);
+      registerResultRoutes(api, deps);
+      registerRunRoutes(api, deps);
+    },
+    { prefix: "/api" },
+  );
 
   const webDist = process.env.WEB_DIST;
   if (webDist && existsSync(webDist)) {
@@ -37,8 +42,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
     app.register(fastifyStatic, { root, prefix: "/", wildcard: false });
     app.setNotFoundHandler((req, reply) => {
       const url = req.raw.url ?? "";
-      // API-ish paths should 404 as JSON; everything else falls back to the SPA shell
-      if (url.startsWith("/projects") || url.startsWith("/version") || url.startsWith("/config")) {
+      if (url.startsWith("/api")) {
         return reply.code(404).send({ error: "not found" });
       }
       return reply.sendFile("index.html");

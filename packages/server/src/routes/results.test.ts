@@ -26,7 +26,7 @@ async function multipart(files: { field: string; filename: string; data: Buffer 
 describe("send-results + generate", () => {
   it("ingests results, generates a report, and serves index.html", async () => {
     const app = buildApp(makeTestDeps());
-    await app.inject({ method: "POST", url: "/projects", payload: { id: "p" } });
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
 
     const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
     const f2 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000002-result.json"));
@@ -35,18 +35,18 @@ describe("send-results + generate", () => {
       { field: "files", filename: "2-result.json", data: f2 },
     ]);
 
-    const send = await app.inject({ method: "POST", url: "/projects/p/send-results", ...mp });
+    const send = await app.inject({ method: "POST", url: "/api/projects/p/send-results", ...mp });
     expect(send.statusCode).toBe(202);
     const runId = send.json().runId as string;
 
     // generate synchronously for the test
-    const gen = await app.inject({ method: "POST", url: `/projects/p/generate` });
+    const gen = await app.inject({ method: "POST", url: `/api/projects/p/generate` });
     expect(gen.statusCode).toBe(200);
 
-    const run = await app.inject({ method: "GET", url: `/projects/p/runs/${runId}` });
+    const run = await app.inject({ method: "GET", url: `/api/projects/p/runs/${runId}` });
     expect(run.json()).toMatchObject({ status: "ready", stats: { total: 2, passed: 1, failed: 1 } });
 
-    const report = await app.inject({ method: "GET", url: `/projects/p/runs/${runId}/report/index.html` });
+    const report = await app.inject({ method: "GET", url: `/api/projects/p/runs/${runId}/report/index.html` });
     expect(report.statusCode).toBe(200);
     expect(report.headers["content-type"]).toContain("text/html");
     await app.close();
