@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
-import type { Run, RunStatus, TrendPoint } from "@allure-station/shared";
+import type { Run, RunStatus, TestDiff, TrendPoint } from "@allure-station/shared";
 import { api } from "../main.js";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
@@ -79,12 +79,78 @@ export function Project() {
           </select>
         </div>
         <div style={{ padding: "4px 12px" }}><TrendBar points={trends} /></div>
+        <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
       </header>
       {current
         ? <iframe title="report" style={{ flex: 1, border: 0 }}
             src={`/api/projects/${id}/runs/${current}/report/index.html`} />
         : <p style={{ padding: 12 }}>No ready report yet. Upload results to generate one.</p>}
     </main>
+  );
+}
+
+function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: Run[] }) {
+  // readyRuns arrive newest-first. Default: compare the newest (target) against the previous (base).
+  const [base, setBase] = useState<string>("");
+  const [target, setTarget] = useState<string>("");
+
+  useEffect(() => {
+    setTarget((t) => (readyRuns.some((r) => r.id === t) ? t : readyRuns[0]?.id ?? ""));
+    setBase((b) => (readyRuns.some((r) => r.id === b) ? b : readyRuns[1]?.id ?? ""));
+  }, [readyRuns]);
+
+  const { data: diff } = useQuery({
+    queryKey: ["compare", projectId, base, target],
+    queryFn: () => api.compareRuns(projectId, base, target),
+    enabled: !!base && !!target && base !== target,
+  });
+
+  if (readyRuns.length < 2) return null;
+
+  const runOption = (r: Run) => (
+    <option key={r.id} value={r.id}>{r.createdAt}{r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}</option>
+  );
+
+  return (
+    <details style={{ padding: "4px 12px", fontSize: 13 }}>
+      <summary style={{ cursor: "pointer" }}>Compare runs</summary>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "6px 0" }}>
+        <label>Base <select value={base} onChange={(e) => setBase(e.target.value)}>{readyRuns.map(runOption)}</select></label>
+        <span>→</span>
+        <label>Target <select value={target} onChange={(e) => setTarget(e.target.value)}>{readyRuns.map(runOption)}</select></label>
+      </div>
+      {base === target ? (
+        <p style={{ color: "#888" }}>Pick two different runs.</p>
+      ) : !diff ? (
+        <p style={{ color: "#888" }}>Loading comparison…</p>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+          <Bucket label="Newly failing" color="#d9534f" tests={diff.newlyFailing} />
+          <Bucket label="Fixed" color="#5cb85c" tests={diff.fixed} />
+          <Bucket label="Flaky" color="#f0ad4e" tests={diff.flaky} />
+          <Bucket label="Still failing" color="#d9534f" tests={diff.stillFailing} />
+          <Bucket label="Added" color="#5bc0de" tests={diff.added} />
+          <Bucket label="Removed" color="#888" tests={diff.removed} />
+        </div>
+      )}
+    </details>
+  );
+}
+
+function Bucket({ label, color, tests }: { label: string; color: string; tests: TestDiff[] }) {
+  if (tests.length === 0) return null;
+  return (
+    <div style={{ minWidth: 180 }}>
+      <div style={{ fontWeight: 600, color }}>{label} ({tests.length})</div>
+      <ul style={{ margin: "2px 0", paddingLeft: 16 }}>
+        {tests.map((t) => (
+          <li key={(t.historyId ?? t.fullName ?? t.name) + label}>
+            {t.name}
+            {t.baseStatus && t.targetStatus ? <span style={{ color: "#888" }}> ({t.baseStatus}→{t.targetStatus})</span> : null}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

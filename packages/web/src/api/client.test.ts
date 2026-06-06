@@ -18,6 +18,13 @@ describe("api client", () => {
     await expect(client.listProjects()).rejects.toThrow("500");
   });
 
+  it("compareRuns GETs /compare with base+target query params", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ newlyFailing: [], fixed: [] }) });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.compareRuns("p", "r1", "r2");
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/compare?base=r1&target=r2", expect.objectContaining({ method: "GET" }));
+  });
+
   it("subscribeRuns opens an EventSource and delivers parsed events; unsubscribe closes it", () => {
     const closed: boolean[] = [];
     class FakeEventSource {

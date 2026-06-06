@@ -1,4 +1,4 @@
-import type { Project, Run, TrendPoint, RunEvent } from "@allure-station/shared";
+import type { Project, Run, TrendPoint, RunEvent, CompareResult } from "@allure-station/shared";
 
 export interface ApiClient {
   listProjects(): Promise<Project[]>;
@@ -7,6 +7,7 @@ export interface ApiClient {
   sendResults(projectId: string, files: File[]): Promise<{ runId: string }>;
   generate(projectId: string): Promise<Run>;
   listTrends(projectId: string): Promise<TrendPoint[]>;
+  compareRuns(projectId: string, base: string, target: string): Promise<CompareResult>;
   /** Subscribe to live run events for a project over SSE. Returns an unsubscribe function. */
   subscribeRuns(projectId: string, onEvent: (event: RunEvent) => void): () => void;
 }
@@ -29,6 +30,8 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     },
     generate: (projectId) => json<Run>(`/projects/${projectId}/generate`, { method: "POST" }),
     listTrends: (projectId) => json<TrendPoint[]>(`/projects/${projectId}/trends`, { method: "GET" }),
+    compareRuns: (projectId, base, target) =>
+      json<CompareResult>(`/projects/${projectId}/compare?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`, { method: "GET" }),
     subscribeRuns: (projectId, onEvent) => {
       // No-op where EventSource is unavailable (e.g. jsdom/SSR); the page still works via fetch.
       if (typeof EventSource === "undefined") return () => {};
