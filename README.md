@@ -10,6 +10,28 @@ docker compose -f docker/docker-compose.yml up
 
 The service listens on port `5050`. Reports and results are stored in the `allure-data` named volume by default (local filesystem).
 
+## Authentication (scoped API tokens)
+
+Auth is **opt-in per project**. A project with no tokens is fully open (zero-config dev mode). The moment a project has at least one token, its **write** endpoints require a bearer token scoped to that project:
+
+- gated writes: `POST /send-results`, `POST /generate`, `DELETE /projects/:id`, and the token-management endpoints below;
+- reads (list/runs/report/trends/compare/events) stay open.
+
+Tokens are stored hashed (sha256) — the plaintext is shown **once**, at creation.
+
+```bash
+# Create the first token for a project (no auth needed while the project is open):
+curl -XPOST host/api/projects/myapp/tokens -H 'content-type: application/json' -d '{"name":"ci"}'
+# → { "id": "...", "prefix": "ast_x9...", "token": "ast_x9....", ... }   (save `token` now)
+
+# Subsequent writes must present it:
+curl -XPOST host/api/projects/myapp/send-results -H 'authorization: Bearer ast_x9....' -F files=@result.json
+```
+
+Endpoints: `POST /api/projects/:id/tokens` (create), `GET /api/projects/:id/tokens` (list — prefixes only, no secrets), `DELETE /api/projects/:id/tokens/:tokenId` (revoke). Deleting the last token re-opens the project.
+
+> A token scoped to project A cannot authorize writes to project B. **Caveat:** while a project is open, anyone can create its first token (and thus lock it). Project-ownership/RBAC and OIDC come in Phase 5.
+
 ## Storage
 
 Allure Station supports two storage backends, configured via environment variables.
