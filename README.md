@@ -60,7 +60,7 @@ The S3 driver has an environment-gated conformance suite that runs against a rea
 1. Start MinIO:
 
 ```bash
-docker compose -f docker/docker-compose.test.yml up -d
+docker compose -f docker/docker-compose.test.yml up -d minio
 ```
 
 2. Run the S3 conformance tests:
@@ -73,6 +73,77 @@ pnpm --filter @allure-station/server test src/storage/s3-driver
 ```
 
 Without `S3_TEST_ENDPOINT` set, the S3 suite is automatically skipped (the rest of the test suite always runs).
+
+## Database
+
+Allure Station uses **SQLite by default** (zero configuration — the database file is created automatically under `DATA_DIR`). Postgres can be selected for multi-instance deployments.
+
+### SQLite (default)
+
+No configuration needed. The database file is created automatically.
+
+| Variable | Default | Description |
+|---|---|---|
+| `DB_DRIVER` | `sqlite` | Database backend (`sqlite` or `postgres`) |
+| `DB_FILE` | `$DATA_DIR/allure-station.db` | Path to the SQLite database file |
+| `DATA_DIR` | `./data` | Base data directory |
+
+### Postgres
+
+Set `DB_DRIVER=postgres` and provide a connection URL:
+
+| Variable | Default | Description |
+|---|---|---|
+| `DB_DRIVER` | `sqlite` | Set to `postgres` to enable |
+| `DATABASE_URL` | _(required when `DB_DRIVER=postgres`)_ | Postgres connection string, e.g. `postgresql://user:pass@host:5432/dbname` |
+
+#### Switching docker-compose to Postgres
+
+The `postgres` service is included in `docker/docker-compose.yml` behind the `postgres` compose profile. To start the app with Postgres:
+
+1. Uncomment the DB env vars in the `allure-station` service in `docker/docker-compose.yml`:
+
+```yaml
+environment:
+  DB_DRIVER: postgres
+  DATABASE_URL: postgresql://allure:allure@postgres:5432/allure
+```
+
+2. Start with the `postgres` profile:
+
+```bash
+docker compose -f docker/docker-compose.yml --profile postgres up
+```
+
+The default `docker compose up` (no profile) continues to use SQLite with no configuration required.
+
+### Schema migrations
+
+Drizzle migrations are applied automatically on startup. If you change the schema, regenerate migrations for **both** dialects:
+
+```bash
+pnpm --filter @allure-station/server db:generate:sqlite
+pnpm --filter @allure-station/server db:generate:pg
+```
+
+### Running Postgres Repository Conformance Tests
+
+The repository conformance suite is environment-gated: it always runs against SQLite (in-memory) and additionally runs against Postgres when `PG_TEST_URL` is set.
+
+1. Start Postgres:
+
+```bash
+docker compose -f docker/docker-compose.test.yml up -d postgres
+```
+
+2. Run the conformance tests:
+
+```bash
+PG_TEST_URL=postgresql://postgres:pw@localhost:5432/allure \
+pnpm --filter @allure-station/server test src/db/repositories
+```
+
+Without `PG_TEST_URL` set, the Postgres conformance suite is automatically skipped.
 
 ## Development
 
