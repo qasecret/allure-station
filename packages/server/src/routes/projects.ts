@@ -27,7 +27,11 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     const { id } = req.params as { id: string };
     if (!(await deps.projects.get(id))) return reply.code(404).send({ error: "not found" });
     await deps.projects.remove(id);
-    await deps.storage.remove(`${id}`); // best-effort artifact cleanup
+    try {
+      await deps.storage.remove(`${id}`); // best-effort artifact cleanup
+    } catch {
+      // ignore: project metadata is already gone; orphaned artifacts are harmless
+    }
     return reply.code(204).send();
   });
 }
