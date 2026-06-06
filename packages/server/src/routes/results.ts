@@ -23,6 +23,7 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
       }
     }
     if (count === 0) return reply.code(400).send({ error: "no result files uploaded" });
+    deps.bus.publish({ type: "run", projectId, run });
     return reply.code(202).send({ runId: run.id, files: count });
   });
 
@@ -43,6 +44,8 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
       return reply.code(503).send({ error: "failed to enqueue generation" });
     }
     // We just claimed `pending` into 'generating' — reflect that without another round-trip.
-    return reply.code(202).send({ ...pending, status: "generating" }); // 202 Accepted
+    const generating = { ...pending, status: "generating" as const };
+    deps.bus.publish({ type: "run", projectId, run: generating });
+    return reply.code(202).send(generating); // 202 Accepted
   });
 }

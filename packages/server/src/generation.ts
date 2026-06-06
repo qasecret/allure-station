@@ -9,6 +9,12 @@ export async function processGenerate(deps: AppDeps, data: GenerateJobData): Pro
   await runGeneration(deps, data.projectId, data.runId);
 }
 
+/** Publish the current state of a run to the event bus (best-effort; never throws into the caller). */
+async function publishRun(deps: AppDeps, projectId: string, runId: string): Promise<void> {
+  const run = await deps.runs.get(runId);
+  if (run) deps.bus.publish({ type: "run", projectId, run });
+}
+
 /**
  * Wire the queue processor to deps. Call from makeTestDeps (tests) and main.ts (production),
  * NOT from buildApp — keeps buildApp free of worker construction for future BullMQ mode.
@@ -39,8 +45,10 @@ export async function runGeneration(deps: AppDeps, projectId: string, runId: str
     });
     await deps.storage.putDir(`${projectId}/runs/${runId}/report`, outDir); // direct to final prefix
     await deps.runs.markReady(runId, stats, deps.now());
+    await publishRun(deps, projectId, runId);
   } catch (err) {
     await deps.runs.markFailed(runId, deps.now());
+    await publishRun(deps, projectId, runId);
     throw err;
   } finally {
     await materialized?.dispose();

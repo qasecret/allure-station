@@ -5,6 +5,8 @@ import type { RunRepository } from "./db/repositories.js";
  * replica) because it only abandons runs older than the staleness window — a run another process is
  * actively generating (started recently) is left untouched. Returns how many were reset.
  */
+// Note: stale-reconcile failures are not published to the event bus (rare worker-crash path);
+// a watching UI catches the 'failed' status on its next load/navigation.
 export async function reconcileStale(runs: RunRepository, staleMs: number, nowMs: number): Promise<number> {
   const cutoff = new Date(nowMs - staleMs).toISOString();
   const finishedAt = new Date(nowMs).toISOString();

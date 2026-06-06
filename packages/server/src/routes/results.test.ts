@@ -30,6 +30,10 @@ describe("send-results + generate", () => {
     const app = buildApp(deps);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
 
+    // Capture the live event stream the SSE route relays to the UI.
+    const events: string[] = [];
+    deps.bus.subscribe((e) => events.push(e.run.status));
+
     const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
     const f2 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000002-result.json"));
     const mp = await multipart([
@@ -46,6 +50,10 @@ describe("send-results + generate", () => {
     expect(gen.statusCode).toBe(202);
     expect(gen.json().status).toBe("generating");
     await deps.queue.onIdle();
+
+    // The bus saw the full lifecycle: pending (on upload) -> generating -> ready.
+    expect(events).toContain("generating");
+    expect(events.at(-1)).toBe("ready");
 
     const run = await app.inject({ method: "GET", url: `/api/projects/p/runs/${runId}` });
     expect(run.json()).toMatchObject({ status: "ready", stats: { total: 2, passed: 1, failed: 1 } });
