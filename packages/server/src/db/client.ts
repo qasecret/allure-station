@@ -15,6 +15,9 @@ export type Db = LibSQLDatabase<typeof sqliteSchema>;
 const sqliteMigrations = fileURLToPath(new URL("../../drizzle/sqlite", import.meta.url));
 const pgMigrations = fileURLToPath(new URL("../../drizzle/pg", import.meta.url));
 
+// Arbitrary fixed key for the migration advisory lock (any process migrating uses the same key).
+const PG_MIGRATION_LOCK = 4011;
+
 export interface DbHandle { db: Db; driver: DbDriver; migrate(): Promise<void>; }
 
 export function createDb(driver: DbDriver, opts: { url: string }): DbHandle {
@@ -24,7 +27,19 @@ export function createDb(driver: DbDriver, opts: { url: string }): DbHandle {
     return {
       db: pg as unknown as Db, // cross-dialect union doesn't type-check; structurally identical at runtime (spike-verified)
       driver,
-      migrate: () => migratePg(pg, { migrationsFolder: pgMigrations }),
+      // drizzle's migrate() isn't concurrency-safe; in bullmq mode the API + N workers boot together
+      // against shared Postgres. A server-wide advisory lock serializes them: the first migrates, the
+      // rest wait then find every migration already applied. (Also serializes parallel test workers.)
+      migrate: async () => {
+        const lock = await pool.connect();
+        try {
+          await lock.query("SELECT pg_advisory_lock($1)", [PG_MIGRATION_LOCK]);
+          await migratePg(pg, { migrationsFolder: pgMigrations });
+        } finally {
+          try { await lock.query("SELECT pg_advisory_unlock($1)", [PG_MIGRATION_LOCK]); } catch { /* releasing is best-effort */ }
+          lock.release();
+        }
+      },
     };
   }
   const client = createClient({ url: opts.url }); // "file:..." or ":memory:"
