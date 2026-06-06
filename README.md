@@ -198,13 +198,19 @@ The default `docker compose up` (no profiles) continues to run single-process wi
 
 `POST /api/projects/:projectId/generate` returns **202 Accepted** with the run object at status `generating` (fire-and-forget). The generation job runs asynchronously.
 
-Clients must **poll `GET /api/projects/:projectId/runs/:runId`** until the run reaches a terminal status:
-- `ready` — report generated successfully
-- `failed` — generation failed
+Clients track progress until the run reaches a terminal status (`ready` — report generated; `failed` — generation failed) either by **subscribing to the live event stream** (see below) or by **polling `GET /api/projects/:projectId/runs/:runId`**. This applies to both `inprocess` and `bullmq` drivers.
 
-This applies to both `inprocess` and `bullmq` drivers. The UI polls automatically via `refetchInterval` while a run is `generating`.
+> **Note:** This changed from the old synchronous behavior (where `/generate` held the HTTP connection open until the report was ready). API clients that previously read the final status from the `/generate` response must now subscribe or poll for it.
 
-> **Note:** This changed from the old synchronous behavior (where `/generate` held the HTTP connection open until the report was ready). API clients that previously read the final status from the `/generate` response must now poll for it.
+### Live updates (SSE)
+
+The UI subscribes to `GET /api/projects/:projectId/events` (Server-Sent Events) and updates run status in real time — no polling. Each message is a JSON `RunEvent` (`{ type: "run", projectId, run }`) emitted on every lifecycle transition (created → generating → ready/failed).
+
+Events are delivered through a pluggable bus selected by `QUEUE_DRIVER`:
+- `inprocess` (default): in-memory — single process, zero config.
+- `bullmq`: Redis pub/sub on `REDIS_URL`, so the worker process and every API replica share one stream. No extra configuration beyond the Redis you already run for the queue.
+
+The bus has an environment-gated conformance suite (`RedisBus`), run with `REDIS_TEST_URL` set (same Redis as the queue tests below).
 
 ### Running Redis conformance tests
 
