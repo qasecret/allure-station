@@ -202,6 +202,10 @@ Clients track progress until the run reaches a terminal status (`ready` — repo
 
 > **Note:** This changed from the old synchronous behavior (where `/generate` held the HTTP connection open until the report was ready). API clients that previously read the final status from the `/generate` response must now subscribe or poll for it.
 
+### Run comparison
+
+`GET /api/projects/:projectId/compare?base=<runId>&target=<runId>` diffs two ready runs and returns tests bucketed as `newlyFailing`, `fixed`, `stillFailing`, `added`, `removed`, and `flaky`. Per-test results (`historyId`, `status`, `duration`, `flaky`) are persisted at generation time; tests are matched across runs by Allure's stable `historyId` (falling back to `fullName`/`name`). The UI exposes this as a compare panel on the project page.
+
 ### Live updates (SSE)
 
 The UI subscribes to `GET /api/projects/:projectId/events` (Server-Sent Events) and updates run status in real time — no polling. Each message is a JSON `RunEvent` (`{ type: "run", projectId, run }`) emitted on every lifecycle transition (created → generating → ready/failed).
