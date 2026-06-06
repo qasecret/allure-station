@@ -4,7 +4,7 @@ import { makeTestDeps } from "../test-helpers.js";
 
 describe("run routes", () => {
   it("lists runs for a project and 404s unknown run", async () => {
-    const deps = makeTestDeps();
+    const deps = await makeTestDeps();
     const app = buildApp(deps);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
     await deps.runs.create("p", deps.newId(), "R", deps.now());
@@ -18,7 +18,7 @@ describe("run routes", () => {
   });
 
   it("GET run-by-id enforces project ownership (IDOR fix)", async () => {
-    const deps = makeTestDeps();
+    const deps = await makeTestDeps();
     const app = buildApp(deps);
 
     // Create two projects

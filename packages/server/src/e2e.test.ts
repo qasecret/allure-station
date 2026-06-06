@@ -21,7 +21,7 @@ async function buildMultipartBody(f1: Buffer, f2: Buffer): Promise<{ body: Buffe
 
 describe("e2e: project -> results -> generate -> serve", () => {
   it("produces a ready run and a servable report", async () => {
-    const app = buildApp(makeTestDeps());
+    const app = buildApp(await makeTestDeps());
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "e2e" } });
 
     const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
@@ -44,7 +44,7 @@ describe("e2e: project -> results -> generate -> serve", () => {
   }, 90_000);
 
   it("two-run trends: DB trends series has 2 points with correct stats and distinct runIds", async () => {
-    const deps = makeTestDeps();
+    const deps = await makeTestDeps();
     const app = buildApp(deps);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "trend2" } });
 

@@ -1,8 +1,9 @@
 export type StorageBackend = "local" | "s3";
+export type DbDriver = "sqlite" | "postgres";
 
 export interface AppConfig {
   port: number;
-  dbFile: string;
+  db: { driver: DbDriver; url: string };
   workDir: string;       // scratch dir for generation jobs
   concurrency: number;
   version: string;
@@ -47,9 +48,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
           localRoot: env.STORAGE_ROOT ?? `${dataDir}/storage`,
         };
 
+  const dbDriver = (env.DB_DRIVER ?? "sqlite") as DbDriver;
+  let dbUrl: string;
+  if (dbDriver === "postgres") {
+    if (!env.DATABASE_URL) throw new Error("DATABASE_URL is required when DB_DRIVER=postgres");
+    dbUrl = env.DATABASE_URL;
+  } else {
+    const dbFile = env.DB_FILE ?? `${dataDir}/allure-station.db`;
+    dbUrl = `file:${dbFile}`;
+  }
+
   return {
     port: Number(env.PORT ?? 5050),
-    dbFile: env.DB_FILE ?? `${dataDir}/allure-station.db`,
+    db: { driver: dbDriver, url: dbUrl },
     workDir: env.WORK_DIR ?? `${dataDir}/work`,
     concurrency: Number(env.GENERATE_CONCURRENCY ?? 2),
     version: env.APP_VERSION ?? "0.1.0",

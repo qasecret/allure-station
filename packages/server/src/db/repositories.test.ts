@@ -1,14 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createDb, ensureSchema, type Db } from "./client.js";
+import { createDb, type Db } from "./client.js";
 import { ProjectRepository, RunRepository } from "./repositories.js";
 
 let db: Db;
 let projects: ProjectRepository;
 let runs: RunRepository;
 
-beforeEach(() => {
-  db = createDb(":memory:");
-  ensureSchema(db);
+beforeEach(async () => {
+  const handle = createDb("sqlite", { url: ":memory:" });
+  await handle.migrate();
+  db = handle.db;
   projects = new ProjectRepository(db);
   runs = new RunRepository(db);
 });

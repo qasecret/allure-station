@@ -1,15 +1,15 @@
 import { resolve } from "node:path";
 import { nanoid } from "nanoid";
 import { loadConfig } from "./config.js";
-import { createDb, ensureSchema } from "./db/client.js";
+import { createDb } from "./db/client.js";
 import { ProjectRepository, RunRepository } from "./db/repositories.js";
 import { createStorage } from "./storage/factory.js";
 import { InProcessQueue } from "@allure-station/worker";
 import { buildApp } from "./app.js";
 
 const config = loadConfig();
-const db = createDb(resolve(config.dbFile));
-ensureSchema(db);
+const { db, migrate } = createDb(config.db.driver, { url: config.db.url });
+await migrate();
 
 const runs = new RunRepository(db);
 const staleReset = await runs.failStaleGenerating(new Date().toISOString());

@@ -4,7 +4,7 @@ import { makeTestDeps } from "../test-helpers.js";
 
 describe("project routes", () => {
   it("creates, lists, gets and deletes a project", async () => {
-    const app = buildApp(makeTestDeps());
+    const app = buildApp(await makeTestDeps());
 
     const created = await app.inject({ method: "POST", url: "/api/projects", payload: { id: "team-a" } });
     expect(created.statusCode).toBe(201);
@@ -23,7 +23,7 @@ describe("project routes", () => {
   });
 
   it("rejects an invalid id with 400 and a duplicate with 409", async () => {
-    const app = buildApp(makeTestDeps());
+    const app = buildApp(await makeTestDeps());
     expect((await app.inject({ method: "POST", url: "/api/projects", payload: { id: "a/b" } })).statusCode).toBe(400);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "dup" } });
     expect((await app.inject({ method: "POST", url: "/api/projects", payload: { id: "dup" } })).statusCode).toBe(409);

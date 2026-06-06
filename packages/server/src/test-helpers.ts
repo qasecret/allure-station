@@ -1,15 +1,15 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDb, ensureSchema } from "./db/client.js";
+import { createDb } from "./db/client.js";
 import { ProjectRepository, RunRepository } from "./db/repositories.js";
 import { LocalDriver } from "./storage/local-driver.js";
 import { InProcessQueue } from "@allure-station/worker";
 import type { AppDeps } from "./app.js";
 
-export function makeTestDeps(): AppDeps {
-  const db = createDb(":memory:");
-  ensureSchema(db);
+export async function makeTestDeps(): Promise<AppDeps> {
+  const { db, migrate } = createDb("sqlite", { url: ":memory:" });
+  await migrate();
   const root = mkdtempSync(join(tmpdir(), "as-srv-"));
   return {
     projects: new ProjectRepository(db),

@@ -25,7 +25,7 @@ async function multipart(files: { field: string; filename: string; data: Buffer 
 
 describe("send-results + generate", () => {
   it("ingests results, generates a report, and serves index.html", async () => {
-    const app = buildApp(makeTestDeps());
+    const app = buildApp(await makeTestDeps());
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
 
     const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
@@ -53,7 +53,7 @@ describe("send-results + generate", () => {
   }, 60_000);
 
   it("sanitizes traversal filenames: ../escape.json is stored as escape.json and generation succeeds", async () => {
-    const app = buildApp(makeTestDeps());
+    const app = buildApp(await makeTestDeps());
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p2" } });
 
     const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
@@ -78,7 +78,7 @@ describe("send-results + generate", () => {
   }, 60_000);
 
   it("serves report assets with correct MIME types (not application/octet-stream) and 404s missing files", async () => {
-    const deps = makeTestDeps();
+    const deps = await makeTestDeps();
     const app = buildApp(deps);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "mime" } });
 
@@ -119,7 +119,7 @@ describe("send-results + generate", () => {
   }, 60_000);
 
   it("generate with no results staged marks the run failed (orphan-pending-run)", async () => {
-    const deps = makeTestDeps();
+    const deps = await makeTestDeps();
     const app = buildApp(deps);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "orphan" } });
 
@@ -136,7 +136,7 @@ describe("send-results + generate", () => {
   });
 
   it("POST /generate on unknown project returns 404", async () => {
-    const app = buildApp(makeTestDeps());
+    const app = buildApp(await makeTestDeps());
     const res = await app.inject({ method: "POST", url: "/api/projects/ghost/generate" });
     expect(res.statusCode).toBe(404);
     expect(res.json().error).toBe("project not found");
@@ -144,7 +144,7 @@ describe("send-results + generate", () => {
   });
 
   it("second POST /generate returns 409 after first succeeds (no pending run)", async () => {
-    const app = buildApp(makeTestDeps());
+    const app = buildApp(await makeTestDeps());
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p3" } });
 
     const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));

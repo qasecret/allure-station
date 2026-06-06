@@ -1,38 +1,37 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import type { Project, Run, RunStats, RunStatus } from "@allure-station/shared";
 import type { Db } from "./client.js";
-import { projects, runs } from "./schema.js";
+import { projects, runs } from "./schema.sqlite.js";
 
 export class ProjectRepository {
   constructor(private readonly db: Db) {}
 
   async create(id: string, now: string): Promise<Project> {
-    this.db.insert(projects).values({ id, createdAt: now }).run();
+    await this.db.insert(projects).values({ id, createdAt: now });
     return { id, createdAt: now, latestRunId: null };
   }
 
   async list(): Promise<Project[]> {
-    const rows = this.db.select().from(projects).orderBy(projects.id).all();
+    const rows = await this.db.select().from(projects).orderBy(projects.id);
     return Promise.all(rows.map((r) => this.#withLatest(r.id, r.createdAt)));
   }
 
   async get(id: string): Promise<Project | null> {
-    const row = this.db.select().from(projects).where(eq(projects.id, id)).get();
+    const [row] = await this.db.select().from(projects).where(eq(projects.id, id));
     return row ? this.#withLatest(row.id, row.createdAt) : null;
   }
 
   async remove(id: string): Promise<void> {
-    this.db.delete(projects).where(eq(projects.id, id)).run();
+    await this.db.delete(projects).where(eq(projects.id, id));
   }
 
   async #withLatest(id: string, createdAt: string): Promise<Project> {
-    const latest = this.db
+    const [latest] = await this.db
       .select({ id: runs.id })
       .from(runs)
       .where(eq(runs.projectId, id))
       .orderBy(desc(runs.createdAt))
-      .limit(1)
-      .get();
+      .limit(1);
     return { id, createdAt, latestRunId: latest?.id ?? null };
   }
 }
@@ -41,47 +40,47 @@ export class RunRepository {
   constructor(private readonly db: Db) {}
 
   async create(projectId: string, id: string, reportName: string, now: string): Promise<Run> {
-    this.db.insert(runs).values({
+    await this.db.insert(runs).values({
       id, projectId, status: "pending", reportName, createdAt: now, finishedAt: null, statsJson: null,
-    }).run();
+    });
     return { id, projectId, status: "pending", reportName, createdAt: now, finishedAt: null, stats: null };
   }
 
   async setStatus(id: string, status: RunStatus): Promise<void> {
-    this.db.update(runs).set({ status }).where(eq(runs.id, id)).run();
+    await this.db.update(runs).set({ status }).where(eq(runs.id, id));
   }
 
   /** Atomically transition a run from 'pending' to 'generating'. Returns true if this caller won the claim. */
   async claimPending(id: string): Promise<boolean> {
-    const res = this.db
+    const updated = await this.db
       .update(runs)
       .set({ status: "generating" })
       .where(and(eq(runs.id, id), eq(runs.status, "pending")))
-      .run();
-    return res.changes === 1;
+      .returning();
+    return updated.length === 1;
   }
 
   async markReady(id: string, stats: RunStats, finishedAt: string): Promise<void> {
-    this.db.update(runs)
+    await this.db.update(runs)
       .set({ status: "ready", statsJson: JSON.stringify(stats), finishedAt })
-      .where(eq(runs.id, id)).run();
+      .where(eq(runs.id, id));
   }
 
   async markFailed(id: string, finishedAt: string): Promise<void> {
-    this.db.update(runs).set({ status: "failed", finishedAt }).where(eq(runs.id, id)).run();
+    await this.db.update(runs).set({ status: "failed", finishedAt }).where(eq(runs.id, id));
   }
 
   /** Mark all runs left mid-generation (e.g. after a crash) as failed. Returns how many were reset. */
   async failStaleGenerating(now: string): Promise<number> {
-    const res = this.db
+    const reset = await this.db
       .update(runs)
       .set({ status: "failed", finishedAt: now })
       .where(eq(runs.status, "generating"))
-      .run();
-    return res.changes;
+      .returning();
+    return reset.length;
   }
 
-  #selectRuns(opts: { projectId: string; readyOnly?: boolean; order: "asc" | "desc"; limit?: number }): Run[] {
+  async #selectRuns(opts: { projectId: string; readyOnly?: boolean; order: "asc" | "desc"; limit?: number }): Promise<Run[]> {
     const where = opts.readyOnly
       ? and(eq(runs.projectId, opts.projectId), eq(runs.status, "ready"))
       : eq(runs.projectId, opts.projectId);
@@ -89,7 +88,7 @@ export class RunRepository {
       ? [asc(runs.createdAt), asc(runs.id)]
       : [desc(runs.createdAt), desc(runs.id)];
     const base = this.db.select().from(runs).where(where).orderBy(...ord);
-    const rows = opts.limit !== undefined ? base.limit(opts.limit).all() : base.all();
+    const rows = opts.limit !== undefined ? await base.limit(opts.limit) : await base;
     return rows.map(this.#toRun);
   }
 
@@ -97,7 +96,7 @@ export class RunRepository {
    * Pass `limit` to cap to the most-recent N runs (still returned oldest-first). */
   async listReadyByProject(projectId: string, limit?: number): Promise<Run[]> {
     if (limit !== undefined) {
-      return this.#selectRuns({ projectId, readyOnly: true, order: "desc", limit }).reverse(); // newest-N, oldest-first
+      return (await this.#selectRuns({ projectId, readyOnly: true, order: "desc", limit })).reverse(); // newest-N, oldest-first
     }
     return this.#selectRuns({ projectId, readyOnly: true, order: "asc" });
   }
@@ -107,7 +106,7 @@ export class RunRepository {
   }
 
   async get(id: string): Promise<Run | null> {
-    const row = this.db.select().from(runs).where(eq(runs.id, id)).get();
+    const [row] = await this.db.select().from(runs).where(eq(runs.id, id));
     return row ? this.#toRun(row) : null;
   }
 

@@ -4,7 +4,7 @@ import { makeTestDeps } from "../test-helpers.js";
 
 describe("trends route", () => {
   it("returns ready runs as an oldest-first stats series", async () => {
-    const deps = makeTestDeps();
+    const deps = await makeTestDeps();
     const app = buildApp(deps);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
     await deps.runs.create("p", "r1", "R", "2026-06-06T00:00:01.000Z");
