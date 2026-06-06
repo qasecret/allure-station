@@ -42,8 +42,16 @@ export const projectSchema = z.object({
   latestRunId: z.string().nullable(),
 });
 
+// Pushed to the UI over SSE on every run lifecycle transition (created/generating/ready/failed).
+export const runEventSchema = z.object({
+  type: z.literal("run"),
+  projectId: z.string(),
+  run: runSchema,
+});
+
 export type ProjectId = z.infer<typeof projectIdSchema>;
 export type Run = z.infer<typeof runSchema>;
 export type RunStats = z.infer<typeof runStatsSchema>;
 export type Project = z.infer<typeof projectSchema>;
 export type RunStatus = z.infer<typeof runStatusSchema>;
+export type RunEvent = z.infer<typeof runEventSchema>;
