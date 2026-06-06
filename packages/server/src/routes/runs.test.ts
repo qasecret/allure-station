@@ -17,6 +17,26 @@ describe("run routes", () => {
     await app.close();
   });
 
+  it("filters runs by ?status, paginates, sets X-Total-Count, and 400s bad status", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
+    await deps.runs.create("p", "r1", "R", "2026-06-06T00:00:01.000Z"); // pending
+    await deps.runs.create("p", "r2", "R", "2026-06-06T00:00:02.000Z");
+    await deps.runs.claimPending("r2", "2026-06-06T00:00:03.000Z");
+    await deps.runs.markReady("r2", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0 }, "2026-06-06T00:00:04.000Z");
+
+    const ready = await app.inject({ method: "GET", url: "/api/projects/p/runs?status=ready" });
+    expect(ready.json().map((r: { id: string }) => r.id)).toEqual(["r2"]);
+    expect(ready.headers["x-total-count"]).toBe("1");
+
+    const all = await app.inject({ method: "GET", url: "/api/projects/p/runs" });
+    expect(all.headers["x-total-count"]).toBe("2");
+
+    expect((await app.inject({ method: "GET", url: "/api/projects/p/runs?status=bogus" })).statusCode).toBe(400);
+    await app.close();
+  });
+
   it("GET run-by-id enforces project ownership (IDOR fix)", async () => {
     const deps = await makeTestDeps();
     const app = buildApp(deps);

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { createProjectSchema, projectIdSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
+import { parsePage } from "./pagination.js";
 
 export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.post("/projects", async (req, reply) => {
@@ -14,7 +15,18 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     return reply.code(201).send(project);
   });
 
-  app.get("/projects", async () => deps.projects.list());
+  app.get("/projects", async (req, reply) => {
+    const { q } = req.query as { q?: string };
+    let page;
+    try { page = parsePage(req.query as Record<string, unknown>); }
+    catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    const [items, total] = await Promise.all([
+      deps.projects.list({ q, ...page }),
+      deps.projects.count({ q }),
+    ]);
+    reply.header("X-Total-Count", String(total));
+    return items;
+  });
 
   app.get("/projects/:id", async (req, reply) => {
     const id = projectIdSchema.safeParse((req.params as { id: string }).id);

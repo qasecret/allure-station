@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import type { TrendPoint } from "@allure-station/shared";
+import { runStatusSchema, type RunStatus, type TrendPoint } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
+import { parsePage } from "./pagination.js";
 
 const TREND_LIMIT = 30;
 
@@ -13,9 +14,22 @@ export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
       .map((r) => ({ runId: r.id, createdAt: r.createdAt, stats: r.stats }));
   });
 
-  app.get("/projects/:projectId/runs", async (req) => {
+  app.get("/projects/:projectId/runs", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
-    return deps.runs.listByProject(projectId);
+    const { status } = req.query as { status?: string };
+    if (status !== undefined && !runStatusSchema.safeParse(status).success) {
+      return reply.code(400).send({ error: `invalid status "${status}"` });
+    }
+    let page;
+    try { page = parsePage(req.query as Record<string, unknown>); }
+    catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    const typedStatus = status as RunStatus | undefined;
+    const [items, total] = await Promise.all([
+      deps.runs.listByProject(projectId, { status: typedStatus, ...page }),
+      deps.runs.countByProject(projectId, { status: typedStatus }),
+    ]);
+    reply.header("X-Total-Count", String(total));
+    return items;
   });
 
   app.get("/projects/:projectId/runs/:runId", async (req, reply) => {

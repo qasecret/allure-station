@@ -29,4 +29,20 @@ describe("project routes", () => {
     expect((await app.inject({ method: "POST", url: "/api/projects", payload: { id: "dup" } })).statusCode).toBe(409);
     await app.close();
   });
+
+  it("supports ?q search, ?limit/?offset pagination, and X-Total-Count", async () => {
+    const app = buildApp(await makeTestDeps());
+    for (const id of ["alpha", "alpine", "beta"]) await app.inject({ method: "POST", url: "/api/projects", payload: { id } });
+
+    const search = await app.inject({ method: "GET", url: "/api/projects?q=alp" });
+    expect(search.json().map((p: { id: string }) => p.id)).toEqual(["alpha", "alpine"]);
+    expect(search.headers["x-total-count"]).toBe("2");
+
+    const page = await app.inject({ method: "GET", url: "/api/projects?limit=1&offset=1" });
+    expect(page.json().map((p: { id: string }) => p.id)).toEqual(["alpine"]);
+    expect(page.headers["x-total-count"]).toBe("3"); // total ignores pagination
+
+    expect((await app.inject({ method: "GET", url: "/api/projects?limit=-1" })).statusCode).toBe(400);
+    await app.close();
+  });
 });
