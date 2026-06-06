@@ -99,10 +99,12 @@ export class BullMQQueue implements JobQueue {
     });
   }
 
-  /** Best-effort drain; tests use the env-gated live path, not onIdle, for BullMQ. */
-  async onIdle(): Promise<void> {
-    await this.#queue.drain();
-  }
+  /**
+   * No-op for the distributed queue: completion is not tracked in the producer.
+   * Callers needing terminal status must poll the run row (GET /runs/:id).
+   * (Deliberately NOT queue.drain() — that would DELETE pending jobs.)
+   */
+  async onIdle(): Promise<void> {}
 
   async close(): Promise<void> {
     await this.#worker?.close();

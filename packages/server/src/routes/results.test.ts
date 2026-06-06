@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { buildApp } from "../app.js";
 import { makeTestDeps } from "../test-helpers.js";
+import type { JobQueue } from "@allure-station/worker";
 
 const fixturesDir = fileURLToPath(
   new URL("../../../worker/test/fixtures/allure-results", import.meta.url),
@@ -189,4 +190,34 @@ describe("send-results + generate", () => {
 
     await app.close();
   }, 60_000);
+
+  it("POST /generate returns 503 and marks run failed when enqueue throws", async () => {
+    const deps = await makeTestDeps();
+    // Replace queue with a stub whose enqueue always rejects (simulates Redis down)
+    deps.queue = {
+      start() {},
+      enqueue: async () => { throw new Error("redis down"); },
+      onIdle: async () => {},
+      close: async () => {},
+    } as unknown as JobQueue;
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "eq-fail" } });
+
+    const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
+    const mp = await multipart([{ field: "files", filename: "1-result.json", data: f1 }]);
+
+    const send = await app.inject({ method: "POST", url: "/api/projects/eq-fail/send-results", ...mp });
+    expect(send.statusCode).toBe(202);
+    const runId = send.json().runId as string;
+
+    const gen = await app.inject({ method: "POST", url: "/api/projects/eq-fail/generate" });
+    expect(gen.statusCode).toBe(503);
+    expect(gen.json().error).toBe("failed to enqueue generation");
+
+    // Run must be marked failed (not stranded in 'generating')
+    const run = await app.inject({ method: "GET", url: `/api/projects/eq-fail/runs/${runId}` });
+    expect(run.json().status).toBe("failed");
+
+    await app.close();
+  });
 });

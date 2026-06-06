@@ -1,6 +1,47 @@
 import { describe, it, expect } from "vitest";
 import { loadConfig } from "./config.js";
 
+describe("loadConfig — driver enum validation", () => {
+  it("throws on unrecognized QUEUE_DRIVER", () => {
+    expect(() => loadConfig({ QUEUE_DRIVER: "bullmqs" })).toThrow(/Invalid QUEUE_DRIVER "bullmqs"/);
+  });
+
+  it("throws on unrecognized DB_DRIVER", () => {
+    expect(() => loadConfig({ DB_DRIVER: "mysql" })).toThrow(/Invalid DB_DRIVER "mysql"/);
+  });
+
+  it("throws on unrecognized STORAGE_DRIVER", () => {
+    expect(() => loadConfig({ STORAGE_DRIVER: "gcs" })).toThrow(/Invalid STORAGE_DRIVER "gcs"/);
+  });
+
+  it("accepts valid QUEUE_DRIVER values", () => {
+    expect(loadConfig({ QUEUE_DRIVER: "inprocess" }).queueDriver).toBe("inprocess");
+    expect(loadConfig({ QUEUE_DRIVER: "bullmq" }).queueDriver).toBe("bullmq");
+  });
+
+  it("defaults QUEUE_DRIVER to inprocess when not set", () => {
+    expect(loadConfig({}).queueDriver).toBe("inprocess");
+  });
+
+  it("accepts valid DB_DRIVER values", () => {
+    expect(loadConfig({ DB_DRIVER: "sqlite" }).db.driver).toBe("sqlite");
+    expect(loadConfig({ DB_DRIVER: "postgres", DATABASE_URL: "postgres://localhost/test" }).db.driver).toBe("postgres");
+  });
+
+  it("defaults DB_DRIVER to sqlite when not set", () => {
+    expect(loadConfig({}).db.driver).toBe("sqlite");
+  });
+
+  it("accepts valid STORAGE_DRIVER values", () => {
+    expect(loadConfig({ STORAGE_DRIVER: "local" }).storage.backend).toBe("local");
+    expect(loadConfig({ STORAGE_DRIVER: "s3" }).storage.backend).toBe("s3");
+  });
+
+  it("defaults STORAGE_DRIVER to local when not set", () => {
+    expect(loadConfig({}).storage.backend).toBe("local");
+  });
+});
+
 describe("loadConfig", () => {
   it("defaults to local backend with no env vars", () => {
     const cfg = loadConfig({});

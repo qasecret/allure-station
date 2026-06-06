@@ -34,10 +34,14 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
     const runs = await deps.runs.listByProject(projectId);
     const pending = runs.find((r) => r.status === "pending");
     if (!pending) return reply.code(409).send({ error: "no pending run to generate" });
-    if (!(await deps.runs.claimPending(pending.id))) {
-      return reply.code(409).send({ error: "run is already being generated" });
+    if (!(await deps.runs.claimPending(pending.id))) return reply.code(409).send({ error: "run is already being generated" });
+    try {
+      await deps.queue.enqueue({ projectId, runId: pending.id });
+    } catch (err) {
+      await deps.runs.markFailed(pending.id, deps.now());
+      req.log?.error?.(err);
+      return reply.code(503).send({ error: "failed to enqueue generation" });
     }
-    await deps.queue.enqueue({ projectId, runId: pending.id });
     return reply.code(202).send(await deps.runs.get(pending.id)); // 202 Accepted; status: "generating"
   });
 }

@@ -23,9 +23,22 @@ export interface AppConfig {
   };
 }
 
+function parseEnum<T extends string>(
+  name: string,
+  value: string | undefined,
+  allowed: readonly T[],
+  def: T,
+): T {
+  if (value === undefined || value === "") return def;
+  if (!allowed.includes(value as T)) {
+    throw new Error(`Invalid ${name} "${value}": must be one of ${allowed.join(", ")}`);
+  }
+  return value as T;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const dataDir = env.DATA_DIR ?? "./data";
-  const backend = (env.STORAGE_DRIVER ?? "local") as StorageBackend;
+  const backend = parseEnum("STORAGE_DRIVER", env.STORAGE_DRIVER, ["local", "s3"] as const, "local");
 
   const storage: AppConfig["storage"] =
     backend === "s3"
@@ -51,7 +64,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
           localRoot: env.STORAGE_ROOT ?? `${dataDir}/storage`,
         };
 
-  const dbDriver = (env.DB_DRIVER ?? "sqlite") as DbDriver;
+  const dbDriver = parseEnum("DB_DRIVER", env.DB_DRIVER, ["sqlite", "postgres"] as const, "sqlite");
   let dbUrl: string;
   if (dbDriver === "postgres") {
     if (!env.DATABASE_URL) throw new Error("DATABASE_URL is required when DB_DRIVER=postgres");
@@ -61,12 +74,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     dbUrl = `file:${dbFile}`;
   }
 
+  const queueDriver = parseEnum("QUEUE_DRIVER", env.QUEUE_DRIVER, ["inprocess", "bullmq"] as const, "inprocess");
+
   return {
     port: Number(env.PORT ?? 5050),
     db: { driver: dbDriver, url: dbUrl },
     workDir: env.WORK_DIR ?? `${dataDir}/work`,
     concurrency: Number(env.GENERATE_CONCURRENCY ?? 2),
-    queueDriver: (env.QUEUE_DRIVER ?? "inprocess") as QueueDriver,
+    queueDriver,
     redisUrl: env.REDIS_URL,
     version: env.APP_VERSION ?? "0.1.0",
     storage,
