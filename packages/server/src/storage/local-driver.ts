@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile, access } from "node:fs/promises";
+import { cp, mkdir, readFile, rename, rm, writeFile, access } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import type { StorageDriver } from "./driver.js";
 
@@ -37,4 +37,12 @@ export class LocalDriver implements StorageDriver {
   }
 
   async resolveLocalPath(key: string): Promise<string> { return this.#path(key); }
+
+  async move(srcKey: string, destKey: string): Promise<void> {
+    const src = this.#path(srcKey);
+    const dest = this.#path(destKey);
+    await mkdir(dirname(dest), { recursive: true });
+    await rm(dest, { recursive: true, force: true });
+    await rename(src, dest);
+  }
 }

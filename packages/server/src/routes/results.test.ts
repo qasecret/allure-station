@@ -51,4 +51,53 @@ describe("send-results + generate", () => {
     expect(report.headers["content-type"]).toContain("text/html");
     await app.close();
   }, 60_000);
+
+  it("sanitizes traversal filenames: ../escape.json is stored as escape.json and generation succeeds", async () => {
+    const app = buildApp(makeTestDeps());
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p2" } });
+
+    const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
+    const f2 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000002-result.json"));
+    // Use traversal filename for one file; the other is normal
+    const mp = await multipart([
+      { field: "files", filename: "../escape.json", data: f1 },
+      { field: "files", filename: "2-result.json", data: f2 },
+    ]);
+
+    const send = await app.inject({ method: "POST", url: "/api/projects/p2/send-results", ...mp });
+    expect(send.statusCode).toBe(202);
+    // Both files accepted (../escape.json becomes escape.json, not skipped)
+    expect(send.json().files).toBe(2);
+
+    // Generation should succeed (no crash from traversal)
+    const gen = await app.inject({ method: "POST", url: `/api/projects/p2/generate` });
+    expect(gen.statusCode).toBe(200);
+    expect(gen.json().status).toBe("ready");
+
+    await app.close();
+  }, 60_000);
+
+  it("second POST /generate returns 409 after first succeeds (no pending run)", async () => {
+    const app = buildApp(makeTestDeps());
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p3" } });
+
+    const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
+    const mp = await multipart([
+      { field: "files", filename: "1-result.json", data: f1 },
+    ]);
+
+    await app.inject({ method: "POST", url: "/api/projects/p3/send-results", ...mp });
+
+    // First generate succeeds and run becomes ready
+    const gen1 = await app.inject({ method: "POST", url: `/api/projects/p3/generate` });
+    expect(gen1.statusCode).toBe(200);
+    expect(gen1.json().status).toBe("ready");
+
+    // Second generate finds no pending run -> 409
+    const gen2 = await app.inject({ method: "POST", url: `/api/projects/p3/generate` });
+    expect(gen2.statusCode).toBe(409);
+    expect(gen2.json().error).toBe("no pending run to generate");
+
+    await app.close();
+  }, 60_000);
 });

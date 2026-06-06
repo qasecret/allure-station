@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { Project, Run, RunStats, RunStatus } from "@allure-station/shared";
 import type { Db } from "./client.js";
 import { projects, runs } from "./schema.js";
@@ -49,6 +49,16 @@ export class RunRepository {
 
   async setStatus(id: string, status: RunStatus): Promise<void> {
     this.db.update(runs).set({ status }).where(eq(runs.id, id)).run();
+  }
+
+  /** Atomically transition a run from 'pending' to 'generating'. Returns true if this caller won the claim. */
+  async claimPending(id: string): Promise<boolean> {
+    const res = this.db
+      .update(runs)
+      .set({ status: "generating" })
+      .where(and(eq(runs.id, id), eq(runs.status, "pending")))
+      .run();
+    return res.changes === 1;
   }
 
   async markReady(id: string, stats: RunStats, finishedAt: string): Promise<void> {

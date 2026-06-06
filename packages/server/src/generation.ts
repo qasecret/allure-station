@@ -8,7 +8,6 @@ import type { AppDeps } from "./app.js";
  * push it back to storage, and update the run row. Returns when done.
  */
 export async function runGeneration(deps: AppDeps, projectId: string, runId: string): Promise<void> {
-  await deps.runs.setStatus(runId, "generating");
   const jobDir = join(deps.workDir, runId);
   const resultsDir = join(jobDir, "results");
   const outDir = join(jobDir, "report");
@@ -28,7 +27,9 @@ export async function runGeneration(deps: AppDeps, projectId: string, runId: str
       dumps: [],
     });
 
-    await deps.storage.putDir(`${projectId}/runs/${runId}/report`, outDir);
+    const tmpKey = `${projectId}/runs/${runId}/.report.tmp`;
+    await deps.storage.putDir(tmpKey, outDir);
+    await deps.storage.move(tmpKey, `${projectId}/runs/${runId}/report`);
     await deps.runs.markReady(runId, stats, deps.now());
   } catch (err) {
     await deps.runs.markFailed(runId, deps.now());

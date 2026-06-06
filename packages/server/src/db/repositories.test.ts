@@ -41,4 +41,21 @@ describe("RunRepository", () => {
 
     expect((await projects.get("p"))?.latestRunId).toBe("r1");
   });
+
+  it("claimPending returns true the first time and false the second time (simulates a race)", async () => {
+    await projects.create("p2", "2026-06-06T00:00:00.000Z");
+    await runs.create("p2", "r2", "Race Report", "2026-06-06T00:00:00.000Z");
+
+    // First caller wins the claim
+    const first = await runs.claimPending("r2");
+    expect(first).toBe(true);
+
+    // Run is now 'generating'
+    const claimed = await runs.get("r2");
+    expect(claimed?.status).toBe("generating");
+
+    // Second caller loses (run is no longer 'pending')
+    const second = await runs.claimPending("r2");
+    expect(second).toBe(false);
+  });
 });

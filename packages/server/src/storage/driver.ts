@@ -13,4 +13,6 @@ export interface StorageDriver {
    * For local this is the real path; the S3 driver will hydrate to a temp dir.
    */
   resolveLocalPath(key: string): Promise<string>;
+  /** Atomically replace destKey with the contents at srcKey (used to publish a finished report dir). */
+  move(srcKey: string, destKey: string): Promise<void>;
 }
