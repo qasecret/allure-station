@@ -1,11 +1,9 @@
-import { resolve } from "node:path";
-import { nanoid } from "nanoid";
 import { loadConfig } from "./config.js";
 import { createDb } from "./db/client.js";
-import { ProjectRepository, RunRepository } from "./db/repositories.js";
-import { createStorage } from "./storage/factory.js";
+import { RunRepository } from "./db/repositories.js";
 import { BullMQQueue } from "@allure-station/worker";
 import { processGenerate } from "./generation.js";
+import { buildDeps } from "./deps.js";
 
 const config = loadConfig();
 
@@ -23,16 +21,7 @@ const runs = new RunRepository(db);
 const staleReset = await runs.failStaleGenerating(new Date().toISOString());
 if (staleReset > 0) console.log(`reconciled ${staleReset} stale 'generating' run(s) to 'failed'`);
 
-const deps = {
-  projects: new ProjectRepository(db),
-  runs,
-  storage: createStorage(config.storage),
-  queue,
-  workDir: resolve(config.workDir),
-  version: config.version,
-  now: () => new Date().toISOString(),
-  newId: () => nanoid(12),
-};
+const deps = buildDeps(config, queue, db);
 
 // Construct the BullMQ Worker — only the worker process calls start, never the API process.
 queue.start((data) => processGenerate(deps, data));

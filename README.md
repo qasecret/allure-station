@@ -145,6 +145,81 @@ pnpm --filter @allure-station/server test src/db/repositories
 
 Without `PG_TEST_URL` set, the Postgres conformance suite is automatically skipped.
 
+## Job queue
+
+Allure Station uses a job queue to run report-generation asynchronously. The queue driver is configured via environment variable.
+
+### `QUEUE_DRIVER=inprocess` (default)
+
+No configuration needed. Generation jobs run inside the API process under a concurrency limit (default: 2). This is the zero-config default — a single container is all you need.
+
+| Variable | Default | Description |
+|---|---|---|
+| `QUEUE_DRIVER` | `inprocess` | Queue backend (`inprocess` or `bullmq`) |
+| `GENERATE_CONCURRENCY` | `2` | Max concurrent generation jobs |
+
+### `QUEUE_DRIVER=bullmq`
+
+Set `QUEUE_DRIVER=bullmq` and provide a Redis URL to use BullMQ as the queue backend. Jobs are enqueued by the API process and consumed by a separate **worker process**. You can scale horizontally by running N worker replicas.
+
+| Variable | Default | Description |
+|---|---|---|
+| `QUEUE_DRIVER` | `inprocess` | Set to `bullmq` to enable |
+| `REDIS_URL` | _(required when `QUEUE_DRIVER=bullmq`)_ | Redis connection URL, e.g. `redis://redis:6379` |
+| `GENERATE_CONCURRENCY` | `2` | Max concurrent jobs per worker process |
+
+**Starting the worker process:**
+
+```bash
+pnpm --filter @allure-station/server start:worker
+```
+
+**Important:** BullMQ mode requires **shared DB (Postgres) and shared storage (S3 or a shared volume)**, since the API and worker run as separate processes that both read/write the same run rows and report files. SQLite and local-filesystem storage are single-process only.
+
+#### Running with docker compose (bullmq profile)
+
+The `redis` and `worker` services are included in `docker/docker-compose.yml` behind the `bullmq` compose profile.
+
+1. Uncomment the BullMQ, DB, and storage env vars in the `allure-station` service in `docker/docker-compose.yml`, and uncomment the DB/storage env vars in the `worker` service.
+
+2. Start with the `bullmq` (and `postgres`) profiles:
+
+```bash
+docker compose -f docker/docker-compose.yml --profile bullmq --profile postgres up
+```
+
+The default `docker compose up` (no profiles) continues to run single-process with the in-process queue — no Redis or worker required.
+
+### `/generate` contract
+
+`POST /api/projects/:projectId/generate` returns **202 Accepted** with the run object at status `generating` (fire-and-forget). The generation job runs asynchronously.
+
+Clients must **poll `GET /api/projects/:projectId/runs/:runId`** until the run reaches a terminal status:
+- `ready` — report generated successfully
+- `failed` — generation failed
+
+This applies to both `inprocess` and `bullmq` drivers. The UI polls automatically via `refetchInterval` while a run is `generating`.
+
+> **Note:** This changed from the old synchronous behavior (where `/generate` held the HTTP connection open until the report was ready). API clients that previously read the final status from the `/generate` response must now poll for it.
+
+### Running Redis conformance tests
+
+The BullMQ driver has an environment-gated conformance suite that runs against a real Redis instance.
+
+1. Start Redis:
+
+```bash
+docker compose -f docker/docker-compose.test.yml up -d redis
+```
+
+2. Run the queue conformance tests:
+
+```bash
+REDIS_TEST_URL=redis://localhost:6379 pnpm --filter @allure-station/worker test
+```
+
+Without `REDIS_TEST_URL` set, the BullMQ suite is automatically skipped (the in-process queue tests always run).
+
 ## Development
 
 ```bash
