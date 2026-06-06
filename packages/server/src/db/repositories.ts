@@ -23,7 +23,9 @@ export class ProjectRepository {
 
   async remove(id: string): Promise<void> {
     // libsql doesn't enforce FK ON DELETE CASCADE (pragma off), so delete children explicitly,
-    // deepest first: test_results -> runs -> project.
+    // deepest first: test_results -> runs -> project. (Sequential, not a transaction: the libsql
+    // `:memory:` driver opens a fresh connection per transaction; project removal is a rare,
+    // operator-initiated action where a partial delete is recoverable by re-running.)
     await this.db.delete(testResults).where(
       inArray(testResults.runId, this.db.select({ id: runs.id }).from(runs).where(eq(runs.projectId, id))),
     );

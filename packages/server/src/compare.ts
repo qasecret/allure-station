@@ -1,8 +1,11 @@
 import type { CompareResult, TestDiff, TestSummary } from "@allure-station/shared";
 
+// Cross-run match key. historyId is Allure's stable per-test hash and is effectively always present;
+// fullName/name are fallbacks. Two distinct tests with no identity at all (null historyId AND null
+// fullName) and the same name are indistinguishable across runs and would share a key — unavoidable
+// without identity, and not produced by Allure in practice.
 const keyOf = (t: TestSummary): string => t.historyId ?? t.fullName ?? t.name;
 const isFailing = (s: TestSummary["status"]): boolean => s === "failed" || s === "broken";
-const isPassing = (s: TestSummary["status"]): boolean => s === "passed" || s === "skipped";
 
 const toDiff = (base: TestSummary | undefined, target: TestSummary | undefined): TestDiff => {
   const t = (target ?? base)!;
@@ -39,12 +42,12 @@ export function compareRuns(
     const bt = baseMap.get(key);
     if (!bt) {
       res.added.push(toDiff(undefined, tt));
-    } else if (isFailing(tt.status) && isPassing(bt.status)) {
-      res.newlyFailing.push(toDiff(bt, tt));
-    } else if (isPassing(tt.status) && isFailing(bt.status)) {
+    } else if (isFailing(tt.status)) {
+      // Every target-failing test is bucketed (no status — incl. 'unknown' or 'skipped' base — slips through).
+      (isFailing(bt.status) ? res.stillFailing : res.newlyFailing).push(toDiff(bt, tt));
+    } else if (isFailing(bt.status) && tt.status === "passed") {
+      // "Fixed" requires a real pass; failed→skipped/unknown is not a confirmed fix, so it isn't claimed here.
       res.fixed.push(toDiff(bt, tt));
-    } else if (isFailing(tt.status) && isFailing(bt.status)) {
-      res.stillFailing.push(toDiff(bt, tt));
     }
     if (tt.flaky) res.flaky.push(toDiff(bt, tt));
   }

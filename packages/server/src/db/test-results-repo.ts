@@ -6,7 +6,11 @@ import { testResults } from "./schema.sqlite.js";
 export class TestResultRepository {
   constructor(private readonly db: Db, private readonly newId: () => string) {}
 
-  /** Replace all stored test rows for a run (idempotent across re-generation). */
+  /** Replace all stored test rows for a run (idempotent across re-generation). Runs as sequential
+   *  statements rather than a transaction: the libsql `:memory:` driver opens a fresh (empty)
+   *  connection per transaction, and a failed insert is self-correcting — generation re-runs
+   *  replace the rows, and a run that fails mid-persist is markFailed'd, so it's excluded from
+   *  comparison until a successful regeneration. */
   async replaceForRun(runId: string, tests: TestSummary[]): Promise<void> {
     await this.db.delete(testResults).where(eq(testResults.runId, runId));
     if (tests.length === 0) return;

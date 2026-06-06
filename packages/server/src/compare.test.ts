@@ -46,6 +46,21 @@ describe("compareRuns", () => {
     expect(r.flaky.map((d) => d.name)).toEqual(["flaky-one"]);
   });
 
+  it("buckets ambiguous statuses safely (no silent drops, no false 'fixed')", () => {
+    const r = compareRuns(
+      { runId: "b", createdAt: "x", tests: [
+        t({ name: "unknown-to-failed", status: "unknown" }),
+        t({ name: "failed-to-skipped", status: "failed" }),
+      ] },
+      { runId: "t", createdAt: "y", tests: [
+        t({ name: "unknown-to-failed", status: "failed" }),  // newly failing (base wasn't failing)
+        t({ name: "failed-to-skipped", status: "skipped" }), // NOT "fixed" — skipped isn't a confirmed pass
+      ] },
+    );
+    expect(r.newlyFailing.map((d) => d.name)).toEqual(["unknown-to-failed"]);
+    expect(r.fixed).toHaveLength(0);
+  });
+
   it("newlyFailing carries base->target statuses", () => {
     const r = compareRuns(
       { runId: "b", createdAt: "x", tests: [t({ name: "a", status: "passed" })] },

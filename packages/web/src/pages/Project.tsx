@@ -90,14 +90,29 @@ export function Project() {
 }
 
 function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: Run[] }) {
-  // readyRuns arrive newest-first. Default: compare the newest (target) against the previous (base).
+  // readyRuns arrive newest-first. Default: compare the newest (target) against the previous (base),
+  // auto-following the latest run until the user picks their own pair.
   const [base, setBase] = useState<string>("");
   const [target, setTarget] = useState<string>("");
+  const [touched, setTouched] = useState(false);
 
+  // Re-default when switching projects.
+  useEffect(() => { setTouched(false); }, [projectId]);
+
+  // Keyed on the ready-run id set (stable string) rather than the array identity, so this runs only
+  // when the set of ready runs actually changes — not on every parent re-render.
+  const readyIds = readyRuns.map((r) => r.id).join(",");
   useEffect(() => {
-    setTarget((t) => (readyRuns.some((r) => r.id === t) ? t : readyRuns[0]?.id ?? ""));
-    setBase((b) => (readyRuns.some((r) => r.id === b) ? b : readyRuns[1]?.id ?? ""));
-  }, [readyRuns]);
+    const ids = readyIds ? readyIds.split(",") : [];
+    if (touched) {
+      // Respect the user's choice; only clamp if a selected run disappeared.
+      setTarget((t) => (ids.includes(t) ? t : ids[0] ?? ""));
+      setBase((b) => (ids.includes(b) ? b : ids[1] ?? ""));
+    } else {
+      setTarget(ids[0] ?? "");
+      setBase(ids[1] ?? "");
+    }
+  }, [readyIds, touched]);
 
   const { data: diff } = useQuery({
     queryKey: ["compare", projectId, base, target],
@@ -107,6 +122,8 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
 
   if (readyRuns.length < 2) return null;
 
+  const pick = (set: (v: string) => void) => (e: { target: { value: string } }) => { setTouched(true); set(e.target.value); };
+
   const runOption = (r: Run) => (
     <option key={r.id} value={r.id}>{r.createdAt}{r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}</option>
   );
@@ -115,9 +132,9 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
     <details style={{ padding: "4px 12px", fontSize: 13 }}>
       <summary style={{ cursor: "pointer" }}>Compare runs</summary>
       <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "6px 0" }}>
-        <label>Base <select value={base} onChange={(e) => setBase(e.target.value)}>{readyRuns.map(runOption)}</select></label>
+        <label>Base <select value={base} onChange={pick(setBase)}>{readyRuns.map(runOption)}</select></label>
         <span>→</span>
-        <label>Target <select value={target} onChange={(e) => setTarget(e.target.value)}>{readyRuns.map(runOption)}</select></label>
+        <label>Target <select value={target} onChange={pick(setTarget)}>{readyRuns.map(runOption)}</select></label>
       </div>
       {base === target ? (
         <p style={{ color: "#888" }}>Pick two different runs.</p>
