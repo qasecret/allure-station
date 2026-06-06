@@ -51,7 +51,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       if (url.startsWith("/api")) {
         return reply.code(404).send({ error: "not found" });
       }
-      return reply.sendFile("index.html");
+      // Pass the web root explicitly: reply.sendFile's default root is the
+      // serve:false registration above (process.cwd()), not WEB_DIST.
+      return reply.sendFile("index.html", root);
     });
   }
 
