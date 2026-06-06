@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { createDb } from "./client.js";
 import { ProjectRepository, RunRepository } from "./repositories.js";
 import { TestResultRepository } from "./test-results-repo.js";
+import { ApiTokenRepository } from "./api-tokens-repo.js";
 import type { TestSummary } from "@allure-station/shared";
 
 // Deterministic id generator per handle (matches the deps `newId` contract).
@@ -15,6 +16,7 @@ type BackendHandle = {
   projects: ProjectRepository;
   runs: RunRepository;
   tests: TestResultRepository;
+  tokens: ApiTokenRepository;
   cleanup: () => Promise<void>;
 };
 
@@ -33,6 +35,7 @@ const backends: Backend[] = [
         projects: new ProjectRepository(db),
         runs: new RunRepository(db),
         tests: new TestResultRepository(db, idGen()),
+        tokens: new ApiTokenRepository(db, idGen()),
         cleanup: async () => {},
       };
     },
@@ -56,11 +59,12 @@ if (process.env.PG_TEST_URL) {
       // Cast to any: Db is typed as LibSQLDatabase which lacks execute(); the pg
       // handle cast as Db at the factory retains execute() at runtime (node-postgres).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (db as any).execute(sql`TRUNCATE test_results, runs, projects CASCADE`);
+      await (db as any).execute(sql`TRUNCATE api_tokens, test_results, runs, projects CASCADE`);
       return {
         projects: new ProjectRepository(db),
         runs: new RunRepository(db),
         tests: new TestResultRepository(db, idGen()),
+        tokens: new ApiTokenRepository(db, idGen()),
         cleanup: async () => {},
       };
     },
@@ -72,10 +76,11 @@ for (const backend of backends) {
     let projects: ProjectRepository;
     let runs: RunRepository;
     let tests: TestResultRepository;
+    let tokens: ApiTokenRepository;
     let cleanup: () => Promise<void>;
 
     beforeEach(async () => {
-      ({ projects, runs, tests, cleanup } = await backend.make());
+      ({ projects, runs, tests, tokens, cleanup } = await backend.make());
     });
 
     // -------------------------------------------------------------------------
@@ -305,6 +310,40 @@ for (const backend of backends) {
         await tests.replaceForRun("r1", sample);
         await projects.remove("p");
         expect(await tests.listByRun("r1")).toHaveLength(0);
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // ApiTokenRepository tests
+    // -------------------------------------------------------------------------
+
+    describe("ApiTokenRepository", () => {
+      beforeEach(async () => {
+        await projects.create("p", "2026-06-06T00:00:00.000Z");
+      });
+
+      it("create + listByProject does not leak the hash, counts, and resolves by hash", async () => {
+        const tok = await tokens.create("p", "ci", "hash-abc", "ast_abc123", "2026-06-06T00:00:01.000Z");
+        expect(tok).toMatchObject({ projectId: "p", name: "ci", prefix: "ast_abc123", lastUsedAt: null });
+        const listed = await tokens.listByProject("p");
+        expect(listed).toHaveLength(1);
+        expect(listed[0]).not.toHaveProperty("tokenHash");
+        expect(await tokens.countByProject("p")).toBe(1);
+        expect(await tokens.findByHash("hash-abc")).toEqual({ id: tok.id, projectId: "p" });
+        expect(await tokens.findByHash("nope")).toBeNull();
+      });
+
+      it("remove is project-scoped and reports whether a row was deleted", async () => {
+        const tok = await tokens.create("p", "ci", "h", "pre", "2026-06-06T00:00:01.000Z");
+        expect(await tokens.remove("other", tok.id)).toBe(false); // wrong project
+        expect(await tokens.remove("p", tok.id)).toBe(true);
+        expect(await tokens.countByProject("p")).toBe(0);
+      });
+
+      it("removing the project cascades to api_tokens", async () => {
+        await tokens.create("p", "ci", "h", "pre", "2026-06-06T00:00:01.000Z");
+        await projects.remove("p");
+        expect(await tokens.countByProject("p")).toBe(0);
       });
     });
   });
