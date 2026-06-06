@@ -25,6 +25,18 @@ describe("quality-gate + summary routes", () => {
     await app.close();
   });
 
+  it("rejects a typo'd rule key (400) instead of silently clearing the gate", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await deps.projects.create("p", deps.now());
+    await deps.projects.setQualityGate("p", { maxFailures: 0 });
+    const res = await app.inject({ method: "PUT", url: "/api/projects/p/quality-gate", payload: { maxFailurez: 0 } });
+    expect(res.statusCode).toBe(400);
+    // the existing gate is untouched
+    expect((await app.inject({ method: "GET", url: "/api/projects/p/quality-gate" })).json()).toEqual({ maxFailures: 0 });
+    await app.close();
+  });
+
   it("PUT quality-gate is rejected (401) when the project is token-protected", async () => {
     const deps = await makeTestDeps();
     const app = buildApp(deps);

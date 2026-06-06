@@ -1,10 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import { qualityGateConfigSchema, type RunStats } from "@allure-station/shared";
+import { qualityGateConfigSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { authorizeProjectWrite } from "../auth.js";
 import { evaluateGate } from "../gate.js";
-
-const ZERO_STATS: RunStats = { total: 0, passed: 0, failed: 0, broken: 0, skipped: 0 };
 
 export function registerQualityGateRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.get("/projects/:projectId/quality-gate", async (req, reply) => {
@@ -36,11 +34,17 @@ export function registerQualityGateRoutes(app: FastifyInstance, deps: AppDeps): 
       deps.projects.getQualityGate(projectId),
       deps.runs.previousReadyBefore(projectId, run.createdAt),
     ]);
+    const configured = !!gate && Object.keys(gate).length > 0;
+    // Only ready runs have stats to evaluate. For a non-ready run, report the gate as not-yet-passed
+    // (no fabricated checks) rather than evaluating over zeroes.
+    const qualityGate = run.stats
+      ? evaluateGate(run.stats, gate)
+      : { configured, passed: !configured, checks: [] };
     return {
       run,
       reportPath: `/api/projects/${projectId}/runs/${runId}/report/index.html`,
       previousReadyRunId: previous?.id ?? null,
-      qualityGate: evaluateGate(run.stats ?? ZERO_STATS, gate),
+      qualityGate,
     };
   });
 }

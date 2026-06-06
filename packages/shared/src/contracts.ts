@@ -67,12 +67,14 @@ export const compareResultSchema = z.object({
   flaky: z.array(testDiffSchema),        // flagged flaky in target
 });
 
+// .strict() so a typo'd rule (e.g. {maxFailurez:0}) is a 400, not silently stripped to {} — which
+// would clear the gate and let everything pass.
 export const qualityGateConfigSchema = z.object({
   maxFailures: z.number().int().nonnegative().optional(),
   minTests: z.number().int().nonnegative().optional(),
   minPassRate: z.number().min(0).max(1).optional(),
   maxDurationMs: z.number().int().nonnegative().optional(),
-});
+}).strict();
 export const qualityGateCheckSchema = z.object({
   rule: z.string(),
   ok: z.boolean(),
