@@ -87,6 +87,19 @@ export const runEventSchema = z.object({
   run: runSchema,
 });
 
+// API token as shown to clients (never includes the hash or plaintext).
+export const apiTokenSchema = z.object({
+  id: z.string(),
+  projectId: projectIdSchema,
+  name: z.string(),
+  prefix: z.string(),
+  createdAt: z.string(),
+  lastUsedAt: z.string().nullable(),
+});
+// Returned ONCE on creation — includes the plaintext token.
+export const createdTokenSchema = apiTokenSchema.extend({ token: z.string() });
+export const createTokenRequestSchema = z.object({ name: z.string().min(1).max(64) });
+
 export type ProjectId = z.infer<typeof projectIdSchema>;
 export type Run = z.infer<typeof runSchema>;
 export type RunStats = z.infer<typeof runStatsSchema>;
@@ -97,3 +110,5 @@ export type TestStatus = z.infer<typeof testStatusSchema>;
 export type TestSummary = z.infer<typeof testSummarySchema>;
 export type TestDiff = z.infer<typeof testDiffSchema>;
 export type CompareResult = z.infer<typeof compareResultSchema>;
+export type ApiToken = z.infer<typeof apiTokenSchema>;
+export type CreatedToken = z.infer<typeof createdTokenSchema>;
