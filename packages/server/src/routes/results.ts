@@ -39,7 +39,10 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
     try {
       await deps.queue.enqueue({ projectId, runId: pending.id });
     } catch (err) {
-      await deps.runs.markFailed(pending.id, deps.now());
+      const failedAt = deps.now();
+      await deps.runs.markFailed(pending.id, failedAt);
+      // Publish the terminal state too — clients already saw this run as pending/generating.
+      deps.bus.publish({ type: "run", projectId, run: { ...pending, status: "failed", finishedAt: failedAt } });
       req.log?.error?.(err);
       return reply.code(503).send({ error: "failed to enqueue generation" });
     }

@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
-import type { Run, TrendPoint } from "@allure-station/shared";
+import type { Run, RunStatus, TrendPoint } from "@allure-station/shared";
 import { api } from "../main.js";
+
+// Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
+const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
 
 export function Project() {
   const { id = "" } = useParams();
@@ -14,21 +17,29 @@ export function Project() {
     setSelectedRun(null);
   }, [id]);
 
+  // SSE drives instant updates; a slow refetch is kept only as a backstop while a run is
+  // generating, so the UI still self-heals if SSE is unavailable or an event is missed.
   const { data: runs = [] } = useQuery({
     queryKey: ["runs", id],
     queryFn: () => api.listRuns(id),
+    refetchInterval: (q) => (q.state.data?.some((r) => r.status === "generating") ? 5000 : false),
   });
 
   const { data: trends = [] } = useQuery({
     queryKey: ["trends", id],
     queryFn: () => api.listTrends(id),
+    refetchInterval: () => (runs.some((r) => r.status === "generating") ? 5000 : false),
   });
 
-  // Live updates over SSE replace polling: upsert the run on every lifecycle event,
-  // and refresh trends once a run reaches a terminal status.
+  // Live updates over SSE: upsert the run on every lifecycle event, and refresh trends once a
+  // run reaches a terminal status.
   useEffect(() => {
     const unsub = api.subscribeRuns(id, (event) => {
       qc.setQueryData<Run[]>(["runs", id], (prev = []) => {
+        // Ignore a stale/out-of-order transition (e.g. a delayed 'generating' arriving after
+        // 'ready' over independent Redis paths in bullmq mode) — never regress a run's status.
+        const existing = prev.find((r) => r.id === event.run.id);
+        if (existing && STATUS_RANK[event.run.status] < STATUS_RANK[existing.status]) return prev;
         const next = prev.filter((r) => r.id !== event.run.id);
         return [event.run, ...next].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
       });

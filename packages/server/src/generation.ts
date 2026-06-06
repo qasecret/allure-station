@@ -9,10 +9,15 @@ export async function processGenerate(deps: AppDeps, data: GenerateJobData): Pro
   await runGeneration(deps, data.projectId, data.runId);
 }
 
-/** Publish the current state of a run to the event bus (best-effort; never throws into the caller). */
+/** Publish the current state of a run to the event bus (best-effort; never throws into the caller —
+ *  in the failure path it must not mask the original generation error being re-thrown). */
 async function publishRun(deps: AppDeps, projectId: string, runId: string): Promise<void> {
-  const run = await deps.runs.get(runId);
-  if (run) deps.bus.publish({ type: "run", projectId, run });
+  try {
+    const run = await deps.runs.get(runId);
+    if (run) deps.bus.publish({ type: "run", projectId, run });
+  } catch (err) {
+    console.error("[events] failed to publish run update:", err);
+  }
 }
 
 /**

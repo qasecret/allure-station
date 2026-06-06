@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { Redis } from "ioredis";
-import type { RunEvent } from "@allure-station/shared";
+import { runEventSchema, type RunEvent } from "@allure-station/shared";
 
 export interface EventBus {
   /** Fire-and-forget publish. In RedisBus, local subscribers are notified via the round-trip too. */
@@ -49,14 +49,21 @@ export class RedisBus implements EventBus {
     this.#pub.on("error", (err) => console.error("[events] redis pub error:", err));
     this.#sub.on("error", (err) => console.error("[events] redis sub error:", err));
     this.#sub.on("message", (_channel, message) => {
-      let event: RunEvent;
+      // Cross-process trust boundary: validate the payload rather than blindly casting,
+      // so schema drift or a foreign producer can't push malformed events to SSE clients.
+      let parsed: unknown;
       try {
-        event = JSON.parse(message) as RunEvent;
+        parsed = JSON.parse(message);
       } catch (err) {
-        console.error("[events] dropping malformed run event:", err);
+        console.error("[events] dropping unparsable run event:", err);
         return;
       }
-      for (const l of this.#listeners) l(event);
+      const result = runEventSchema.safeParse(parsed);
+      if (!result.success) {
+        console.error("[events] dropping invalid run event:", result.error.message);
+        return;
+      }
+      for (const l of this.#listeners) l(result.data);
     });
     this.#ready = this.#sub.subscribe(CHANNEL).then(() => undefined);
   }

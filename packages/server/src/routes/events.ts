@@ -15,13 +15,19 @@ export function registerEventRoutes(app: FastifyInstance, deps: AppDeps): void {
       Connection: "keep-alive",
       "X-Accel-Buffering": "no", // disable proxy buffering (nginx)
     });
-    res.write("retry: 3000\n\n");
+
+    // Guard every write: a frame can be emitted between socket teardown and the 'close'
+    // event, which would throw / emit an unhandled 'error' on the raw response.
+    const write = (chunk: string) => {
+      if (!res.writableEnded && !res.destroyed) res.write(chunk);
+    };
+    write("retry: 3000\n\n");
 
     const unsub = deps.bus.subscribe((event) => {
       if (event.projectId !== projectId) return;
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      write(`data: ${JSON.stringify(event)}\n\n`);
     });
-    const heartbeat = setInterval(() => res.write(": ping\n\n"), 25_000);
+    const heartbeat = setInterval(() => write(": ping\n\n"), 25_000);
     heartbeat.unref?.();
 
     const cleanup = () => {
@@ -30,5 +36,6 @@ export function registerEventRoutes(app: FastifyInstance, deps: AppDeps): void {
     };
     req.raw.on("close", cleanup);
     req.raw.on("error", cleanup);
+    res.on("error", cleanup); // socket write error after teardown — clean up, don't crash
   });
 }
