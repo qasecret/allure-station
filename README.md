@@ -24,6 +24,15 @@ Push results from any pipeline with the reusable **[GitHub Action](github-action
 
 The action README also has copy-paste **GitLab CI** and **Jenkins** recipes (the same three HTTP calls).
 
+On `pull_request` events the action posts a **commit status + PR comment** (pass/fail, quality-gate verdict, stats, trend delta vs the previous run) and fails the job on a gate breach. Configure a per-project **quality gate**:
+
+```bash
+curl -XPUT host/api/projects/my-app/quality-gate -H 'content-type: application/json' \
+  -d '{"maxFailures":0,"minPassRate":0.95,"minTests":1}'   # PUT is auth-gated; GET is open
+```
+
+Rules (all configured must pass): `maxFailures` (failed+broken ≤ N), `minTests` (total ≥ N), `minPassRate` (0..1), `maxDurationMs`. The verdict is exposed on `GET /api/projects/:id/runs/:runId/summary`.
+
 Embed a live **status badge** (latest run, public) in your project README:
 
 ```markdown
