@@ -32,6 +32,9 @@ describe("notification routes", () => {
 
     expect((await app.inject({ method: "POST", url: "/api/projects/p/notifications", payload: { kind: "webhook", url: "not-a-url" } })).statusCode).toBe(400);
     expect((await app.inject({ method: "POST", url: "/api/projects/p/notifications", payload: { kind: "carrierpigeon", url: "https://h/x" } })).statusCode).toBe(400);
+    // SSRF guard: internal/loopback targets rejected
+    expect((await app.inject({ method: "POST", url: "/api/projects/p/notifications", payload: { kind: "webhook", url: "http://169.254.169.254/latest" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/api/projects/p/notifications", payload: { kind: "webhook", url: "http://localhost:5095/h" } })).statusCode).toBe(400);
     await app.close();
   });
 

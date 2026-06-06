@@ -53,6 +53,8 @@ curl -XPOST host/api/projects/my-app/notifications -H 'content-type: application
 
 Endpoints (auth-gated — they expose webhook URLs): `POST` / `GET` / `DELETE /api/projects/:id/notifications[/:id]`. Delivery is best-effort (a down endpoint never fails a run). Set `PUBLIC_URL` so report links in payloads are absolute. (Email/SMTP is not built in — use a webhook bridge.)
 
+> **SSRF note:** the server fetches webhook URLs. URLs must be http(s) and may not point at loopback/private/link-local **IP literals** or `localhost` (rejected at create + dispatch). Internal *hostnames* are allowed (legitimate on a self-hosted network) — on an internet-exposed instance, restrict who can configure webhooks (project tokens) and apply network egress controls.
+
 ## Authentication (scoped API tokens)
 
 Auth is **opt-in per project**. A project with no tokens is fully open (zero-config dev mode). The moment a project has at least one token, its **write** endpoints require a bearer token scoped to that project:

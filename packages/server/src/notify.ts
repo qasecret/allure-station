@@ -1,5 +1,6 @@
 import { compareRuns } from "./compare.js";
 import { evaluateGate } from "./gate.js";
+import { checkWebhookUrl } from "./safe-url.js";
 import type { AppDeps } from "./app.js";
 import type { Notification, NotificationTrigger, Run } from "@allure-station/shared";
 
@@ -48,6 +49,9 @@ export function webhookPayload(ctx: NotifyContext) {
 }
 
 async function postOne(sub: Notification, ctx: NotifyContext, fetchImpl: typeof fetch): Promise<void> {
+  // Re-check at dispatch (defends pre-guard rows / blocks internal targets the SSRF guard rejects).
+  const safe = checkWebhookUrl(sub.url);
+  if (!safe.ok) { console.error(`[notify] skipping ${sub.id}: ${safe.reason}`); return; }
   const body = sub.kind === "slack" ? { text: slackText(ctx) } : webhookPayload(ctx);
   try {
     await fetchImpl(sub.url, {

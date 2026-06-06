@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { createNotificationRequestSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { authorizeProjectWrite } from "../auth.js";
+import { checkWebhookUrl } from "../safe-url.js";
 
 export function registerNotificationRoutes(app: FastifyInstance, deps: AppDeps): void {
   // All notification routes are auth-gated: they create/reveal webhook URLs (a write-equivalent).
@@ -15,6 +16,8 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: AppDeps):
     const parsed = createNotificationRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
     const { kind, url, events } = parsed.data;
+    const safe = checkWebhookUrl(url);
+    if (!safe.ok) return reply.code(400).send({ error: `webhook url rejected: ${safe.reason}` });
     return reply.code(201).send(await deps.notifications.create(projectId, kind, url, events, deps.now()));
   });
 
