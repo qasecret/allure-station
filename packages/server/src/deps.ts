@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import type { Db } from "./db/client.js";
 import { ProjectRepository, RunRepository } from "./db/repositories.js";
 import { TestResultRepository } from "./db/test-results-repo.js";
+import { ApiTokenRepository } from "./db/api-tokens-repo.js";
 import { createStorage } from "./storage/factory.js";
 import type { AppDeps } from "./app.js";
 import type { AppConfig } from "./config.js";
@@ -18,6 +19,7 @@ export function buildDeps(config: AppConfig, queue: JobQueue, db: Db, bus: Event
     projects: new ProjectRepository(db),
     runs: new RunRepository(db),
     testResults: new TestResultRepository(db, () => nanoid(12)),
+    tokens: new ApiTokenRepository(db, () => nanoid(12)),
     storage: createStorage(config.storage),
     queue,
     bus,

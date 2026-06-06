@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import fastifyStatic from "@fastify/static";
 import type { ProjectRepository, RunRepository } from "./db/repositories.js";
 import type { TestResultRepository } from "./db/test-results-repo.js";
+import type { ApiTokenRepository } from "./db/api-tokens-repo.js";
 import type { StorageDriver } from "./storage/driver.js";
 import type { JobQueue } from "@allure-station/worker";
 import type { EventBus } from "./events/bus.js";
@@ -19,6 +20,7 @@ export interface AppDeps {
   projects: ProjectRepository;
   runs: RunRepository;
   testResults: TestResultRepository;
+  tokens: ApiTokenRepository;
   storage: StorageDriver;
   queue: JobQueue;
   bus: EventBus;
