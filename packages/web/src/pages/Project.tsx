@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { api } from "../main.js";
@@ -8,6 +8,10 @@ export function Project() {
   const qc = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedRun(null);
+  }, [id]);
 
   const { data: runs = [] } = useQuery({
     queryKey: ["runs", id],
