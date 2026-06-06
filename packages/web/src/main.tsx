@@ -6,7 +6,7 @@ import { createClient } from "./api/client.js";
 import { Projects } from "./pages/Projects.js";
 import { Project } from "./pages/Project.js";
 
-export const api = createClient("/api");
+export const api = createClient(import.meta.env.VITE_API_BASE ?? "/api");
 const qc = new QueryClient();
 
 createRoot(document.getElementById("root")!).render(

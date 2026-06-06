@@ -1,5 +1,8 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import multipart from "@fastify/multipart";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import fastifyStatic from "@fastify/static";
 import type { ProjectRepository, RunRepository } from "./db/repositories.js";
 import type { StorageDriver } from "./storage/driver.js";
 import type { JobQueue } from "@allure-station/worker";
@@ -27,6 +30,21 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   registerProjectRoutes(app, deps);
   registerResultRoutes(app, deps);
   registerRunRoutes(app, deps);
+
+  const webDist = process.env.WEB_DIST;
+  if (webDist && existsSync(webDist)) {
+    const root = resolve(webDist); // @fastify/static requires an absolute root
+    app.register(fastifyStatic, { root, prefix: "/", wildcard: false });
+    app.setNotFoundHandler((req, reply) => {
+      const url = req.raw.url ?? "";
+      // API-ish paths should 404 as JSON; everything else falls back to the SPA shell
+      if (url.startsWith("/projects") || url.startsWith("/version") || url.startsWith("/config")) {
+        return reply.code(404).send({ error: "not found" });
+      }
+      return reply.sendFile("index.html");
+    });
+  }
+
   return app;
 }
 

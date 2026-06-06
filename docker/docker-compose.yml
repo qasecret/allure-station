@@ -1,0 +1,7 @@
+services:
+  allure-station:
+    build: { context: .., dockerfile: docker/Dockerfile }
+    ports: ["5050:5050"]
+    volumes: ["allure-data:/data"]
+volumes:
+  allure-data:
