@@ -22,6 +22,7 @@ export class ProjectRepository {
   }
 
   async remove(id: string): Promise<void> {
+    await this.db.delete(runs).where(eq(runs.projectId, id));
     await this.db.delete(projects).where(eq(projects.id, id));
   }
 

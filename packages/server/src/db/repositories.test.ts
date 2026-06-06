@@ -82,6 +82,17 @@ for (const backend of backends) {
         await projects.create("dup", "2026-06-06T00:00:00.000Z");
         await expect(projects.create("dup", "2026-06-06T00:00:00.000Z")).rejects.toThrow();
       });
+
+      it("remove deletes the project and cascades to its runs", async () => {
+        await projects.create("del-p", "2026-06-06T00:00:00.000Z");
+        await runs.create("del-p", "del-r1", "Del Report", "2026-06-06T00:00:00.000Z");
+
+        await projects.remove("del-p");
+
+        expect(await projects.get("del-p")).toBeNull();
+        expect(await runs.get("del-r1")).toBeNull();
+        expect(await runs.listByProject("del-p")).toEqual([]);
+      });
     });
 
     // -------------------------------------------------------------------------

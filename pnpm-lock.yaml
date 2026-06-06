@@ -44,9 +44,6 @@ importers:
       '@libsql/client':
         specifier: 0.14.0
         version: 0.14.0
-      '@types/pg':
-        specifier: 8.11.11
-        version: 8.11.11
       drizzle-orm:
         specifier: 0.36.0
         version: 0.36.0(@libsql/client@0.14.0)(@types/better-sqlite3@7.6.11)(@types/pg@8.11.11)(@types/react@18.3.12)(better-sqlite3@11.5.0)(pg@8.21.0)(react@18.3.1)
@@ -66,6 +63,9 @@ importers:
         specifier: 3.23.8
         version: 3.23.8
     devDependencies:
+      '@types/pg':
+        specifier: 8.11.11
+        version: 8.11.11
       drizzle-kit:
         specifier: 0.28.0
         version: 0.28.0
