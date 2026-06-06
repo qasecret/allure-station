@@ -4,6 +4,7 @@ import { createDb } from "./client.js";
 import { ProjectRepository, RunRepository } from "./repositories.js";
 import { TestResultRepository } from "./test-results-repo.js";
 import { ApiTokenRepository } from "./api-tokens-repo.js";
+import { NotificationRepository } from "./notifications-repo.js";
 import type { TestSummary } from "@allure-station/shared";
 
 // Deterministic id generator per handle (matches the deps `newId` contract).
@@ -17,6 +18,7 @@ type BackendHandle = {
   runs: RunRepository;
   tests: TestResultRepository;
   tokens: ApiTokenRepository;
+  notifs: NotificationRepository;
   cleanup: () => Promise<void>;
 };
 
@@ -36,6 +38,7 @@ const backends: Backend[] = [
         runs: new RunRepository(db),
         tests: new TestResultRepository(db, idGen()),
         tokens: new ApiTokenRepository(db, idGen()),
+        notifs: new NotificationRepository(db, idGen()),
         cleanup: async () => {},
       };
     },
@@ -59,12 +62,13 @@ if (process.env.PG_TEST_URL) {
       // Cast to any: Db is typed as LibSQLDatabase which lacks execute(); the pg
       // handle cast as Db at the factory retains execute() at runtime (node-postgres).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (db as any).execute(sql`TRUNCATE api_tokens, test_results, runs, projects CASCADE`);
+      await (db as any).execute(sql`TRUNCATE notifications, api_tokens, test_results, runs, projects CASCADE`);
       return {
         projects: new ProjectRepository(db),
         runs: new RunRepository(db),
         tests: new TestResultRepository(db, idGen()),
         tokens: new ApiTokenRepository(db, idGen()),
+        notifs: new NotificationRepository(db, idGen()),
         cleanup: async () => {},
       };
     },
@@ -77,10 +81,11 @@ for (const backend of backends) {
     let runs: RunRepository;
     let tests: TestResultRepository;
     let tokens: ApiTokenRepository;
+    let notifs: NotificationRepository;
     let cleanup: () => Promise<void>;
 
     beforeEach(async () => {
-      ({ projects, runs, tests, tokens, cleanup } = await backend.make());
+      ({ projects, runs, tests, tokens, notifs, cleanup } = await backend.make());
     });
 
     // -------------------------------------------------------------------------
@@ -366,6 +371,38 @@ for (const backend of backends) {
         await tokens.create("p", "ci", "h", "pre", "2026-06-06T00:00:01.000Z");
         await projects.remove("p");
         expect(await tokens.countByProject("p")).toBe(0);
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // NotificationRepository tests
+    // -------------------------------------------------------------------------
+
+    describe("NotificationRepository", () => {
+      beforeEach(async () => {
+        await projects.create("p", "2026-06-06T00:00:00.000Z");
+      });
+
+      it("create + listByProject round-trips events; countByProject counts", async () => {
+        const n = await notifs.create("p", "slack", "https://hooks.example/x", ["failed", "regression"], "2026-06-06T00:00:01.000Z");
+        expect(n).toMatchObject({ projectId: "p", kind: "slack", url: "https://hooks.example/x", events: ["failed", "regression"] });
+        const list = await notifs.listByProject("p");
+        expect(list).toHaveLength(1);
+        expect(list[0].events).toEqual(["failed", "regression"]);
+        expect(await notifs.countByProject("p")).toBe(1);
+      });
+
+      it("remove is project-scoped", async () => {
+        const n = await notifs.create("p", "webhook", "https://h/x", ["completed"], "2026-06-06T00:00:01.000Z");
+        expect(await notifs.remove("other", n.id)).toBe(false);
+        expect(await notifs.remove("p", n.id)).toBe(true);
+        expect(await notifs.countByProject("p")).toBe(0);
+      });
+
+      it("removing the project cascades to notifications", async () => {
+        await notifs.create("p", "webhook", "https://h/x", ["completed"], "2026-06-06T00:00:01.000Z");
+        await projects.remove("p");
+        expect(await notifs.countByProject("p")).toBe(0);
       });
     });
   });
