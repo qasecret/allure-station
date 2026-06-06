@@ -2,18 +2,38 @@ import { describe, it, expect, vi } from "vitest";
 import { createClient } from "./client.js";
 
 describe("api client", () => {
-  it("lists projects via GET /projects", async () => {
+  const headers = (h: Record<string, string> = {}) => ({ get: (k: string) => h[k] ?? null });
+
+  it("lists projects via GET /projects and surfaces X-Total-Count", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
-      ok: true, json: async () => [{ id: "p", createdAt: "x", latestRunId: null }],
+      ok: true,
+      headers: headers({ "X-Total-Count": "42" }),
+      json: async () => [{ id: "p", createdAt: "x", latestRunId: null }],
     });
     const client = createClient("/api", fetchMock as unknown as typeof fetch);
-    const projects = await client.listProjects();
+    const res = await client.listProjects();
     expect(fetchMock).toHaveBeenCalledWith("/api/projects", expect.objectContaining({ method: "GET" }));
-    expect(projects[0].id).toBe("p");
+    expect(res.items[0].id).toBe("p");
+    expect(res.total).toBe(42);
+  });
+
+  it("listProjects passes q/limit/offset as query params", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, headers: headers(), json: async () => [] });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    const res = await client.listProjects({ q: "ab", limit: 20, offset: 40 });
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects?q=ab&limit=20&offset=40", expect.objectContaining({ method: "GET" }));
+    expect(res.total).toBe(0); // falls back to items.length when header absent
+  });
+
+  it("listRuns passes ?status", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.listRuns("p", { status: "ready" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/runs?status=ready", expect.objectContaining({ method: "GET" }));
   });
 
   it("throws on non-ok responses", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => "boom" });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500, headers: headers(), text: async () => "boom" });
     const client = createClient("/api", fetchMock as unknown as typeof fetch);
     await expect(client.listProjects()).rejects.toThrow("500");
   });
