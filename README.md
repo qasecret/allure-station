@@ -211,6 +211,15 @@ List endpoints accept optional query params and return the total match count in 
 
 `limit` is capped at 200; invalid `limit`/`offset`/`status` return 400. The web UI uses server-side search + Prev/Next pagination on the project list.
 
+### End-to-end tests (Playwright)
+
+`packages/e2e` drives a real browser against the full stack — it builds the web bundle, starts the server with `WEB_DIST` pointing at it (default sqlite/local/inprocess, zero external deps), and exercises the SPA. It's isolated from the unit suites, so `pnpm -r test` doesn't run it. To run it:
+
+```bash
+pnpm --filter @allure-station/e2e exec playwright install chromium  # once
+pnpm --filter @allure-station/e2e test:e2e
+```
+
 ### Trends
 
 `GET /api/projects/:projectId/trends` returns the most recent ready runs (oldest-first) as a stats series — pass/fail/broken/skipped plus a **flaky** count (tests Allure flagged flaky via retries / `statusDetails.flaky`). The UI renders a per-run pass-rate bar chart with an orange cap marking runs that had flaky tests.

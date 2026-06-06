@@ -5,6 +5,8 @@ import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
 import { migrate as migratePg } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { fileURLToPath } from "node:url";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import * as sqliteSchema from "./schema.sqlite.js";
 import * as pgSchema from "./schema.pg.js";
 
@@ -41,6 +43,11 @@ export function createDb(driver: DbDriver, opts: { url: string }): DbHandle {
         }
       },
     };
+  }
+  // Ensure the DB file's directory exists — libsql can't create a file in a missing dir, so a
+  // fresh DATA_DIR (first run / empty volume / e2e) would otherwise fail with SQLITE_CANTOPEN.
+  if (opts.url.startsWith("file:")) {
+    mkdirSync(dirname(opts.url.slice("file:".length)), { recursive: true });
   }
   const client = createClient({ url: opts.url }); // "file:..." or ":memory:"
   const db = drizzleLibsql(client, { schema: sqliteSchema });
