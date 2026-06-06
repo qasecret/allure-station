@@ -47,7 +47,8 @@ export function createDb(driver: DbDriver, opts: { url: string }): DbHandle {
   // Ensure the DB file's directory exists — libsql can't create a file in a missing dir, so a
   // fresh DATA_DIR (first run / empty volume / e2e) would otherwise fail with SQLITE_CANTOPEN.
   if (opts.url.startsWith("file:")) {
-    mkdirSync(dirname(opts.url.slice("file:".length)), { recursive: true });
+    const path = opts.url.slice("file:".length);
+    if (path && !path.startsWith(":")) mkdirSync(dirname(path), { recursive: true }); // skip in-memory forms (":memory:")
   }
   const client = createClient({ url: opts.url }); // "file:..." or ":memory:"
   const db = drizzleLibsql(client, { schema: sqliteSchema });
