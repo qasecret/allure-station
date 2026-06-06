@@ -71,6 +71,16 @@ export class RunRepository {
     this.db.update(runs).set({ status: "failed", finishedAt }).where(eq(runs.id, id)).run();
   }
 
+  /** Mark all runs left mid-generation (e.g. after a crash) as failed. Returns how many were reset. */
+  async failStaleGenerating(now: string): Promise<number> {
+    const res = this.db
+      .update(runs)
+      .set({ status: "failed", finishedAt: now })
+      .where(eq(runs.status, "generating"))
+      .run();
+    return res.changes;
+  }
+
   async listByProject(projectId: string): Promise<Run[]> {
     return this.db.select().from(runs)
       .where(eq(runs.projectId, projectId))

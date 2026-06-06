@@ -26,6 +26,11 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify({ logger: false });
   app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024, files: 5000 } });
   app.decorate("deps", deps);
+
+  // Register @fastify/static once with serve:false so reply.sendFile is decorated
+  // before the API scope registers the report route.
+  app.register(fastifyStatic, { root: process.cwd(), serve: false });
+
   app.register(
     async (api) => {
       registerMetaRoutes(api, deps);
@@ -39,7 +44,8 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   const webDist = process.env.WEB_DIST;
   if (webDist && existsSync(webDist)) {
     const root = resolve(webDist); // @fastify/static requires an absolute root
-    app.register(fastifyStatic, { root, prefix: "/", wildcard: false });
+    // decorateReply:false because reply.sendFile is already decorated above
+    app.register(fastifyStatic, { root, prefix: "/", wildcard: false, decorateReply: false });
     app.setNotFoundHandler((req, reply) => {
       const url = req.raw.url ?? "";
       if (url.startsWith("/api")) {

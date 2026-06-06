@@ -16,4 +16,28 @@ describe("run routes", () => {
     expect((await app.inject({ method: "GET", url: "/api/projects/p/runs/nope" })).statusCode).toBe(404);
     await app.close();
   });
+
+  it("GET run-by-id enforces project ownership (IDOR fix)", async () => {
+    const deps = makeTestDeps();
+    const app = buildApp(deps);
+
+    // Create two projects
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p1" } });
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p2" } });
+
+    // Create a run under p2
+    const p2RunId = deps.newId();
+    await deps.runs.create("p2", p2RunId, "P2 Report", deps.now());
+
+    // Fetching the p2 run via p1's URL must return 404 (IDOR protection)
+    const idor = await app.inject({ method: "GET", url: `/api/projects/p1/runs/${p2RunId}` });
+    expect(idor.statusCode).toBe(404);
+
+    // Fetching the p2 run via p2's URL must return 200
+    const ok = await app.inject({ method: "GET", url: `/api/projects/p2/runs/${p2RunId}` });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().projectId).toBe("p2");
+
+    await app.close();
+  });
 });

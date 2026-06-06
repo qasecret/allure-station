@@ -11,9 +11,13 @@ const config = loadConfig();
 const db = createDb(resolve(config.dbFile));
 ensureSchema(db);
 
+const runs = new RunRepository(db);
+const staleReset = await runs.failStaleGenerating(new Date().toISOString());
+if (staleReset > 0) console.log(`reconciled ${staleReset} stale 'generating' run(s) to 'failed'`);
+
 const app = buildApp({
   projects: new ProjectRepository(db),
-  runs: new RunRepository(db),
+  runs,
   storage: new LocalDriver(resolve(config.storageRoot)),
   queue: new InProcessQueue(config.concurrency),
   workDir: resolve(config.workDir),

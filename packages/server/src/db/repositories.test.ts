@@ -58,4 +58,28 @@ describe("RunRepository", () => {
     const second = await runs.claimPending("r2");
     expect(second).toBe(false);
   });
+
+  it("failStaleGenerating marks 'generating' runs as failed and leaves other statuses untouched", async () => {
+    await projects.create("stale-p", "2026-06-06T00:00:00.000Z");
+
+    // Create a run in 'generating' state (simulate crash mid-generation)
+    await runs.create("stale-p", "stale1", "Stale Run", "2026-06-06T00:00:00.000Z");
+    await runs.claimPending("stale1"); // -> generating
+
+    // Create a run already 'ready' — should be untouched
+    await runs.create("stale-p", "ready1", "Ready Run", "2026-06-06T00:00:00.000Z");
+    await runs.markReady("ready1", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0 }, "2026-06-06T00:01:00.000Z");
+
+    const now = "2026-06-06T01:00:00.000Z";
+    const changed = await runs.failStaleGenerating(now);
+    expect(changed).toBe(1);
+
+    const stale = await runs.get("stale1");
+    expect(stale?.status).toBe("failed");
+    expect(stale?.finishedAt).toBe(now);
+
+    // 'ready' run must be untouched
+    const ready = await runs.get("ready1");
+    expect(ready?.status).toBe("ready");
+  });
 });
