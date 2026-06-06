@@ -30,25 +30,25 @@ export function Projects() {
   });
 
   return (
-    <main style={{ maxWidth: 720, margin: "2rem auto", fontFamily: "system-ui" }}>
+    <main style={{ maxWidth: 720, margin: "2rem auto", padding: "0 1rem" }}>
       <h1>Allure Station</h1>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <input placeholder="search…" value={q} onChange={(e) => onSearch(e.target.value)} />
-        <input placeholder="new project id" value={newId} onChange={(e) => setNewId(e.target.value)} />
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        <input aria-label="Search projects" placeholder="search…" value={q} onChange={(e) => onSearch(e.target.value)} />
+        <input aria-label="New project id" placeholder="new project id" value={newId} onChange={(e) => setNewId(e.target.value)} />
         <button disabled={!newId || create.isPending} onClick={() => create.mutate()}>Create</button>
       </div>
-      {create.isError && <p style={{ color: "crimson" }}>{(create.error as Error).message}</p>}
+      {create.isError && <p style={{ color: "#d9534f" }}>{(create.error as Error).message}</p>}
       {isLoading ? <p>Loading…</p> : (
         <>
           <ul>{items.map((p) => (
             <li key={p.id}><Link to={`/projects/${p.id}`}>{p.id}</Link>
               {p.latestRunId ? "" : " (no runs yet)"}</li>
           ))}</ul>
-          {items.length === 0 && <p style={{ color: "#888" }}>No projects{q ? ` matching “${q}”` : ""}.</p>}
+          {items.length === 0 && <p style={{ color: "var(--muted)" }}>No projects{q ? ` matching “${q}”` : ""}.</p>}
           {total > PAGE_SIZE && (
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <button disabled={page === 0} onClick={() => setPage((p) => p - 1)}>← Prev</button>
-              <span style={{ fontSize: 13, color: "#666" }}>Page {page + 1} of {maxPage + 1} · {total} total</span>
+              <span style={{ fontSize: 13, color: "var(--muted)" }}>Page {page + 1} of {maxPage + 1} · {total} total</span>
               <button disabled={page >= maxPage} onClick={() => setPage((p) => p + 1)}>Next →</button>
             </div>
           )}

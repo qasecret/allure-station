@@ -64,13 +64,13 @@ export function Project() {
 
   const current = selectedRun ?? runs.find((r) => r.status === "ready")?.id ?? null;
   return (
-    <main style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "system-ui" }}>
-      <header style={{ borderBottom: "1px solid #ddd" }}>
-        <div style={{ padding: 12, display: "flex", gap: 12 }}>
+    <main style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      <header style={{ borderBottom: "1px solid var(--border)" }}>
+        <div style={{ padding: 12, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           <strong>{id}</strong>
-          <input type="file" multiple ref={fileInput} />
+          <input aria-label="Allure result files" type="file" multiple ref={fileInput} />
           <button disabled={upload.isPending} onClick={() => upload.mutate()}>Upload &amp; generate</button>
-          <select value={current ?? ""} onChange={(e) => setSelectedRun(e.target.value)}>
+          <select aria-label="Select run to view" value={current ?? ""} onChange={(e) => setSelectedRun(e.target.value)}>
             {runs.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.createdAt} — {r.status}{r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}
@@ -137,9 +137,9 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
         <label>Target <select value={target} onChange={pick(setTarget)}>{readyRuns.map(runOption)}</select></label>
       </div>
       {base === target ? (
-        <p style={{ color: "#888" }}>Pick two different runs.</p>
+        <p style={{ color: "var(--muted)" }}>Pick two different runs.</p>
       ) : !diff ? (
-        <p style={{ color: "#888" }}>Loading comparison…</p>
+        <p style={{ color: "var(--muted)" }}>Loading comparison…</p>
       ) : (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
           <Bucket label="Newly failing" color="#d9534f" tests={diff.newlyFailing} />
@@ -147,7 +147,7 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
           <Bucket label="Flaky" color="#f0ad4e" tests={diff.flaky} />
           <Bucket label="Still failing" color="#d9534f" tests={diff.stillFailing} />
           <Bucket label="Added" color="#5bc0de" tests={diff.added} />
-          <Bucket label="Removed" color="#888" tests={diff.removed} />
+          <Bucket label="Removed" color="var(--muted)" tests={diff.removed} />
         </div>
       )}
     </details>
@@ -163,7 +163,7 @@ function Bucket({ label, color, tests }: { label: string; color: string; tests: 
         {tests.map((t) => (
           <li key={(t.historyId ?? t.fullName ?? t.name) + label}>
             {t.name}
-            {t.baseStatus && t.targetStatus ? <span style={{ color: "#888" }}> ({t.baseStatus}→{t.targetStatus})</span> : null}
+            {t.baseStatus && t.targetStatus ? <span style={{ color: "var(--muted)" }}> ({t.baseStatus}→{t.targetStatus})</span> : null}
           </li>
         ))}
       </ul>
@@ -173,7 +173,7 @@ function Bucket({ label, color, tests }: { label: string; color: string; tests: 
 
 function TrendBar({ points }: { points: TrendPoint[] }) {
   if (points.length < 2) {
-    return <span style={{ color: "#888", fontSize: 12 }}>Trends appear after 2+ runs.</span>;
+    return <span style={{ color: "var(--muted)", fontSize: 12 }}>Trends appear after 2+ runs.</span>;
   }
   const w = points.length * 14;
   const anyFlaky = points.some((p) => (p.stats.flaky ?? 0) > 0);

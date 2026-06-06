@@ -1,0 +1,57 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #666666;
+  --border: #dddddd;
+  --link: #1a5fb4;
+  --panel: #f7f7f7;
+}
+
+/* Explicit dark theme (manual toggle). */
+[data-theme="dark"] {
+  --bg: #16181c;
+  --fg: #e6e6e6;
+  --muted: #9aa0a6;
+  --border: #2c2f36;
+  --link: #6ab0ff;
+  --panel: #1e2127;
+}
+
+/* System dark — applies only when the user hasn't forced light. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16181c;
+    --fg: #e6e6e6;
+    --muted: #9aa0a6;
+    --border: #2c2f36;
+    --link: #6ab0ff;
+    --panel: #1e2127;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+a { color: var(--link); }
+
+input, select, button {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font: inherit;
+}
+
+button:not(:disabled) { cursor: pointer; }
+button:disabled { opacity: 0.5; }
+
+/* Visible keyboard focus for accessibility. */
+:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
