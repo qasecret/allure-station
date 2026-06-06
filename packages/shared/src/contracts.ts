@@ -94,6 +94,22 @@ export const runSummarySchema = z.object({
   qualityGate: qualityGateVerdictSchema,
 });
 
+export const notificationTriggerSchema = z.enum(["completed", "failed", "gate_failed", "regression"]);
+export const notificationKindSchema = z.enum(["slack", "webhook"]);
+export const notificationSchema = z.object({
+  id: z.string(),
+  projectId: projectIdSchema,
+  kind: notificationKindSchema,
+  url: z.string().url(),
+  events: z.array(notificationTriggerSchema).min(1),
+  createdAt: z.string(),
+});
+export const createNotificationRequestSchema = z.object({
+  kind: notificationKindSchema,
+  url: z.string().url(),
+  events: z.array(notificationTriggerSchema).min(1).default(["failed", "gate_failed", "regression"]),
+}).strict();
+
 export const trendPointSchema = z.object({
   runId: z.string(),
   createdAt: z.string(),
@@ -142,3 +158,6 @@ export type CreatedToken = z.infer<typeof createdTokenSchema>;
 export type QualityGateConfig = z.infer<typeof qualityGateConfigSchema>;
 export type QualityGateVerdict = z.infer<typeof qualityGateVerdictSchema>;
 export type RunSummary = z.infer<typeof runSummarySchema>;
+export type NotificationTrigger = z.infer<typeof notificationTriggerSchema>;
+export type NotificationKind = z.infer<typeof notificationKindSchema>;
+export type Notification = z.infer<typeof notificationSchema>;
