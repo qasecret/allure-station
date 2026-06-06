@@ -11,6 +11,7 @@ import { registerMetaRoutes } from "./routes/meta.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerResultRoutes } from "./routes/results.js";
 import { registerRunRoutes } from "./routes/runs.js";
+import { registerEventRoutes } from "./routes/events.js";
 
 export interface AppDeps {
   projects: ProjectRepository;
@@ -39,6 +40,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       registerProjectRoutes(api, deps);
       registerResultRoutes(api, deps);
       registerRunRoutes(api, deps);
+      registerEventRoutes(api, deps);
     },
     { prefix: "/api" },
   );
