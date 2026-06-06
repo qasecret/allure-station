@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { InProcessQueue, type GenerateJobData } from "./queue.js";
+import { describe, it, expect, vi } from "vitest";
+import { InProcessQueue, BullMQQueue, type GenerateJobData } from "./queue.js";
 
 describe("InProcessQueue", () => {
   it("runs enqueued jobs via the registered processor, honoring concurrency, and onIdle waits", async () => {
@@ -35,5 +35,21 @@ describe("InProcessQueue", () => {
   it("enqueue before start throws", async () => {
     const q = new InProcessQueue(1);
     await expect(q.enqueue({ projectId: "p", runId: "x" } as GenerateJobData)).rejects.toThrow(/start/);
+  });
+});
+
+const url = process.env.REDIS_TEST_URL;
+(url ? describe : describe.skip)("BullMQQueue (requires REDIS_TEST_URL)", () => {
+  it("enqueued data is processed by a started worker", async () => {
+    const producer = new BullMQQueue({ url: url!, concurrency: 2 });
+    const consumer = new BullMQQueue({ url: url!, concurrency: 2 });
+    const seen: string[] = [];
+    consumer.start(async (d) => {
+      seen.push(d.runId);
+    });
+    await producer.enqueue({ projectId: "p", runId: "r1" });
+    await vi.waitFor(() => expect(seen).toContain("r1"), { timeout: 5000 });
+    await producer.close();
+    await consumer.close();
   });
 });

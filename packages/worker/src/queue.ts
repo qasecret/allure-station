@@ -1,3 +1,5 @@
+import { Queue, Worker, type Job } from "bullmq";
+
 export type GenerateJobData = { projectId: string; runId: string };
 export type JobProcessor = (data: GenerateJobData) => Promise<void>;
 
@@ -58,5 +60,52 @@ export class InProcessQueue implements JobQueue {
   async close(): Promise<void> {
     this.#closed = true;
     await this.onIdle();
+  }
+}
+
+const QUEUE_NAME = "generate";
+
+export class BullMQQueue implements JobQueue {
+  readonly #queue: Queue;
+  #worker?: Worker;
+  readonly #connection: { url: string };
+  readonly #concurrency: number;
+
+  constructor(cfg: { url: string; concurrency?: number }) {
+    this.#connection = { url: cfg.url };
+    this.#concurrency = cfg.concurrency ?? 2;
+    this.#queue = new Queue(QUEUE_NAME, { connection: this.#connection });
+  }
+
+  /** In the API process this is never called — only worker-main calls start to construct the BullMQ Worker. */
+  start(processor: JobProcessor): void {
+    this.#worker = new Worker(
+      QUEUE_NAME,
+      async (job: Job) => {
+        await processor(job.data as GenerateJobData);
+      },
+      {
+        connection: { ...this.#connection, maxRetriesPerRequest: null },
+        concurrency: this.#concurrency,
+      },
+    );
+  }
+
+  async enqueue(data: GenerateJobData): Promise<void> {
+    await this.#queue.add(QUEUE_NAME, data, {
+      attempts: 1,
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+  }
+
+  /** Best-effort drain; tests use the env-gated live path, not onIdle, for BullMQ. */
+  async onIdle(): Promise<void> {
+    await this.#queue.drain();
+  }
+
+  async close(): Promise<void> {
+    await this.#worker?.close();
+    await this.#queue.close();
   }
 }

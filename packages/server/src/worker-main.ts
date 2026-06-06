@@ -4,20 +4,17 @@ import { loadConfig } from "./config.js";
 import { createDb } from "./db/client.js";
 import { ProjectRepository, RunRepository } from "./db/repositories.js";
 import { createStorage } from "./storage/factory.js";
-import { InProcessQueue, BullMQQueue } from "@allure-station/worker";
-import { buildApp } from "./app.js";
-import { wireQueue } from "./generation.js";
+import { BullMQQueue } from "@allure-station/worker";
+import { processGenerate } from "./generation.js";
 
 const config = loadConfig();
 
-if (config.queueDriver === "bullmq" && !config.redisUrl) {
-  throw new Error("REDIS_URL is required when QUEUE_DRIVER=bullmq");
+if (!config.redisUrl) {
+  console.error("REDIS_URL is required when running worker-main (QUEUE_DRIVER=bullmq)");
+  process.exit(1);
 }
 
-const queue =
-  config.queueDriver === "bullmq"
-    ? new BullMQQueue({ url: config.redisUrl!, concurrency: config.concurrency })
-    : new InProcessQueue(config.concurrency);
+const queue = new BullMQQueue({ url: config.redisUrl, concurrency: config.concurrency });
 
 const { db, migrate } = createDb(config.db.driver, { url: config.db.url });
 await migrate();
@@ -37,26 +34,18 @@ const deps = {
   newId: () => nanoid(12),
 };
 
-const app = buildApp(deps);
-
-// Wire the processor only for the in-process driver.
-// In bullmq mode the API process must NOT construct a Worker — only worker-main does.
-if (config.queueDriver === "inprocess") {
-  wireQueue(deps);
-}
+// Construct the BullMQ Worker — only the worker process calls start, never the API process.
+queue.start((data) => processGenerate(deps, data));
 
 const shutdown = async () => {
   try {
-    await deps.queue.close();
+    await queue.close();
   } catch {
     // best-effort drain
   }
-  await app.close();
   process.exit(0);
 };
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
-app.listen({ port: config.port, host: "0.0.0.0" })
-  .then(() => console.log(`allure-station listening on :${config.port}`))
-  .catch((err) => { console.error(err); process.exit(1); });
+console.log("allure-station worker consuming 'generate' jobs");
