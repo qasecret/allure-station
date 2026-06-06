@@ -19,6 +19,7 @@ import { registerCompareRoutes } from "./routes/compare.js";
 import { registerTokenRoutes } from "./routes/tokens.js";
 import { registerBadgeRoutes } from "./routes/badge.js";
 import { registerQualityGateRoutes } from "./routes/quality-gate.js";
+import { registerNotificationRoutes } from "./routes/notifications.js";
 
 export interface AppDeps {
   projects: ProjectRepository;
@@ -56,6 +57,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       registerTokenRoutes(api, deps);
       registerBadgeRoutes(api, deps);
       registerQualityGateRoutes(api, deps);
+      registerNotificationRoutes(api, deps);
     },
     { prefix: "/api" },
   );
