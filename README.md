@@ -202,6 +202,15 @@ Clients track progress until the run reaches a terminal status (`ready` — repo
 
 > **Note:** This changed from the old synchronous behavior (where `/generate` held the HTTP connection open until the report was ready). API clients that previously read the final status from the `/generate` response must now subscribe or poll for it.
 
+### Search, filter & pagination
+
+List endpoints accept optional query params and return the total match count in an `X-Total-Count` header (the JSON body stays a plain array, so existing clients are unaffected):
+
+- `GET /api/projects?q=<substr>&limit=<n>&offset=<n>` — case-sensitive substring search over project id (LIKE wildcards are escaped), windowed by limit/offset.
+- `GET /api/projects/:projectId/runs?status=<pending|generating|ready|failed>&limit=<n>&offset=<n>` — filter by run status, windowed.
+
+`limit` is capped at 200; invalid `limit`/`offset`/`status` return 400. The web UI uses server-side search + Prev/Next pagination on the project list.
+
 ### Run comparison
 
 `GET /api/projects/:projectId/compare?base=<runId>&target=<runId>` diffs two ready runs and returns tests bucketed as `newlyFailing`, `fixed`, `stillFailing`, `added`, `removed`, and `flaky`. Per-test results (`historyId`, `status`, `duration`, `flaky`) are persisted at generation time; tests are matched across runs by Allure's stable `historyId` (falling back to `fullName`/`name`). The UI exposes this as a compare panel on the project page.
