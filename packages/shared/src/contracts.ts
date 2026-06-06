@@ -17,6 +17,9 @@ export const runStatsSchema = z.object({
   failed: z.number().int().nonnegative(),
   broken: z.number().int().nonnegative(),
   skipped: z.number().int().nonnegative(),
+  // Count of tests Allure flagged flaky (retry/statusDetails.flaky) in this run. Optional so runs
+  // generated before this field existed still parse; consumers coalesce to 0.
+  flaky: z.number().int().nonnegative().optional(),
 });
 
 export const runSchema = z.object({
