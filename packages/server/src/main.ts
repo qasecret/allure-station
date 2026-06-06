@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { loadConfig } from "./config.js";
 import { createDb, ensureSchema } from "./db/client.js";
 import { ProjectRepository, RunRepository } from "./db/repositories.js";
-import { LocalDriver } from "./storage/local-driver.js";
+import { createStorage } from "./storage/factory.js";
 import { InProcessQueue } from "@allure-station/worker";
 import { buildApp } from "./app.js";
 
@@ -18,7 +18,7 @@ if (staleReset > 0) console.log(`reconciled ${staleReset} stale 'generating' run
 const app = buildApp({
   projects: new ProjectRepository(db),
   runs,
-  storage: new LocalDriver(resolve(config.storageRoot)),
+  storage: createStorage(config.storage),
   queue: new InProcessQueue(config.concurrency),
   workDir: resolve(config.workDir),
   version: config.version,
