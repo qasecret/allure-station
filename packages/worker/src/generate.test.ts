@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, access, readdir } from "node:fs/promises";
+import { mkdtemp, rm, access, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,5 +38,25 @@ describe("generateReport", () => {
     // Allure recomputes historyId as a stable hash — assert it's a non-empty string.
     expect(typeof byName["passing test"].historyId).toBe("string");
     expect(byName["passing test"].historyId!.length).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("counts flaky tests (statusDetails.flaky) into stats.flaky and per-test flaky", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "as-flaky-"));
+    await writeFile(join(resultsDir, "f1-result.json"), JSON.stringify({
+      uuid: "f1", historyId: "case-flaky", name: "flaky test", fullName: "suite#flaky",
+      status: "passed", stage: "finished", statusDetails: { flaky: true }, start: 1, stop: 2,
+    }));
+    await writeFile(join(resultsDir, "f2-result.json"), JSON.stringify({
+      uuid: "f2", historyId: "case-stable", name: "stable test", fullName: "suite#stable",
+      status: "passed", stage: "finished", start: 1, stop: 2,
+    }));
+    try {
+      const result = await generateReport({ resultsDirs: [resultsDir], outputDir: out, reportName: "Flaky", dumps: [] });
+      expect(result.stats.flaky).toBe(1);
+      expect(result.tests.find((t) => t.name === "flaky test")?.flaky).toBe(true);
+      expect(result.tests.find((t) => t.name === "stable test")?.flaky).toBe(false);
+    } finally {
+      await rm(resultsDir, { recursive: true, force: true });
+    }
   }, 60_000);
 });

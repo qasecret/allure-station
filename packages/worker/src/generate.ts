@@ -56,10 +56,11 @@ const KNOWN_STATUSES: readonly string[] = ["passed", "failed", "broken", "skippe
 async function summarize(report: AllureReport): Promise<GenerateResult> {
   const results = await report.store.allTestResults();
 
-  const stats: RunStats = { total: 0, passed: 0, failed: 0, broken: 0, skipped: 0 };
+  const stats: RunStats = { total: 0, passed: 0, failed: 0, broken: 0, skipped: 0, flaky: 0 };
   const tests: TestSummary[] = [];
   for (const r of results) {
     stats.total += 1;
+    if (r.flaky) stats.flaky = (stats.flaky ?? 0) + 1;
     switch (r.status) {
       case "passed": stats.passed += 1; break;
       case "failed": stats.failed += 1; break;
