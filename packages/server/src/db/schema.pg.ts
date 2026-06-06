@@ -34,6 +34,17 @@ export const apiTokens = pgTable("api_tokens", {
 
 }));
 
+export const notifications = pgTable("notifications", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  url: text("url").notNull(),
+  events: text("events").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (t) => ({
+  byProject: index("idx_notifications_project").on(t.projectId),
+}));
+
 export const testResults = pgTable("test_results", {
   id: text("id").primaryKey(),
   runId: text("run_id").notNull().references(() => runs.id, { onDelete: "cascade" }),

@@ -43,6 +43,13 @@
       "when": 1780763887550,
       "tag": "0005_flat_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780789266424,
+      "tag": "0006_curvy_stark_industries",
+      "breakpoints": true
     }
   ]
 }
