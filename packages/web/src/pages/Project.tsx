@@ -177,26 +177,35 @@ function TrendBar({ points }: { points: TrendPoint[] }) {
   }
   const w = points.length * 14;
   const anyFlaky = points.some((p) => (p.stats.flaky ?? 0) > 0);
+  const maxDur = Math.max(1, ...points.map((p) => p.stats.durationMs ?? 0));
+  const anyDur = points.some((p) => (p.stats.durationMs ?? 0) > 0);
+  // Duration sparkline: per-run total test time, normalized to the max, drawn over the bars.
+  const durLine = points
+    .map((p, i) => `${i * 14 + 5},${42 - Math.round(((p.stats.durationMs ?? 0) / maxDur) * 36) - 2}`)
+    .join(" ");
   return (
     <span style={{ display: "inline-flex", gap: 8, alignItems: "flex-end" }}>
-      <svg width={w} height={44} role="img" aria-label="pass-rate and flakiness trend by run">
+      <svg width={w} height={44} role="img" aria-label="pass-rate, flakiness and duration trend by run">
         {points.map((p, i) => {
           const rate = p.stats.total ? p.stats.passed / p.stats.total : 0;
           const h = Math.round(rate * 38) + 2;
           const flaky = p.stats.flaky ?? 0;
+          const durMs = p.stats.durationMs ?? 0;
           return (
             <g key={p.runId}>
               <rect x={i * 14} y={42 - h} width={10} height={h}
                 fill={p.stats.failed || p.stats.broken ? "#d9534f" : "#5cb85c"}>
-                <title>{`${new Date(p.createdAt).toLocaleString()}\n${p.stats.passed}/${p.stats.total} passed, ${p.stats.failed} failed, ${p.stats.broken} broken${flaky ? `, ${flaky} flaky` : ""}`}</title>
+                <title>{`${new Date(p.createdAt).toLocaleString()}\n${p.stats.passed}/${p.stats.total} passed, ${p.stats.failed} failed, ${p.stats.broken} broken${flaky ? `, ${flaky} flaky` : ""}${durMs ? `\n${(durMs / 1000).toFixed(1)}s total` : ""}`}</title>
               </rect>
               {/* Orange cap marks runs with flaky tests (the flakiness trend); clamped into view. */}
               {flaky > 0 && <rect x={i * 14} y={Math.max(0, 42 - h - 3)} width={10} height={3} fill="#f0ad4e" pointerEvents="none" />}
             </g>
           );
         })}
+        {anyDur && <polyline points={durLine} fill="none" stroke="#337ab7" strokeWidth={1} opacity={0.7} pointerEvents="none" />}
       </svg>
       {anyFlaky && <span style={{ fontSize: 11, color: "#f0ad4e" }}>▮ flaky</span>}
+      {anyDur && <span style={{ fontSize: 11, color: "#337ab7" }}>╱ duration</span>}
     </span>
   );
 }

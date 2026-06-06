@@ -22,9 +22,10 @@ describe("trends route", () => {
     const app = buildApp(deps);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
     await deps.runs.create("p", "r1", "R", "2026-06-06T00:00:01.000Z");
-    await deps.runs.markReady("r1", { total: 3, passed: 3, failed: 0, broken: 0, skipped: 0, flaky: 2 }, "2026-06-06T00:00:02.000Z");
+    await deps.runs.markReady("r1", { total: 3, passed: 3, failed: 0, broken: 0, skipped: 0, flaky: 2, durationMs: 4200 }, "2026-06-06T00:00:02.000Z");
     const res = await app.inject({ method: "GET", url: "/api/projects/p/trends" });
     expect(res.json()[0].stats.flaky).toBe(2);
+    expect(res.json()[0].stats.durationMs).toBe(4200);
     await app.close();
   });
 });

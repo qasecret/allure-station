@@ -44,15 +44,16 @@ describe("generateReport", () => {
     const resultsDir = await mkdtemp(join(tmpdir(), "as-flaky-"));
     await writeFile(join(resultsDir, "f1-result.json"), JSON.stringify({
       uuid: "f1", historyId: "case-flaky", name: "flaky test", fullName: "suite#flaky",
-      status: "passed", stage: "finished", statusDetails: { flaky: true }, start: 1, stop: 2,
+      status: "passed", stage: "finished", statusDetails: { flaky: true }, start: 1000, stop: 2000,
     }));
     await writeFile(join(resultsDir, "f2-result.json"), JSON.stringify({
       uuid: "f2", historyId: "case-stable", name: "stable test", fullName: "suite#stable",
-      status: "passed", stage: "finished", start: 1, stop: 2,
+      status: "passed", stage: "finished", start: 1000, stop: 2000,
     }));
     try {
       const result = await generateReport({ resultsDirs: [resultsDir], outputDir: out, reportName: "Flaky", dumps: [] });
       expect(result.stats.flaky).toBe(1);
+      expect(result.stats.durationMs).toBe(2000); // two tests, 1000ms each (stop-start)
       expect(result.tests.find((t) => t.name === "flaky test")?.flaky).toBe(true);
       expect(result.tests.find((t) => t.name === "stable test")?.flaky).toBe(false);
     } finally {

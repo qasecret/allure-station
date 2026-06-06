@@ -20,6 +20,8 @@ export const runStatsSchema = z.object({
   // Count of tests Allure flagged flaky (retry/statusDetails.flaky) in this run. Optional so runs
   // generated before this field existed still parse; consumers coalesce to 0.
   flaky: z.number().int().nonnegative().optional(),
+  // Total test execution time (sum of per-test durations, ms). Optional for the same back-compat reason.
+  durationMs: z.number().int().nonnegative().optional(),
 });
 
 export const runSchema = z.object({
