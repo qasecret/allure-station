@@ -1,4 +1,4 @@
-import { mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { generateReport } from "@allure-station/worker";
 import type { AppDeps } from "./app.js";
@@ -40,6 +40,5 @@ export async function runGeneration(deps: AppDeps, projectId: string, runId: str
 
 async function hydrateResults(deps: AppDeps, projectId: string, runId: string, destDir: string): Promise<void> {
   const src = await deps.storage.resolveLocalPath(`${projectId}/runs/${runId}/results`);
-  const { cp } = await import("node:fs/promises");
   await cp(src, destDir, { recursive: true });
 }

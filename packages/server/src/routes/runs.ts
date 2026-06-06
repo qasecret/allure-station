@@ -1,6 +1,6 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { extname, join, sep } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { AppDeps } from "../app.js";
 
@@ -32,7 +32,7 @@ export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
     const rel = (req.params as Record<string, string>)["*"] || "index.html";
     const base = await deps.storage.resolveLocalPath(`${projectId}/runs/${runId}/report`);
     const file = join(base, rel);
-    if (!file.startsWith(base)) return reply.code(400).send({ error: "bad path" });
+    if (file !== base && !file.startsWith(base + sep)) return reply.code(400).send({ error: "bad path" });
     try {
       await stat(file);
     } catch {
