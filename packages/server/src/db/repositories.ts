@@ -1,7 +1,15 @@
-import { and, asc, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { Project, Run, RunStats, RunStatus } from "@allure-station/shared";
 import type { Db } from "./client.js";
 import { projects, runs, testResults } from "./schema.sqlite.js";
+
+// Case-sensitive substring LIKE with wildcards escaped, so user input like "a_b" matches literally
+// rather than treating _/% as wildcards. Works on sqlite + pg via the ESCAPE clause.
+function likeContains(column: AnySQLiteColumn, q: string) {
+  const escaped = q.replace(/[\\%_]/g, (c) => `\\${c}`);
+  return sql`${column} LIKE ${`%${escaped}%`} ESCAPE '\\'`;
+}
 
 export class ProjectRepository {
   constructor(private readonly db: Db) {}
@@ -11,9 +19,19 @@ export class ProjectRepository {
     return { id, createdAt: now, latestRunId: null };
   }
 
-  async list(): Promise<Project[]> {
-    const rows = await this.db.select().from(projects).orderBy(projects.id);
+  async list(opts: { q?: string; limit?: number; offset?: number } = {}): Promise<Project[]> {
+    const where = opts.q ? likeContains(projects.id, opts.q) : undefined;
+    let query = this.db.select().from(projects).where(where).orderBy(projects.id).$dynamic();
+    if (opts.limit !== undefined) query = query.limit(opts.limit);
+    if (opts.offset !== undefined) query = query.offset(opts.offset);
+    const rows = await query;
     return Promise.all(rows.map((r) => this.#withLatest(r.id, r.createdAt)));
+  }
+
+  async count(opts: { q?: string } = {}): Promise<number> {
+    const where = opts.q ? likeContains(projects.id, opts.q) : undefined;
+    const [row] = await this.db.select({ c: count() }).from(projects).where(where);
+    return Number(row?.c ?? 0);
   }
 
   async get(id: string): Promise<Project | null> {
@@ -105,16 +123,17 @@ export class RunRepository {
     return reset.length;
   }
 
-  async #selectRuns(opts: { projectId: string; readyOnly?: boolean; order: "asc" | "desc"; limit?: number }): Promise<Run[]> {
-    const where = opts.readyOnly
-      ? and(eq(runs.projectId, opts.projectId), eq(runs.status, "ready"))
-      : eq(runs.projectId, opts.projectId);
+  async #selectRuns(opts: { projectId: string; readyOnly?: boolean; status?: RunStatus; order: "asc" | "desc"; limit?: number; offset?: number }): Promise<Run[]> {
+    const conds = [eq(runs.projectId, opts.projectId)];
+    if (opts.readyOnly) conds.push(eq(runs.status, "ready"));
+    if (opts.status) conds.push(eq(runs.status, opts.status));
     const ord = opts.order === "asc"
       ? [asc(runs.createdAt), asc(runs.id)]
       : [desc(runs.createdAt), desc(runs.id)];
-    const base = this.db.select().from(runs).where(where).orderBy(...ord);
-    const rows = opts.limit !== undefined ? await base.limit(opts.limit) : await base;
-    return rows.map(this.#toRun);
+    let query = this.db.select().from(runs).where(and(...conds)).orderBy(...ord).$dynamic();
+    if (opts.limit !== undefined) query = query.limit(opts.limit);
+    if (opts.offset !== undefined) query = query.offset(opts.offset);
+    return (await query).map(this.#toRun);
   }
 
   /** Ready runs for a project, OLDEST first (chronological) — trend series source.
@@ -126,8 +145,15 @@ export class RunRepository {
     return this.#selectRuns({ projectId, readyOnly: true, order: "asc" });
   }
 
-  async listByProject(projectId: string): Promise<Run[]> {
-    return this.#selectRuns({ projectId, order: "desc" });
+  async listByProject(projectId: string, opts: { status?: RunStatus; limit?: number; offset?: number } = {}): Promise<Run[]> {
+    return this.#selectRuns({ projectId, order: "desc", ...opts });
+  }
+
+  async countByProject(projectId: string, opts: { status?: RunStatus } = {}): Promise<number> {
+    const conds = [eq(runs.projectId, projectId)];
+    if (opts.status) conds.push(eq(runs.status, opts.status));
+    const [row] = await this.db.select({ c: count() }).from(runs).where(and(...conds));
+    return Number(row?.c ?? 0);
   }
 
   async get(id: string): Promise<Run | null> {

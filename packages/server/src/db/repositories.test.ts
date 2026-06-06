@@ -105,6 +105,22 @@ for (const backend of backends) {
         expect(await runs.get("del-r1")).toBeNull();
         expect(await runs.listByProject("del-p")).toEqual([]);
       });
+
+      it("list({q}) substring-searches by id with wildcards escaped", async () => {
+        for (const id of ["alpha", "a_b", "axb", "beta"]) await projects.create(id, "2026-06-06T00:00:00.000Z");
+        expect((await projects.list({ q: "lph" })).map((p) => p.id)).toEqual(["alpha"]);
+        // '_' must be escaped — search "a_b" matches only the literal "a_b", not "axb".
+        expect((await projects.list({ q: "a_b" })).map((p) => p.id)).toEqual(["a_b"]);
+        expect(await projects.count({ q: "a_b" })).toBe(1);
+        expect(await projects.count()).toBe(4);
+      });
+
+      it("list({limit,offset}) windows results in id order", async () => {
+        for (const id of ["p1", "p2", "p3", "p4", "p5"]) await projects.create(id, "2026-06-06T00:00:00.000Z");
+        expect((await projects.list({ limit: 2 })).map((p) => p.id)).toEqual(["p1", "p2"]);
+        expect((await projects.list({ limit: 2, offset: 2 })).map((p) => p.id)).toEqual(["p3", "p4"]);
+        expect((await projects.list({ limit: 2, offset: 4 })).map((p) => p.id)).toEqual(["p5"]);
+      });
     });
 
     // -------------------------------------------------------------------------
@@ -187,6 +203,23 @@ for (const backend of backends) {
         // Without limit, all 3 returned oldest-first
         const all = await runs.listReadyByProject("lim-p");
         expect(all.map((r) => r.id)).toEqual(["lr1", "lr2", "lr3"]);
+      });
+
+      it("listByProject filters by status and paginates; countByProject counts", async () => {
+        await projects.create("f", "2026-06-06T00:00:00.000Z");
+        await runs.create("f", "f1", "R", "2026-06-06T00:00:01.000Z");
+        await runs.create("f", "f2", "R", "2026-06-06T00:00:02.000Z");
+        await runs.claimPending("f2", "2026-06-06T00:00:03.000Z");
+        await runs.markReady("f2", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0 }, "2026-06-06T00:00:04.000Z");
+        await runs.create("f", "f3", "R", "2026-06-06T00:00:05.000Z");
+
+        expect((await runs.listByProject("f", { status: "pending" })).map((r) => r.id).sort()).toEqual(["f1", "f3"]);
+        expect((await runs.listByProject("f", { status: "ready" })).map((r) => r.id)).toEqual(["f2"]);
+        expect(await runs.countByProject("f")).toBe(3);
+        expect(await runs.countByProject("f", { status: "pending" })).toBe(2);
+        // newest-first; limit/offset window
+        expect((await runs.listByProject("f", { limit: 1 })).map((r) => r.id)).toEqual(["f3"]);
+        expect((await runs.listByProject("f", { limit: 1, offset: 1 })).map((r) => r.id)).toEqual(["f2"]);
       });
 
       it("failStaleGenerating fails only generating runs older than the cutoff, leaving others untouched", async () => {
