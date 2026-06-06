@@ -1,4 +1,4 @@
-import { index, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
@@ -28,7 +28,8 @@ export const apiTokens = sqliteTable("api_tokens", {
   lastUsedAt: text("last_used_at"),
 }, (t) => ({
   byProject: index("idx_api_tokens_project").on(t.projectId),
-  byHash: index("idx_api_tokens_hash").on(t.tokenHash),
+  byHash: uniqueIndex("idx_api_tokens_hash").on(t.tokenHash), // unique: a token credential resolves to exactly one row
+
 }));
 
 export const testResults = sqliteTable("test_results", {

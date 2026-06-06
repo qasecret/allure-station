@@ -1,4 +1,4 @@
-import { index, pgTable, text } from "drizzle-orm/pg-core";
+import { index, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const projects = pgTable("projects", {
   id: text("id").primaryKey(),
@@ -29,7 +29,8 @@ export const apiTokens = pgTable("api_tokens", {
   lastUsedAt: text("last_used_at"),
 }, (t) => ({
   byProject: index("idx_api_tokens_project").on(t.projectId),
-  byHash: index("idx_api_tokens_hash").on(t.tokenHash),
+  byHash: uniqueIndex("idx_api_tokens_hash").on(t.tokenHash),
+
 }));
 
 export const testResults = pgTable("test_results", {

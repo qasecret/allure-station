@@ -15,7 +15,7 @@ The service listens on port `5050`. Reports and results are stored in the `allur
 Auth is **opt-in per project**. A project with no tokens is fully open (zero-config dev mode). The moment a project has at least one token, its **write** endpoints require a bearer token scoped to that project:
 
 - gated writes: `POST /send-results`, `POST /generate`, `DELETE /projects/:id`, and the token-management endpoints below;
-- reads (list/runs/report/trends/compare/events) stay open.
+- reads (list/runs/report/trends/compare/events) stay open — **tokens protect integrity (who can push/delete), not confidentiality**: report contents remain publicly readable. Read-gating arrives with Phase 5 RBAC.
 
 Tokens are stored hashed (sha256) — the plaintext is shown **once**, at creation.
 
