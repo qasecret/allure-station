@@ -29,6 +29,39 @@ export const runSchema = z.object({
   stats: runStatsSchema.nullable(),
 });
 
+export const testStatusSchema = z.enum(["passed", "failed", "broken", "skipped", "unknown"]);
+
+// One test's outcome within a run (persisted per run, returned by generation).
+export const testSummarySchema = z.object({
+  historyId: z.string().nullable(),
+  name: z.string(),
+  fullName: z.string().nullable(),
+  status: testStatusSchema,
+  duration: z.number().nullable(),
+  flaky: z.boolean(),
+});
+
+// One test's cross-run difference.
+export const testDiffSchema = z.object({
+  historyId: z.string().nullable(),
+  name: z.string(),
+  fullName: z.string().nullable(),
+  baseStatus: testStatusSchema.nullable(),   // null = absent in base
+  targetStatus: testStatusSchema.nullable(), // null = absent in target
+  flaky: z.boolean(),                          // flaky in target (or base if absent in target)
+});
+
+export const compareResultSchema = z.object({
+  base: z.object({ runId: z.string(), createdAt: z.string() }),
+  target: z.object({ runId: z.string(), createdAt: z.string() }),
+  newlyFailing: z.array(testDiffSchema), // base passed/skipped -> target failed/broken
+  fixed: z.array(testDiffSchema),        // base failed/broken  -> target passed
+  stillFailing: z.array(testDiffSchema), // failing in both
+  added: z.array(testDiffSchema),        // absent in base
+  removed: z.array(testDiffSchema),      // absent in target
+  flaky: z.array(testDiffSchema),        // flagged flaky in target
+});
+
 export const trendPointSchema = z.object({
   runId: z.string(),
   createdAt: z.string(),
@@ -55,3 +88,7 @@ export type RunStats = z.infer<typeof runStatsSchema>;
 export type Project = z.infer<typeof projectSchema>;
 export type RunStatus = z.infer<typeof runStatusSchema>;
 export type RunEvent = z.infer<typeof runEventSchema>;
+export type TestStatus = z.infer<typeof testStatusSchema>;
+export type TestSummary = z.infer<typeof testSummarySchema>;
+export type TestDiff = z.infer<typeof testDiffSchema>;
+export type CompareResult = z.infer<typeof compareResultSchema>;
