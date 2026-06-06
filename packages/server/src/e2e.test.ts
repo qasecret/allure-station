@@ -21,7 +21,8 @@ async function buildMultipartBody(f1: Buffer, f2: Buffer): Promise<{ body: Buffe
 
 describe("e2e: project -> results -> generate -> serve", () => {
   it("produces a ready run and a servable report", async () => {
-    const app = buildApp(await makeTestDeps());
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "e2e" } });
 
     const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
@@ -33,7 +34,11 @@ describe("e2e: project -> results -> generate -> serve", () => {
     });
     const runId = send.json().runId as string;
 
-    await app.inject({ method: "POST", url: "/api/projects/e2e/generate" });
+    // fire-and-forget; returns 202 with generating status
+    const gen = await app.inject({ method: "POST", url: "/api/projects/e2e/generate" });
+    expect(gen.statusCode).toBe(202);
+    expect(gen.json().status).toBe("generating");
+    await deps.queue.onIdle();
 
     const run = await app.inject({ method: "GET", url: `/api/projects/e2e/runs/${runId}` });
     expect(run.json()).toMatchObject({ status: "ready", stats: { total: 2, passed: 1, failed: 1 } });
@@ -61,7 +66,13 @@ describe("e2e: project -> results -> generate -> serve", () => {
     const runId1 = send1.json().runId as string;
 
     const gen1 = await app.inject({ method: "POST", url: "/api/projects/trend2/generate" });
-    expect(gen1.json()).toMatchObject({ status: "ready", stats: { total: 2, passed: 1, failed: 1 } });
+    expect(gen1.statusCode).toBe(202);
+    expect(gen1.json().status).toBe("generating");
+    await deps.queue.onIdle();
+
+    // Confirm run 1 is ready
+    const run1 = await app.inject({ method: "GET", url: `/api/projects/trend2/runs/${runId1}` });
+    expect(run1.json()).toMatchObject({ status: "ready", stats: { total: 2, passed: 1, failed: 1 } });
 
     // Run 2: send the same two fixture files again and generate a second run
     const { body: body2, boundary: boundary2 } = await buildMultipartBody(f1, f2);
@@ -73,7 +84,13 @@ describe("e2e: project -> results -> generate -> serve", () => {
     const runId2 = send2.json().runId as string;
 
     const gen2 = await app.inject({ method: "POST", url: "/api/projects/trend2/generate" });
-    expect(gen2.json()).toMatchObject({ status: "ready", stats: { total: 2, passed: 1, failed: 1 } });
+    expect(gen2.statusCode).toBe(202);
+    expect(gen2.json().status).toBe("generating");
+    await deps.queue.onIdle();
+
+    // Confirm run 2 is ready
+    const run2 = await app.inject({ method: "GET", url: `/api/projects/trend2/runs/${runId2}` });
+    expect(run2.json()).toMatchObject({ status: "ready", stats: { total: 2, passed: 1, failed: 1 } });
 
     // Assert the two runIds are distinct
     expect(runId1).not.toBe(runId2);

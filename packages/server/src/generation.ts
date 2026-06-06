@@ -1,7 +1,21 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { generateReport } from "@allure-station/worker";
+import type { GenerateJobData } from "@allure-station/worker";
 import type { AppDeps } from "./app.js";
+
+/** Job processor: run a generation job from its serialized data. */
+export async function processGenerate(deps: AppDeps, data: GenerateJobData): Promise<void> {
+  await runGeneration(deps, data.projectId, data.runId);
+}
+
+/**
+ * Wire the queue processor to deps. Call from makeTestDeps (tests) and main.ts (production),
+ * NOT from buildApp — keeps buildApp free of worker construction for future BullMQ mode.
+ */
+export function wireQueue(deps: AppDeps): void {
+  deps.queue.start((d) => processGenerate(deps, d));
+}
 
 /**
  * Pull a run's raw results out of storage, generate the Awesome report,

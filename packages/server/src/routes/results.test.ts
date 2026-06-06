@@ -25,7 +25,8 @@ async function multipart(files: { field: string; filename: string; data: Buffer 
 
 describe("send-results + generate", () => {
   it("ingests results, generates a report, and serves index.html", async () => {
-    const app = buildApp(await makeTestDeps());
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
 
     const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
@@ -39,9 +40,11 @@ describe("send-results + generate", () => {
     expect(send.statusCode).toBe(202);
     const runId = send.json().runId as string;
 
-    // generate synchronously for the test
+    // fire-and-forget enqueue; returns 202 with generating status
     const gen = await app.inject({ method: "POST", url: `/api/projects/p/generate` });
-    expect(gen.statusCode).toBe(200);
+    expect(gen.statusCode).toBe(202);
+    expect(gen.json().status).toBe("generating");
+    await deps.queue.onIdle();
 
     const run = await app.inject({ method: "GET", url: `/api/projects/p/runs/${runId}` });
     expect(run.json()).toMatchObject({ status: "ready", stats: { total: 2, passed: 1, failed: 1 } });
@@ -53,7 +56,8 @@ describe("send-results + generate", () => {
   }, 60_000);
 
   it("sanitizes traversal filenames: ../escape.json is stored as escape.json and generation succeeds", async () => {
-    const app = buildApp(await makeTestDeps());
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p2" } });
 
     const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
@@ -66,13 +70,18 @@ describe("send-results + generate", () => {
 
     const send = await app.inject({ method: "POST", url: "/api/projects/p2/send-results", ...mp });
     expect(send.statusCode).toBe(202);
+    const { runId: runId2, files } = send.json() as { runId: string; files: number };
     // Both files accepted (../escape.json becomes escape.json, not skipped)
-    expect(send.json().files).toBe(2);
+    expect(files).toBe(2);
 
     // Generation should succeed (no crash from traversal)
     const gen = await app.inject({ method: "POST", url: `/api/projects/p2/generate` });
-    expect(gen.statusCode).toBe(200);
-    expect(gen.json().status).toBe("ready");
+    expect(gen.statusCode).toBe(202);
+    expect(gen.json().status).toBe("generating");
+    await deps.queue.onIdle();
+
+    const run = await app.inject({ method: "GET", url: `/api/projects/p2/runs/${runId2}` });
+    expect(run.json().status).toBe("ready");
 
     await app.close();
   }, 60_000);
@@ -93,7 +102,10 @@ describe("send-results + generate", () => {
     expect(send.statusCode).toBe(202);
     const runId = send.json().runId as string;
 
-    await app.inject({ method: "POST", url: "/api/projects/mime/generate" });
+    const gen = await app.inject({ method: "POST", url: "/api/projects/mime/generate" });
+    expect(gen.statusCode).toBe(202);
+    expect(gen.json().status).toBe("generating");
+    await deps.queue.onIdle();
 
     // index.html served as text/html
     const htmlResp = await app.inject({ method: "GET", url: `/api/projects/mime/runs/${runId}/report/index.html` });
@@ -129,8 +141,12 @@ describe("send-results + generate", () => {
 
     // POST /generate should not 409 (there is a pending run) but generation must fail
     const gen = await app.inject({ method: "POST", url: "/api/projects/orphan/generate" });
-    expect(gen.statusCode).toBe(200);
-    expect(gen.json().status).toBe("failed");
+    expect(gen.statusCode).toBe(202);
+    expect(gen.json().status).toBe("generating");
+    await deps.queue.onIdle();
+
+    const run = await app.inject({ method: "GET", url: `/api/projects/orphan/runs/${runId}` });
+    expect(run.json().status).toBe("failed");
 
     await app.close();
   });
@@ -144,7 +160,8 @@ describe("send-results + generate", () => {
   });
 
   it("second POST /generate returns 409 after first succeeds (no pending run)", async () => {
-    const app = buildApp(await makeTestDeps());
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p3" } });
 
     const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
@@ -152,12 +169,18 @@ describe("send-results + generate", () => {
       { field: "files", filename: "1-result.json", data: f1 },
     ]);
 
-    await app.inject({ method: "POST", url: "/api/projects/p3/send-results", ...mp });
+    const sendRes = await app.inject({ method: "POST", url: "/api/projects/p3/send-results", ...mp });
+    const runId = sendRes.json().runId as string;
 
-    // First generate succeeds and run becomes ready
+    // First generate: fire-and-forget, returns 202 generating; wait for completion
     const gen1 = await app.inject({ method: "POST", url: `/api/projects/p3/generate` });
-    expect(gen1.statusCode).toBe(200);
-    expect(gen1.json().status).toBe("ready");
+    expect(gen1.statusCode).toBe(202);
+    expect(gen1.json().status).toBe("generating");
+    await deps.queue.onIdle();
+
+    // Confirm the run is now ready
+    const ready = await app.inject({ method: "GET", url: `/api/projects/p3/runs/${runId}` });
+    expect(ready.json().status).toBe("ready");
 
     // Second generate finds no pending run -> 409
     const gen2 = await app.inject({ method: "POST", url: `/api/projects/p3/generate` });

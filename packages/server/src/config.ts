@@ -1,11 +1,14 @@
 export type StorageBackend = "local" | "s3";
 export type DbDriver = "sqlite" | "postgres";
+export type QueueDriver = "inprocess" | "bullmq";
 
 export interface AppConfig {
   port: number;
   db: { driver: DbDriver; url: string };
   workDir: string;       // scratch dir for generation jobs
   concurrency: number;
+  queueDriver: QueueDriver;
+  redisUrl: string | undefined;
   version: string;
   storage: {
     backend: StorageBackend;
@@ -63,6 +66,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     db: { driver: dbDriver, url: dbUrl },
     workDir: env.WORK_DIR ?? `${dataDir}/work`,
     concurrency: Number(env.GENERATE_CONCURRENCY ?? 2),
+    queueDriver: (env.QUEUE_DRIVER ?? "inprocess") as QueueDriver,
+    redisUrl: env.REDIS_URL,
     version: env.APP_VERSION ?? "0.1.0",
     storage,
   };

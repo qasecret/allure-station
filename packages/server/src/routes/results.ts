@@ -1,7 +1,6 @@
 import { basename } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { AppDeps } from "../app.js";
-import { runGeneration } from "../generation.js";
 
 export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void {
   // Upload result files; stages them in storage under a new pending run.
@@ -27,7 +26,8 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
     return reply.code(202).send({ runId: run.id, files: count });
   });
 
-  // Generate the most recent pending run (synchronous response; uses the job queue).
+  // Claim and enqueue the most recent pending run. Returns 202 with the generating run immediately.
+  // Callers must poll GET /projects/:id/runs/:runId for terminal status (ready/failed).
   app.post("/projects/:projectId/generate", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
@@ -37,11 +37,7 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
     if (!(await deps.runs.claimPending(pending.id))) {
       return reply.code(409).send({ error: "run is already being generated" });
     }
-    try {
-      await deps.queue.add(() => runGeneration(deps, projectId, pending.id));
-    } catch {
-      // Generation failed; runGeneration has marked the run 'failed'. Fall through to return its state.
-    }
-    return reply.code(200).send(await deps.runs.get(pending.id));
+    await deps.queue.enqueue({ projectId, runId: pending.id });
+    return reply.code(202).send(await deps.runs.get(pending.id)); // 202 Accepted; status: "generating"
   });
 }

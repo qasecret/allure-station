@@ -6,12 +6,13 @@ import { ProjectRepository, RunRepository } from "./db/repositories.js";
 import { LocalDriver } from "./storage/local-driver.js";
 import { InProcessQueue } from "@allure-station/worker";
 import type { AppDeps } from "./app.js";
+import { wireQueue } from "./generation.js";
 
 export async function makeTestDeps(): Promise<AppDeps> {
   const { db, migrate } = createDb("sqlite", { url: ":memory:" });
   await migrate();
   const root = mkdtempSync(join(tmpdir(), "as-srv-"));
-  return {
+  const deps: AppDeps = {
     projects: new ProjectRepository(db),
     runs: new RunRepository(db),
     storage: new LocalDriver(join(root, "storage")),
@@ -21,4 +22,6 @@ export async function makeTestDeps(): Promise<AppDeps> {
     now: () => "2026-06-06T00:00:00.000Z",
     newId: (() => { let n = 0; return () => `id${++n}`; })(),
   };
+  wireQueue(deps);
+  return deps;
 }
