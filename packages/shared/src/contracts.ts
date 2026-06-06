@@ -67,6 +67,31 @@ export const compareResultSchema = z.object({
   flaky: z.array(testDiffSchema),        // flagged flaky in target
 });
 
+export const qualityGateConfigSchema = z.object({
+  maxFailures: z.number().int().nonnegative().optional(),
+  minTests: z.number().int().nonnegative().optional(),
+  minPassRate: z.number().min(0).max(1).optional(),
+  maxDurationMs: z.number().int().nonnegative().optional(),
+});
+export const qualityGateCheckSchema = z.object({
+  rule: z.string(),
+  ok: z.boolean(),
+  actual: z.number(),
+  threshold: z.number(),
+});
+export const qualityGateVerdictSchema = z.object({
+  configured: z.boolean(),
+  passed: z.boolean(),
+  checks: z.array(qualityGateCheckSchema),
+});
+
+export const runSummarySchema = z.object({
+  run: runSchema,
+  reportPath: z.string(),
+  previousReadyRunId: z.string().nullable(),
+  qualityGate: qualityGateVerdictSchema,
+});
+
 export const trendPointSchema = z.object({
   runId: z.string(),
   createdAt: z.string(),
@@ -112,3 +137,6 @@ export type TestDiff = z.infer<typeof testDiffSchema>;
 export type CompareResult = z.infer<typeof compareResultSchema>;
 export type ApiToken = z.infer<typeof apiTokenSchema>;
 export type CreatedToken = z.infer<typeof createdTokenSchema>;
+export type QualityGateConfig = z.infer<typeof qualityGateConfigSchema>;
+export type QualityGateVerdict = z.infer<typeof qualityGateVerdictSchema>;
+export type RunSummary = z.infer<typeof runSummarySchema>;
