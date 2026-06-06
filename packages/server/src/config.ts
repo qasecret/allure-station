@@ -11,6 +11,7 @@ export interface AppConfig {
   queueDriver: QueueDriver;
   redisUrl: string | undefined;
   version: string;
+  publicUrl: string | undefined; // absolute base URL for links in notifications (no trailing slash)
   storage: {
     backend: StorageBackend;
     localRoot: string;
@@ -100,6 +101,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     queueDriver,
     redisUrl: env.REDIS_URL,
     version: env.APP_VERSION ?? "0.1.0",
+    publicUrl: env.PUBLIC_URL ? env.PUBLIC_URL.replace(/\/$/, "") : undefined,
     storage,
   };
 }

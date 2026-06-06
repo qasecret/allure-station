@@ -18,6 +18,7 @@ function testConfig(): AppConfig {
     queueDriver: "inprocess",
     redisUrl: undefined,
     version: "test",
+    publicUrl: undefined,
     storage: { backend: "local", localRoot: join(root, "storage") },
   };
 }

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { generateReport } from "@allure-station/worker";
 import type { GenerateJobData } from "@allure-station/worker";
 import type { AppDeps } from "./app.js";
+import { dispatchNotifications } from "./notify.js";
 
 /** Job processor: run a generation job from its serialized data. */
 export async function processGenerate(deps: AppDeps, data: GenerateJobData): Promise<void> {
@@ -52,9 +53,11 @@ export async function runGeneration(deps: AppDeps, projectId: string, runId: str
     await deps.testResults.replaceForRun(runId, tests);
     await deps.runs.markReady(runId, stats, deps.now());
     await publishRun(deps, projectId, runId);
+    await dispatchNotifications(deps, projectId, runId); // best-effort, never throws
   } catch (err) {
     await deps.runs.markFailed(runId, deps.now());
     await publishRun(deps, projectId, runId);
+    await dispatchNotifications(deps, projectId, runId); // best-effort, never throws
     throw err;
   } finally {
     await materialized?.dispose();

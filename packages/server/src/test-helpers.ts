@@ -5,6 +5,7 @@ import { createDb } from "./db/client.js";
 import { ProjectRepository, RunRepository } from "./db/repositories.js";
 import { TestResultRepository } from "./db/test-results-repo.js";
 import { ApiTokenRepository } from "./db/api-tokens-repo.js";
+import { NotificationRepository } from "./db/notifications-repo.js";
 import { LocalDriver } from "./storage/local-driver.js";
 import { InProcessQueue } from "@allure-station/worker";
 import type { AppDeps } from "./app.js";
@@ -20,11 +21,13 @@ export async function makeTestDeps(): Promise<AppDeps> {
     runs: new RunRepository(db),
     testResults: new TestResultRepository(db, (() => { let n = 0; return () => `tr${++n}`; })()),
     tokens: new ApiTokenRepository(db, (() => { let n = 0; return () => `tok${++n}`; })()),
+    notifications: new NotificationRepository(db, (() => { let n = 0; return () => `ntf${++n}`; })()),
     storage: new LocalDriver(join(root, "storage")),
     queue: new InProcessQueue(2),
     bus: new InProcessBus(),
     workDir: join(root, "work"),
     version: "test",
+    publicUrl: undefined,
     now: () => "2026-06-06T00:00:00.000Z",
     newId: (() => { let n = 0; return () => `id${++n}`; })(),
   };

@@ -6,6 +6,7 @@ import fastifyStatic from "@fastify/static";
 import type { ProjectRepository, RunRepository } from "./db/repositories.js";
 import type { TestResultRepository } from "./db/test-results-repo.js";
 import type { ApiTokenRepository } from "./db/api-tokens-repo.js";
+import type { NotificationRepository } from "./db/notifications-repo.js";
 import type { StorageDriver } from "./storage/driver.js";
 import type { JobQueue } from "@allure-station/worker";
 import type { EventBus } from "./events/bus.js";
@@ -24,11 +25,13 @@ export interface AppDeps {
   runs: RunRepository;
   testResults: TestResultRepository;
   tokens: ApiTokenRepository;
+  notifications: NotificationRepository;
   storage: StorageDriver;
   queue: JobQueue;
   bus: EventBus;
   workDir: string;
   version: string;
+  publicUrl: string | undefined; // absolute base for links in notifications (no trailing slash)
   now: () => string;
   newId: () => string;
 }
