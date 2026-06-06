@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import type { Project, Run, RunStats, RunStatus } from "@allure-station/shared";
+import type { Project, QualityGateConfig, Run, RunStats, RunStatus } from "@allure-station/shared";
 import type { Db } from "./client.js";
 import { apiTokens, projects, runs, testResults } from "./schema.sqlite.js";
 
@@ -54,6 +54,15 @@ export class ProjectRepository {
     await this.db.delete(apiTokens).where(eq(apiTokens.projectId, id));
     await this.db.delete(runs).where(eq(runs.projectId, id));
     await this.db.delete(projects).where(eq(projects.id, id));
+  }
+
+  async getQualityGate(id: string): Promise<QualityGateConfig | null> {
+    const [row] = await this.db.select({ qg: projects.qualityGate }).from(projects).where(eq(projects.id, id));
+    return row?.qg ? (JSON.parse(row.qg) as QualityGateConfig) : null;
+  }
+
+  async setQualityGate(id: string, config: QualityGateConfig | null): Promise<void> {
+    await this.db.update(projects).set({ qualityGate: config ? JSON.stringify(config) : null }).where(eq(projects.id, id));
   }
 
   async #withLatest(id: string, createdAt: string): Promise<Project> {
@@ -155,6 +164,17 @@ export class RunRepository {
 
   async listByProject(projectId: string, opts: { status?: RunStatus; limit?: number; offset?: number } = {}): Promise<Run[]> {
     return this.#selectRuns({ projectId, order: "desc", ...opts });
+  }
+
+  /** The newest ready run created strictly before `createdAt` (the run immediately prior). */
+  async previousReadyBefore(projectId: string, createdAt: string): Promise<Run | null> {
+    const [row] = await this.db
+      .select()
+      .from(runs)
+      .where(and(eq(runs.projectId, projectId), eq(runs.status, "ready"), lt(runs.createdAt, createdAt)))
+      .orderBy(desc(runs.createdAt), desc(runs.id))
+      .limit(1);
+    return row ? this.#toRun(row) : null;
   }
 
   async countByProject(projectId: string, opts: { status?: RunStatus } = {}): Promise<number> {

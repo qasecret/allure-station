@@ -120,6 +120,15 @@ for (const backend of backends) {
         expect(await projects.count()).toBe(4);
       });
 
+      it("quality gate config round-trips and clears", async () => {
+        await projects.create("qg", "2026-06-06T00:00:00.000Z");
+        expect(await projects.getQualityGate("qg")).toBeNull();
+        await projects.setQualityGate("qg", { maxFailures: 0, minPassRate: 0.9 });
+        expect(await projects.getQualityGate("qg")).toEqual({ maxFailures: 0, minPassRate: 0.9 });
+        await projects.setQualityGate("qg", null);
+        expect(await projects.getQualityGate("qg")).toBeNull();
+      });
+
       it("list({limit,offset}) windows results in id order", async () => {
         for (const id of ["p1", "p2", "p3", "p4", "p5"]) await projects.create(id, "2026-06-06T00:00:00.000Z");
         expect((await projects.list({ limit: 2 })).map((p) => p.id)).toEqual(["p1", "p2"]);
@@ -210,6 +219,19 @@ for (const backend of backends) {
         // Without limit, all 3 returned oldest-first
         const all = await runs.listReadyByProject("lim-p");
         expect(all.map((r) => r.id)).toEqual(["lr1", "lr2", "lr3"]);
+      });
+
+      it("previousReadyBefore returns the prior ready run", async () => {
+        await projects.create("pr", "2026-06-06T00:00:00.000Z");
+        const mk = async (id: string, t: string) => {
+          await runs.create("pr", id, "R", t);
+          await runs.claimPending(id, t);
+          await runs.markReady(id, { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0 }, t);
+        };
+        await mk("r1", "2026-06-06T00:00:01.000Z");
+        await mk("r2", "2026-06-06T00:00:02.000Z");
+        expect((await runs.previousReadyBefore("pr", "2026-06-06T00:00:02.000Z"))?.id).toBe("r1");
+        expect(await runs.previousReadyBefore("pr", "2026-06-06T00:00:01.000Z")).toBeNull(); // nothing before r1
       });
 
       it("listByProject filters by status and paginates; countByProject counts", async () => {
