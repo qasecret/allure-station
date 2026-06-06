@@ -19,6 +19,19 @@ export const runs = pgTable("runs", {
   byProjectStatusCreated: index("idx_runs_project_status_created").on(t.projectId, t.status, t.createdAt),
 }));
 
+export const apiTokens = pgTable("api_tokens", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  prefix: text("prefix").notNull(),
+  createdAt: text("created_at").notNull(),
+  lastUsedAt: text("last_used_at"),
+}, (t) => ({
+  byProject: index("idx_api_tokens_project").on(t.projectId),
+  byHash: index("idx_api_tokens_hash").on(t.tokenHash),
+}));
+
 export const testResults = pgTable("test_results", {
   id: text("id").primaryKey(),
   runId: text("run_id").notNull().references(() => runs.id, { onDelete: "cascade" }),
