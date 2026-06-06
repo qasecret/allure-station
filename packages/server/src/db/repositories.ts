@@ -1,7 +1,7 @@
-import { and, asc, desc, eq, isNull, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import type { Project, Run, RunStats, RunStatus } from "@allure-station/shared";
 import type { Db } from "./client.js";
-import { projects, runs } from "./schema.sqlite.js";
+import { projects, runs, testResults } from "./schema.sqlite.js";
 
 export class ProjectRepository {
   constructor(private readonly db: Db) {}
@@ -22,6 +22,11 @@ export class ProjectRepository {
   }
 
   async remove(id: string): Promise<void> {
+    // libsql doesn't enforce FK ON DELETE CASCADE (pragma off), so delete children explicitly,
+    // deepest first: test_results -> runs -> project.
+    await this.db.delete(testResults).where(
+      inArray(testResults.runId, this.db.select({ id: runs.id }).from(runs).where(eq(runs.projectId, id))),
+    );
     await this.db.delete(runs).where(eq(runs.projectId, id));
     await this.db.delete(projects).where(eq(projects.id, id));
   }
