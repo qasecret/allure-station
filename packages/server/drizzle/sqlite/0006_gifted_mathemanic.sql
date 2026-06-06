@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `quality_gate` text;

@@ -43,6 +43,13 @@
       "when": 1780762589131,
       "tag": "0005_worried_trauma",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1780763887067,
+      "tag": "0006_gifted_mathemanic",
+      "breakpoints": true
     }
   ]
 }

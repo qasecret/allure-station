@@ -3,6 +3,7 @@ import { index, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 export const projects = pgTable("projects", {
   id: text("id").primaryKey(),
   createdAt: text("created_at").notNull(),
+  qualityGate: text("quality_gate"), // JSON QualityGateConfig | null
 });
 
 export const runs = pgTable("runs", {
