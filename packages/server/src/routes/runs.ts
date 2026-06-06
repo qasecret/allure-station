@@ -2,6 +2,12 @@ import type { FastifyInstance } from "fastify";
 import type { AppDeps } from "../app.js";
 
 export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
+  app.get("/projects/:projectId/trends", async (req) => {
+    const { projectId } = req.params as { projectId: string };
+    const ready = await deps.runs.listReadyByProject(projectId);
+    return ready.map((r) => ({ runId: r.id, createdAt: r.createdAt, stats: r.stats }));
+  });
+
   app.get("/projects/:projectId/runs", async (req) => {
     const { projectId } = req.params as { projectId: string };
     return deps.runs.listByProject(projectId);

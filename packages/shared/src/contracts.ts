@@ -29,6 +29,13 @@ export const runSchema = z.object({
   stats: runStatsSchema.nullable(),
 });
 
+export const trendPointSchema = z.object({
+  runId: z.string(),
+  createdAt: z.string(),
+  stats: runStatsSchema,
+});
+export type TrendPoint = z.infer<typeof trendPointSchema>;
+
 export const projectSchema = z.object({
   id: projectIdSchema,
   createdAt: z.string(),

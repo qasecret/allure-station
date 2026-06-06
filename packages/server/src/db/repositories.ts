@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { Project, Run, RunStats, RunStatus } from "@allure-station/shared";
 import type { Db } from "./client.js";
 import { projects, runs } from "./schema.js";
@@ -79,6 +79,17 @@ export class RunRepository {
       .where(eq(runs.status, "generating"))
       .run();
     return res.changes;
+  }
+
+  /** Ready runs for a project, OLDEST first (chronological) — trend series source. */
+  async listReadyByProject(projectId: string): Promise<Run[]> {
+    return this.db
+      .select()
+      .from(runs)
+      .where(and(eq(runs.projectId, projectId), eq(runs.status, "ready")))
+      .orderBy(asc(runs.createdAt))
+      .all()
+      .map(this.#toRun);
   }
 
   async listByProject(projectId: string): Promise<Run[]> {

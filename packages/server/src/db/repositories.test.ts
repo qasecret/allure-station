@@ -59,6 +59,15 @@ describe("RunRepository", () => {
     expect(second).toBe(false);
   });
 
+  it("listReadyByProject returns only ready runs, oldest-first", async () => {
+    await projects.create("p", "2026-06-06T00:00:00.000Z");
+    await runs.create("p", "r1", "R", "2026-06-06T00:00:01.000Z");
+    await runs.markReady("r1", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0 }, "2026-06-06T00:00:02.000Z");
+    await runs.create("p", "r2", "R", "2026-06-06T00:00:03.000Z"); // pending, excluded
+    const ready = await runs.listReadyByProject("p");
+    expect(ready.map((r) => r.id)).toEqual(["r1"]);
+  });
+
   it("failStaleGenerating marks 'generating' runs as failed and leaves other statuses untouched", async () => {
     await projects.create("stale-p", "2026-06-06T00:00:00.000Z");
 
