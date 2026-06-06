@@ -1,4 +1,4 @@
-import { cp, mkdir, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { generateReport } from "@allure-station/worker";
 import type { AppDeps } from "./app.js";
@@ -9,14 +9,12 @@ import type { AppDeps } from "./app.js";
  */
 export async function runGeneration(deps: AppDeps, projectId: string, runId: string): Promise<void> {
   const jobDir = join(deps.workDir, runId);
-  const resultsDir = join(jobDir, "results");
   const outDir = join(jobDir, "report");
   const historyFile = join(jobDir, "history.jsonl");
 
   try {
-    await mkdir(resultsDir, { recursive: true });
-    // hydrate raw results from storage to the local scratch dir
-    await hydrateResults(deps, projectId, runId, resultsDir);
+    await mkdir(jobDir, { recursive: true });
+    const resultsDir = await deps.storage.resolveLocalPath(`${projectId}/runs/${runId}/results`);
 
     const run = await deps.runs.get(runId);
     const { stats } = await generateReport({
@@ -37,9 +35,4 @@ export async function runGeneration(deps: AppDeps, projectId: string, runId: str
   } finally {
     await rm(jobDir, { recursive: true, force: true });
   }
-}
-
-async function hydrateResults(deps: AppDeps, projectId: string, runId: string, destDir: string): Promise<void> {
-  const src = await deps.storage.resolveLocalPath(`${projectId}/runs/${runId}/results`);
-  await cp(src, destDir, { recursive: true });
 }
