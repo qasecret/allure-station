@@ -385,9 +385,25 @@ Wire it into the project header area.
 2. **Dump size / chain length:** restoring all prior dumps grows with run count. 2a restores all ready runs; add a cap (e.g. last 20) if the spike shows large dumps or slow restore — make the cap a constant in `generation.ts`.
 3. **Two-pass generation cost:** the dump-only pass renders nothing (cheap), but parses results twice. Acceptable for 2a; revisit if profiling shows it matters.
 
-## Spike findings (fill in during Task 1)
-- Dump config keys used: _TBD_
-- Produced dump path pattern: _TBD (expected `${dump}.zip`)_
-- Trend-evidence file in report output: _TBD_
-- One-pass vs two-pass verdict: _TBD (expected two-pass)_
-- done() resolves without hang when historyPath omitted: _TBD (expected yes)_
+## Spike findings (Task 1 — DONE 2026-06-06)
+- **No hang confirmed:** omitting `historyPath` ⇒ `#history` never constructed ⇒ `appendHistory` (the hang) never runs. Setting `historyPath` hangs even on run 1. **Never set `historyPath`.**
+- **`resolveConfig` REJECTS `dump`** (unsupported field, throws). Attach it to the constructor instead:
+  `const resolved = await resolveConfig({name,output,plugins:{awesome:{options:{}}}}); new AllureReport({ ...resolved, dump: dumpBase })`. Tasks 2 & 4 must use this pattern (NOT `resolveConfig({...,dump})`).
+- **Dump path:** `${dump}.zip` exactly. `output` is unused in dump mode (done() early-returns).
+- **Two passes required** (definitive): a report pass with `dump` set renders nothing (early return); `dumpState()` after a no-`dump` `done()` writes a bogus `undefined.zip`. Capture dump in a separate `dump`-set pass.
+- **⚠️ KEY: dump-chaining yields per-test RETRIES, not trend CHARTS.** `restoreState` feeds restored TRs into the retry substore (each test shows prior-run occurrences as retries — real cross-run value), but the Awesome trend charts (`statusDynamics`/`durationDynamics`) read `store.allHistoryDataPoints()`, which is fed ONLY by the `appendHistory`/`readHistory` (deadlock) path. `dumpState`/`restoreState` do NOT serialize/restore history data points. So **embedded trend charts stay single-point**; visible trend lines must come from the DB-sourced trends API/UI (Tasks 5–6), which therefore become the PRIMARY trend surface, not a complement.
+- **Fixtures share fixed result UUIDs** → they collide across runs in the store (latest=0). Test data for Tasks 2/7 must use UNIQUE result UUIDs per run (re-UUID the fixture files per simulated run).
+- **Timings:** dump-only pass ~80–90 ms; report+restore pass ~125–155 ms. Cheap.
+
+### DECISION (2026-06-06): **DB-trends only (lean)**.
+Given native embedded trend charts aren't reachable without an upstream `appendHistory` fix, Slice 2a is
+reduced to DB-sourced trends — the visible trend surface — and dump-chaining is DEFERRED.
+- **SKIP:** Task 2 (worker dump capture/restore) and Task 4's dump-chaining/dump-storage.
+- **KEEP:** Task 3 (`listReadyByProject`), Task 5 (`/trends` + contract), Task 6 (UI panel), Task 7
+  (two-run e2e — reduced to asserting the `/trends` series has 2 points; no dump assertions).
+- **BONUS:** fold code-review #8 (drop redundant `hydrateResults` copy in `generation.ts`) as a small
+  standalone cleanup (independent of dump-chaining).
+- **DEFERRED to a later slice (when upstream fixes the deadlock or we vendor-patch core):** embedded
+  report retries via dump-chaining, native trend charts.
+The worker's `generateReport` stays as-is from Phase 1 (no `historyPath` change needed for DB-trends);
+the existing `historyLimit:0` workaround is harmless and remains until dump-chaining is implemented.
