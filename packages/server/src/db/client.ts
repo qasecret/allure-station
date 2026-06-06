@@ -32,5 +32,6 @@ export function ensureSchema(db: Db): void {
       stats_json TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
+    CREATE INDEX IF NOT EXISTS idx_runs_project_status_created ON runs(project_id, status, created_at);
   `);
 }

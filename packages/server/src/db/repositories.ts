@@ -81,28 +81,29 @@ export class RunRepository {
     return res.changes;
   }
 
+  #selectRuns(opts: { projectId: string; readyOnly?: boolean; order: "asc" | "desc"; limit?: number }): Run[] {
+    const where = opts.readyOnly
+      ? and(eq(runs.projectId, opts.projectId), eq(runs.status, "ready"))
+      : eq(runs.projectId, opts.projectId);
+    const ord = opts.order === "asc"
+      ? [asc(runs.createdAt), asc(runs.id)]
+      : [desc(runs.createdAt), desc(runs.id)];
+    const base = this.db.select().from(runs).where(where).orderBy(...ord);
+    const rows = opts.limit !== undefined ? base.limit(opts.limit).all() : base.all();
+    return rows.map(this.#toRun);
+  }
+
   /** Ready runs for a project, OLDEST first (chronological) — trend series source.
    * Pass `limit` to cap to the most-recent N runs (still returned oldest-first). */
   async listReadyByProject(projectId: string, limit?: number): Promise<Run[]> {
     if (limit !== undefined) {
-      const recent = this.db.select().from(runs)
-        .where(and(eq(runs.projectId, projectId), eq(runs.status, "ready")))
-        .orderBy(desc(runs.createdAt), desc(runs.id)).limit(limit).all().map(this.#toRun);
-      return recent.reverse(); // newest-N, returned oldest-first
+      return this.#selectRuns({ projectId, readyOnly: true, order: "desc", limit }).reverse(); // newest-N, oldest-first
     }
-    return this.db
-      .select()
-      .from(runs)
-      .where(and(eq(runs.projectId, projectId), eq(runs.status, "ready")))
-      .orderBy(asc(runs.createdAt), asc(runs.id))
-      .all()
-      .map(this.#toRun);
+    return this.#selectRuns({ projectId, readyOnly: true, order: "asc" });
   }
 
   async listByProject(projectId: string): Promise<Run[]> {
-    return this.db.select().from(runs)
-      .where(eq(runs.projectId, projectId))
-      .orderBy(desc(runs.createdAt)).all().map(this.#toRun);
+    return this.#selectRuns({ projectId, order: "desc" });
   }
 
   async get(id: string): Promise<Run | null> {

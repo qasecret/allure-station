@@ -1,4 +1,4 @@
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
@@ -13,4 +13,6 @@ export const runs = sqliteTable("runs", {
   createdAt: text("created_at").notNull(),
   finishedAt: text("finished_at"),
   statsJson: text("stats_json"), // JSON RunStats | null
-});
+}, (t) => ({
+  byProjectStatusCreated: index("idx_runs_project_status_created").on(t.projectId, t.status, t.createdAt),
+}));

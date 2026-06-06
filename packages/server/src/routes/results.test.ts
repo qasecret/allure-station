@@ -134,6 +134,14 @@ describe("send-results + generate", () => {
     await app.close();
   });
 
+  it("POST /generate on unknown project returns 404", async () => {
+    const app = buildApp(makeTestDeps());
+    const res = await app.inject({ method: "POST", url: "/api/projects/ghost/generate" });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe("project not found");
+    await app.close();
+  });
+
   it("second POST /generate returns 409 after first succeeds (no pending run)", async () => {
     const app = buildApp(makeTestDeps());
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p3" } });

@@ -30,6 +30,7 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
   // Generate the most recent pending run (synchronous response; uses the job queue).
   app.post("/projects/:projectId/generate", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
+    if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
     const runs = await deps.runs.listByProject(projectId);
     const pending = runs.find((r) => r.status === "pending");
     if (!pending) return reply.code(409).send({ error: "no pending run to generate" });
