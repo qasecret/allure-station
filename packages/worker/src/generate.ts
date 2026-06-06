@@ -1,5 +1,5 @@
 import { AllureReport, resolveConfig } from "@allurereport/core";
-import type { RunStats } from "@allure-station/shared";
+import type { RunStats, TestStatus, TestSummary } from "@allure-station/shared";
 
 export interface GenerateParams {
   resultsDirs: string[];
@@ -11,6 +11,8 @@ export interface GenerateParams {
 
 export interface GenerateResult {
   stats: RunStats;
+  /** Per-test outcomes, persisted for run comparison. */
+  tests: TestSummary[];
 }
 
 /**
@@ -39,30 +41,40 @@ export async function generateReport(params: GenerateParams): Promise<GenerateRe
   for (const dir of params.resultsDirs) await report.readDirectory(dir);
   await report.done();
 
-  return { stats: await computeStats(report) };
+  return summarize(report);
 }
 
+const KNOWN_STATUSES: readonly string[] = ["passed", "failed", "broken", "skipped"];
+
 /**
- * Derive run stats from the report's store. `AllureReport` exposes a public
- * `store` getter (`get store(): DefaultAllureStore`), and `DefaultAllureStore`
- * exposes the public async `allTestResults()` which returns the finished test
- * results. We tally by `status` ("passed" | "failed" | "broken" | "skipped" |
- * "unknown"). Confirmed against the installed `@allurereport/core@3.9.0` and
- * `@allurereport/core-api@3.9.0` type definitions — no internal/private access
- * is required. Kept isolated so the store-access detail lives in one place.
+ * Derive run stats AND per-test summaries from the report's store in one pass.
+ * `AllureReport` exposes a public `store` getter, and `DefaultAllureStore` exposes
+ * the public async `allTestResults()`. Each result carries `historyId` (Allure's
+ * stable cross-run hash), `fullName`, `status`, `duration`, and `flaky` — confirmed
+ * against `@allurereport/core-api@3.9.0`. No internal/private access is required.
  */
-async function computeStats(report: AllureReport): Promise<RunStats> {
+async function summarize(report: AllureReport): Promise<GenerateResult> {
   const results = await report.store.allTestResults();
 
   const stats: RunStats = { total: 0, passed: 0, failed: 0, broken: 0, skipped: 0 };
+  const tests: TestSummary[] = [];
   for (const r of results) {
     stats.total += 1;
     switch (r.status) {
       case "passed": stats.passed += 1; break;
       case "failed": stats.failed += 1; break;
       case "broken": stats.broken += 1; break;
-      default: stats.skipped += 1; break;
+      default: stats.skipped += 1; break; // skipped + unknown
     }
+    const status = (KNOWN_STATUSES.includes(r.status) ? r.status : "unknown") as TestStatus;
+    tests.push({
+      historyId: r.historyId ?? null,
+      name: r.name,
+      fullName: r.fullName ?? null,
+      status,
+      duration: r.duration ?? null,
+      flaky: r.flaky ?? false,
+    });
   }
-  return stats;
+  return { stats, tests };
 }

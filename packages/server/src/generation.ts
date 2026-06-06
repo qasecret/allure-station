@@ -42,13 +42,14 @@ export async function runGeneration(deps: AppDeps, projectId: string, runId: str
     materialized = await deps.storage.materializeDir(resultsKey);
     await mkdir(jobDir, { recursive: true });
     const run = await deps.runs.get(runId);
-    const { stats } = await generateReport({
+    const { stats, tests } = await generateReport({
       resultsDirs: [materialized.dir],
       outputDir: outDir,
       reportName: run?.reportName ?? "Allure Report",
       dumps: [],
     });
     await deps.storage.putDir(`${projectId}/runs/${runId}/report`, outDir); // direct to final prefix
+    await deps.testResults.replaceForRun(runId, tests);
     await deps.runs.markReady(runId, stats, deps.now());
     await publishRun(deps, projectId, runId);
   } catch (err) {

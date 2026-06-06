@@ -29,5 +29,14 @@ describe("generateReport", () => {
     expect(result.stats.total).toBe(2);
     expect(result.stats.passed).toBe(1);
     expect(result.stats.failed).toBe(1);
+
+    // per-test summaries are returned for run comparison
+    expect(result.tests).toHaveLength(2);
+    const byName = Object.fromEntries(result.tests.map((t) => [t.name, t]));
+    expect(byName["passing test"].status).toBe("passed");
+    expect(byName["failing test"].status).toBe("failed");
+    // Allure recomputes historyId as a stable hash — assert it's a non-empty string.
+    expect(typeof byName["passing test"].historyId).toBe("string");
+    expect(byName["passing test"].historyId!.length).toBeGreaterThan(0);
   }, 60_000);
 });

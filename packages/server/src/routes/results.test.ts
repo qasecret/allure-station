@@ -58,6 +58,11 @@ describe("send-results + generate", () => {
     const run = await app.inject({ method: "GET", url: `/api/projects/p/runs/${runId}` });
     expect(run.json()).toMatchObject({ status: "ready", stats: { total: 2, passed: 1, failed: 1 } });
 
+    // per-test results persisted for run comparison
+    const persisted = await deps.testResults.listByRun(runId);
+    expect(persisted).toHaveLength(2);
+    expect(persisted.map((t) => t.status).sort()).toEqual(["failed", "passed"]);
+
     const report = await app.inject({ method: "GET", url: `/api/projects/p/runs/${runId}/report/index.html` });
     expect(report.statusCode).toBe(200);
     expect(report.headers["content-type"]).toContain("text/html");
