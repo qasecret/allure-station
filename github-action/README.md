@@ -17,6 +17,35 @@ Upload Allure results to an [Allure Station](../README.md) instance, trigger rep
 
 Outputs: `run-id`, `status` (`ready`|`failed`|`generating`), `report-url`.
 
+## Pull-request status checks & comments
+
+On `pull_request` events the action posts a **commit status** and an (upserted) **PR comment** with pass/fail, the **quality-gate verdict**, run stats, and the **trend delta vs the previous run**. It fails the job if generation failed or the quality gate breached.
+
+```yaml
+permissions:
+  pull-requests: write   # PR comment
+  statuses: write        # commit status
+jobs:
+  test:
+    steps:
+      - uses: qasecret/allure-station/github-action@v1
+        with:
+          url: https://allure.example.com
+          project: my-app
+          token: ${{ secrets.ALLURE_TOKEN }}
+          # comment: "true"                 # default; set "false" to skip PR posting
+          # github-token: ${{ github.token }}  # default
+```
+
+Configure the gate once per project (write-gated if the project is token-protected):
+
+```bash
+curl -XPUT host/api/projects/my-app/quality-gate -H 'content-type: application/json' \
+  -d '{"maxFailures":0,"minPassRate":0.95,"minTests":1}'
+```
+
+Rules: `maxFailures` (failed+broken ≤ N), `minTests` (total ≥ N), `minPassRate` (0..1), `maxDurationMs`. All configured rules must pass.
+
 ```yaml
 - uses: qasecret/allure-station/github-action@v1
   id: allure

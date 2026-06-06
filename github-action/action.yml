@@ -26,6 +26,14 @@ inputs:
     description: "Max seconds to wait when wait=true"
     required: false
     default: "300"
+  comment:
+    description: "On pull_request events, post a commit status + PR comment with the verdict"
+    required: false
+    default: "true"
+  github-token:
+    description: "Token for posting the PR status/comment (needs pull-requests:write + statuses:write)"
+    required: false
+    default: ${{ github.token }}
 outputs:
   run-id:
     description: "The created run id"
@@ -86,3 +94,49 @@ runs:
         fi
         echo "status=$status" >> "$GITHUB_OUTPUT"
         [ "$status" = "failed" ] && exit 1 || true
+
+    - name: PR status + comment
+      # Runs even if generation failed (always()) so the PR reflects the failure; PR events only.
+      if: ${{ always() && github.event_name == 'pull_request' && inputs.comment == 'true' }}
+      uses: actions/github-script@v7
+      env:
+        AS_URL: ${{ inputs.url }}
+        AS_PROJECT: ${{ inputs.project }}
+        AS_RUN_ID: ${{ steps.run.outputs.run-id }}
+        AS_TOKEN: ${{ inputs.token }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const base = process.env.AS_URL.replace(/\/$/, "");
+          const project = process.env.AS_PROJECT;
+          const runId = process.env.AS_RUN_ID;
+          if (!runId) { core.warning("no run id; skipping PR status/comment"); return; }
+          const headers = process.env.AS_TOKEN ? { authorization: `Bearer ${process.env.AS_TOKEN}` } : {};
+          const get = async (p) => { const r = await fetch(`${base}${p}`, { headers }); if (!r.ok) throw new Error(`${p} → ${r.status}`); return r.json(); };
+          const summary = await get(`/api/projects/${project}/runs/${runId}/summary`);
+          const s = summary.run.stats ?? { total: 0, passed: 0, failed: 0, broken: 0, skipped: 0, flaky: 0 };
+          const gate = summary.qualityGate;
+          let delta = "";
+          if (summary.previousReadyRunId) {
+            try {
+              const c = await get(`/api/projects/${project}/compare?base=${summary.previousReadyRunId}&target=${runId}`);
+              delta = `\n**Δ vs previous:** ${c.newlyFailing.length} new failing · ${c.fixed.length} fixed · ${c.flaky.length} flaky`;
+            } catch (e) { core.warning(`compare failed: ${e}`); }
+          }
+          const ok = summary.run.status === "ready" && (!gate.configured || gate.passed);
+          const reportUrl = `${base}${summary.reportPath}`;
+          const gateLine = gate.configured
+            ? `\n**Quality gate:** ${gate.passed ? "✅ pass" : "❌ fail"}${gate.checks.length ? " — " + gate.checks.map((c) => `${c.rule} ${c.ok ? "✓" : "✗"}`).join(", ") : ""}`
+            : "";
+          const marker = `<!-- allure-station:${project} -->`;
+          const body = `${marker}\n### Allure report — ${ok ? "✅ passed" : "❌ failed"}\n`
+            + `${s.passed}/${s.total} passed · ${s.failed} failed · ${s.broken} broken · ${s.skipped} skipped${s.flaky ? ` · ${s.flaky} flaky` : ""}`
+            + gateLine + delta + `\n\n[View report](${reportUrl})`;
+          const sha = context.payload.pull_request.head.sha;
+          await github.rest.repos.createCommitStatus({ ...context.repo, sha, state: ok ? "success" : "failure", context: `allure/${project}`, target_url: reportUrl, description: `${s.passed}/${s.total} passed` });
+          const issue_number = context.payload.pull_request.number;
+          const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number, per_page: 100 });
+          const existing = comments.find((c) => c.body && c.body.includes(marker));
+          if (existing) await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+          else await github.rest.issues.createComment({ ...context.repo, issue_number, body });
+          if (!ok) core.setFailed(`Allure: ${summary.run.status !== "ready" ? "generation failed" : "quality gate failed"}`);
