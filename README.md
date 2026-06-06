@@ -39,6 +39,20 @@ Embed a live **status badge** (latest run, public) in your project README:
 ![tests](https://allure.example.com/api/projects/my-app/badge.svg)
 ```
 
+## Notifications
+
+Subscribe a project to **Slack** or **generic webhook** notifications, fired when a run finishes:
+
+```bash
+curl -XPOST host/api/projects/my-app/notifications -H 'content-type: application/json' \
+  -d '{"kind":"slack","url":"https://hooks.slack.com/services/…","events":["failed","gate_failed","regression"]}'
+```
+
+- **kinds**: `slack` (posts `{text}`), `webhook` (posts a JSON payload: `{project, runId, status, stats, triggers, newlyFailing, reportUrl}`).
+- **triggers** (`events`): `completed` (any terminal run), `failed` (generation failed), `gate_failed` (ready but the quality gate breached), `regression` (≥1 newly-failing test vs the previous run). Default: `["failed","gate_failed","regression"]`.
+
+Endpoints (auth-gated — they expose webhook URLs): `POST` / `GET` / `DELETE /api/projects/:id/notifications[/:id]`. Delivery is best-effort (a down endpoint never fails a run). Set `PUBLIC_URL` so report links in payloads are absolute. (Email/SMTP is not built in — use a webhook bridge.)
+
 ## Authentication (scoped API tokens)
 
 Auth is **opt-in per project**. A project with no tokens is fully open (zero-config dev mode). The moment a project has at least one token, its **write** endpoints require a bearer token scoped to that project:
