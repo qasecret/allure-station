@@ -11,6 +11,7 @@ export const runs = sqliteTable("runs", {
   status: text("status").notNull(), // pending|generating|ready|failed
   reportName: text("report_name").notNull(),
   createdAt: text("created_at").notNull(),
+  startedAt: text("started_at"), // set when claimed into 'generating'; powers age-bounded stale reconciliation
   finishedAt: text("finished_at"),
   statsJson: text("stats_json"), // JSON RunStats | null
 }, (t) => ({

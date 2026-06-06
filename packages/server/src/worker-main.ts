@@ -2,31 +2,36 @@ import { loadConfig } from "./config.js";
 import { createDb } from "./db/client.js";
 import { RunRepository } from "./db/repositories.js";
 import { BullMQQueue } from "@allure-station/worker";
-import { processGenerate } from "./generation.js";
+import { wireQueue } from "./generation.js";
 import { buildDeps } from "./deps.js";
+import { reconcileStale, startReconciler } from "./reconcile.js";
 
 const config = loadConfig();
 
-if (!config.redisUrl) {
-  console.error("REDIS_URL is required when running worker-main (QUEUE_DRIVER=bullmq)");
+// worker-main is the bullmq consumer; the inprocess driver runs jobs in the API process instead.
+if (config.queueDriver !== "bullmq") {
+  console.error("worker-main requires QUEUE_DRIVER=bullmq");
   process.exit(1);
 }
 
-const queue = new BullMQQueue({ url: config.redisUrl, concurrency: config.concurrency });
+// loadConfig guarantees redisUrl is set when queueDriver === bullmq.
+const queue = new BullMQQueue({ url: config.redisUrl!, concurrency: config.concurrency });
 
 const { db, migrate } = createDb(config.db.driver, { url: config.db.url });
 await migrate();
 
 const runs = new RunRepository(db);
-const staleReset = await runs.failStaleGenerating(new Date().toISOString());
-if (staleReset > 0) console.log(`reconciled ${staleReset} stale 'generating' run(s) to 'failed'`);
+await reconcileStale(runs, config.generateStaleMs, Date.now());
+const stopReconciler = startReconciler(runs, config.generateStaleMs);
 
 const deps = buildDeps(config, queue, db);
 
 // Construct the BullMQ Worker — only the worker process calls start, never the API process.
-queue.start((data) => processGenerate(deps, data));
+// wireQueue is the single binding of processor → queue, shared with the in-process path.
+wireQueue(deps);
 
 const shutdown = async () => {
+  stopReconciler();
   try {
     await queue.close();
   } catch {

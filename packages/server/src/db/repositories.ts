@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, or } from "drizzle-orm";
 import type { Project, Run, RunStats, RunStatus } from "@allure-station/shared";
 import type { Db } from "./client.js";
 import { projects, runs } from "./schema.sqlite.js";
@@ -42,7 +42,7 @@ export class RunRepository {
 
   async create(projectId: string, id: string, reportName: string, now: string): Promise<Run> {
     await this.db.insert(runs).values({
-      id, projectId, status: "pending", reportName, createdAt: now, finishedAt: null, statsJson: null,
+      id, projectId, status: "pending", reportName, createdAt: now, startedAt: null, finishedAt: null, statsJson: null,
     });
     return { id, projectId, status: "pending", reportName, createdAt: now, finishedAt: null, stats: null };
   }
@@ -51,14 +51,26 @@ export class RunRepository {
     await this.db.update(runs).set({ status }).where(eq(runs.id, id));
   }
 
-  /** Atomically transition a run from 'pending' to 'generating'. Returns true if this caller won the claim. */
-  async claimPending(id: string): Promise<boolean> {
+  /** Atomically transition a run from 'pending' to 'generating', stamping startedAt.
+   * Returns true if this caller won the claim. startedAt is what age-bounded reconciliation reads. */
+  async claimPending(id: string, startedAt: string): Promise<boolean> {
     const updated = await this.db
       .update(runs)
-      .set({ status: "generating" })
+      .set({ status: "generating", startedAt })
       .where(and(eq(runs.id, id), eq(runs.status, "pending")))
       .returning();
     return updated.length === 1;
+  }
+
+  /** Most recent pending run for a project, or null. Uses the (project, status, created) index. */
+  async findPendingByProject(projectId: string): Promise<Run | null> {
+    const [row] = await this.db
+      .select()
+      .from(runs)
+      .where(and(eq(runs.projectId, projectId), eq(runs.status, "pending")))
+      .orderBy(desc(runs.createdAt), desc(runs.id))
+      .limit(1);
+    return row ? this.#toRun(row) : null;
   }
 
   async markReady(id: string, stats: RunStats, finishedAt: string): Promise<void> {
@@ -71,12 +83,17 @@ export class RunRepository {
     await this.db.update(runs).set({ status: "failed", finishedAt }).where(eq(runs.id, id));
   }
 
-  /** Mark all runs left mid-generation (e.g. after a crash) as failed. Returns how many were reset. */
-  async failStaleGenerating(now: string): Promise<number> {
+  /**
+   * Fail runs stuck in 'generating' that started before `cutoff` (or have no startedAt — legacy/crashed
+   * rows). Age-bounding is essential: in bullmq mode the API and N worker replicas share one DB, so a
+   * blanket reset would fail runs another process is actively generating. Only runs older than the
+   * staleness window are abandoned. Returns how many were reset.
+   */
+  async failStaleGenerating(cutoff: string, finishedAt: string): Promise<number> {
     const reset = await this.db
       .update(runs)
-      .set({ status: "failed", finishedAt: now })
-      .where(eq(runs.status, "generating"))
+      .set({ status: "failed", finishedAt })
+      .where(and(eq(runs.status, "generating"), or(lt(runs.startedAt, cutoff), isNull(runs.startedAt))))
       .returning();
     return reset.length;
   }

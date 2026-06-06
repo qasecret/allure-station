@@ -16,7 +16,11 @@ describe("loadConfig — driver enum validation", () => {
 
   it("accepts valid QUEUE_DRIVER values", () => {
     expect(loadConfig({ QUEUE_DRIVER: "inprocess" }).queueDriver).toBe("inprocess");
-    expect(loadConfig({ QUEUE_DRIVER: "bullmq" }).queueDriver).toBe("bullmq");
+    expect(loadConfig({ QUEUE_DRIVER: "bullmq", REDIS_URL: "redis://localhost:6379" }).queueDriver).toBe("bullmq");
+  });
+
+  it("throws when QUEUE_DRIVER=bullmq but REDIS_URL is missing", () => {
+    expect(() => loadConfig({ QUEUE_DRIVER: "bullmq" })).toThrow(/REDIS_URL is required/);
   });
 
   it("defaults QUEUE_DRIVER to inprocess when not set", () => {
@@ -80,6 +84,25 @@ describe("loadConfig", () => {
     expect(cfg.storage.s3!.region).toBe("eu-west-1");
     expect(cfg.storage.s3!.endpoint).toBe("http://minio:9000");
     expect(cfg.storage.s3!.forcePathStyle).toBe(false);
+  });
+
+  it("defaults concurrency to 2 when GENERATE_CONCURRENCY is unset or empty", () => {
+    expect(loadConfig({}).concurrency).toBe(2);
+    expect(loadConfig({ GENERATE_CONCURRENCY: "" }).concurrency).toBe(2);
+  });
+
+  it("parses a valid GENERATE_CONCURRENCY", () => {
+    expect(loadConfig({ GENERATE_CONCURRENCY: "4" }).concurrency).toBe(4);
+  });
+
+  it("throws on non-numeric or non-positive GENERATE_CONCURRENCY (would silently hang the queue)", () => {
+    expect(() => loadConfig({ GENERATE_CONCURRENCY: "two" })).toThrow(/must be a positive integer/);
+    expect(() => loadConfig({ GENERATE_CONCURRENCY: "0" })).toThrow(/must be a positive integer/);
+    expect(() => loadConfig({ GENERATE_CONCURRENCY: "1.5" })).toThrow(/must be a positive integer/);
+  });
+
+  it("defaults generateStaleMs to 30 minutes", () => {
+    expect(loadConfig({}).generateStaleMs).toBe(30 * 60 * 1000);
   });
 
   it("populates credentials only when both key id and secret are present", () => {

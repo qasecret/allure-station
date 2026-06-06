@@ -75,11 +75,14 @@ export class BullMQQueue implements JobQueue {
     this.#connection = { url: cfg.url };
     this.#concurrency = cfg.concurrency ?? 2;
     this.#queue = new Queue(QUEUE_NAME, { connection: this.#connection });
+    // Without an 'error' listener, an ioredis connection error on the producer is an unhandled
+    // EventEmitter 'error' and crashes the (API) process. Log and let bullmq reconnect.
+    this.#queue.on("error", (err) => console.error("[bullmq] queue connection error:", err));
   }
 
   /** In the API process this is never called — only worker-main calls start to construct the BullMQ Worker. */
   start(processor: JobProcessor): void {
-    this.#worker = new Worker(
+    const worker = new Worker(
       QUEUE_NAME,
       async (job: Job) => {
         await processor(job.data as GenerateJobData);
@@ -89,6 +92,12 @@ export class BullMQQueue implements JobQueue {
         concurrency: this.#concurrency,
       },
     );
+    // 'error' (e.g. Redis dropped) must be handled or it crashes the worker process.
+    worker.on("error", (err) => console.error("[bullmq] worker connection error:", err));
+    // attempts:1 + removeOnFail means a failed job is otherwise dropped with no signal; log it so
+    // operators can see generation failures server-side (the run row is also marked 'failed').
+    worker.on("failed", (job, err) => console.error(`[bullmq] job ${job?.id ?? "?"} failed:`, err));
+    this.#worker = worker;
   }
 
   async enqueue(data: GenerateJobData): Promise<void> {

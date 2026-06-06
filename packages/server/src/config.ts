@@ -7,6 +7,7 @@ export interface AppConfig {
   db: { driver: DbDriver; url: string };
   workDir: string;       // scratch dir for generation jobs
   concurrency: number;
+  generateStaleMs: number; // a run stuck 'generating' longer than this is reconciled to 'failed'
   queueDriver: QueueDriver;
   redisUrl: string | undefined;
   version: string;
@@ -34,6 +35,17 @@ function parseEnum<T extends string>(
     throw new Error(`Invalid ${name} "${value}": must be one of ${allowed.join(", ")}`);
   }
   return value as T;
+}
+
+/** Parse a required positive integer env var. Rejects empty string, non-numeric, and < 1
+ *  (Number("") === 0 and Number("x") === NaN would otherwise silently misconfigure the queue). */
+function parsePositiveInt(name: string, value: string | undefined, def: number): number {
+  if (value === undefined || value === "") return def;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new Error(`Invalid ${name} "${value}": must be a positive integer`);
+  }
+  return n;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -75,12 +87,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   const queueDriver = parseEnum("QUEUE_DRIVER", env.QUEUE_DRIVER, ["inprocess", "bullmq"] as const, "inprocess");
+  if (queueDriver === "bullmq" && !env.REDIS_URL) {
+    throw new Error("REDIS_URL is required when QUEUE_DRIVER=bullmq");
+  }
 
   return {
-    port: Number(env.PORT ?? 5050),
+    port: parsePositiveInt("PORT", env.PORT, 5050),
     db: { driver: dbDriver, url: dbUrl },
     workDir: env.WORK_DIR ?? `${dataDir}/work`,
-    concurrency: Number(env.GENERATE_CONCURRENCY ?? 2),
+    concurrency: parsePositiveInt("GENERATE_CONCURRENCY", env.GENERATE_CONCURRENCY, 2),
+    generateStaleMs: parsePositiveInt("GENERATE_STALE_MS", env.GENERATE_STALE_MS, 30 * 60 * 1000),
     queueDriver,
     redisUrl: env.REDIS_URL,
     version: env.APP_VERSION ?? "0.1.0",

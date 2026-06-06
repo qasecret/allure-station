@@ -156,7 +156,8 @@ No configuration needed. Generation jobs run inside the API process under a conc
 | Variable | Default | Description |
 |---|---|---|
 | `QUEUE_DRIVER` | `inprocess` | Queue backend (`inprocess` or `bullmq`) |
-| `GENERATE_CONCURRENCY` | `2` | Max concurrent generation jobs |
+| `GENERATE_CONCURRENCY` | `2` | Max concurrent generation jobs (must be a positive integer) |
+| `GENERATE_STALE_MS` | `1800000` (30 min) | A run stuck in `generating` longer than this is reconciled to `failed` |
 
 ### `QUEUE_DRIVER=bullmq`
 
@@ -167,6 +168,7 @@ Set `QUEUE_DRIVER=bullmq` and provide a Redis URL to use BullMQ as the queue bac
 | `QUEUE_DRIVER` | `inprocess` | Set to `bullmq` to enable |
 | `REDIS_URL` | _(required when `QUEUE_DRIVER=bullmq`)_ | Redis connection URL, e.g. `redis://redis:6379` |
 | `GENERATE_CONCURRENCY` | `2` | Max concurrent jobs per worker process |
+| `GENERATE_STALE_MS` | `1800000` (30 min) | A run stuck in `generating` longer than this is reconciled to `failed` (see below) |
 
 **Starting the worker process:**
 
@@ -175,6 +177,8 @@ pnpm --filter @allure-station/server start:worker
 ```
 
 **Important:** BullMQ mode requires **shared DB (Postgres) and shared storage (S3 or a shared volume)**, since the API and worker run as separate processes that both read/write the same run rows and report files. SQLite and local-filesystem storage are single-process only.
+
+**Stale-run reconciliation.** A run is marked `generating` when claimed and only reaches `ready`/`failed` when a worker finishes it. If the worker that picked up a job dies (or no worker is running at all), the run would otherwise stay `generating` forever. Every process (API and each worker replica) runs a periodic sweep that fails any run whose generation **started more than `GENERATE_STALE_MS` ago** (default 30 min). The sweep is deliberately **age-bounded** — it never touches a recently-started run, so it is safe to run from multiple replicas concurrently without aborting a sibling's in-flight generation. Set `GENERATE_STALE_MS` above your slowest expected report generation time.
 
 #### Running with docker compose (bullmq profile)
 

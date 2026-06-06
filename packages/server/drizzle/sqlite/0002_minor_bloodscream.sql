@@ -1,0 +1,1 @@
+ALTER TABLE `runs` ADD `started_at` text;

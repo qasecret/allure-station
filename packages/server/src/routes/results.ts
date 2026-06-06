@@ -31,10 +31,10 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
   app.post("/projects/:projectId/generate", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
-    const runs = await deps.runs.listByProject(projectId);
-    const pending = runs.find((r) => r.status === "pending");
+    const pending = await deps.runs.findPendingByProject(projectId);
     if (!pending) return reply.code(409).send({ error: "no pending run to generate" });
-    if (!(await deps.runs.claimPending(pending.id))) return reply.code(409).send({ error: "run is already being generated" });
+    const startedAt = deps.now();
+    if (!(await deps.runs.claimPending(pending.id, startedAt))) return reply.code(409).send({ error: "run is already being generated" });
     try {
       await deps.queue.enqueue({ projectId, runId: pending.id });
     } catch (err) {
@@ -42,6 +42,7 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
       req.log?.error?.(err);
       return reply.code(503).send({ error: "failed to enqueue generation" });
     }
-    return reply.code(202).send(await deps.runs.get(pending.id)); // 202 Accepted; status: "generating"
+    // We just claimed `pending` into 'generating' — reflect that without another round-trip.
+    return reply.code(202).send({ ...pending, status: "generating" }); // 202 Accepted
   });
 }

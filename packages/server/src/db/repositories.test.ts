@@ -122,7 +122,7 @@ for (const backend of backends) {
         await runs.create("p2", "r2", "Race Report", "2026-06-06T00:00:00.000Z");
 
         // First caller wins the claim
-        const first = await runs.claimPending("r2");
+        const first = await runs.claimPending("r2", "2026-06-06T00:00:01.000Z");
         expect(first).toBe(true);
 
         // Run is now 'generating'
@@ -130,7 +130,7 @@ for (const backend of backends) {
         expect(claimed?.status).toBe("generating");
 
         // Second caller loses (run is no longer 'pending')
-        const second = await runs.claimPending("r2");
+        const second = await runs.claimPending("r2", "2026-06-06T00:00:02.000Z");
         expect(second).toBe(false);
       });
 
@@ -177,14 +177,18 @@ for (const backend of backends) {
         expect(all.map((r) => r.id)).toEqual(["lr1", "lr2", "lr3"]);
       });
 
-      it("failStaleGenerating marks 'generating' runs as failed and leaves other statuses untouched", async () => {
+      it("failStaleGenerating fails only generating runs older than the cutoff, leaving others untouched", async () => {
         await projects.create("stale-p", "2026-06-06T00:00:00.000Z");
 
-        // Create a run in 'generating' state (simulate crash mid-generation)
+        // Old generating run (started long ago — abandoned/crashed)
         await runs.create("stale-p", "stale1", "Stale Run", "2026-06-06T00:00:00.000Z");
-        await runs.claimPending("stale1"); // -> generating
+        await runs.claimPending("stale1", "2026-06-06T00:00:00.000Z"); // -> generating, startedAt old
 
-        // Create a run already 'ready' — should be untouched
+        // Recently-started generating run — another process may still be working it
+        await runs.create("stale-p", "fresh1", "Fresh Run", "2026-06-06T00:55:00.000Z");
+        await runs.claimPending("fresh1", "2026-06-06T00:59:59.000Z"); // -> generating, startedAt recent
+
+        // 'ready' run — must be untouched regardless of age
         await runs.create("stale-p", "ready1", "Ready Run", "2026-06-06T00:00:00.000Z");
         await runs.markReady(
           "ready1",
@@ -192,17 +196,21 @@ for (const backend of backends) {
           "2026-06-06T00:01:00.000Z",
         );
 
-        const now = "2026-06-06T01:00:00.000Z";
-        const changed = await runs.failStaleGenerating(now);
+        // Cutoff 00:30 — stale1 (started 00:00) is before it; fresh1 (started 00:59:59) is after.
+        const cutoff = "2026-06-06T00:30:00.000Z";
+        const finishedAt = "2026-06-06T01:00:00.000Z";
+        const changed = await runs.failStaleGenerating(cutoff, finishedAt);
         expect(changed).toBe(1);
 
         const stale = await runs.get("stale1");
         expect(stale?.status).toBe("failed");
-        expect(stale?.finishedAt).toBe(now);
+        expect(stale?.finishedAt).toBe(finishedAt);
+
+        // Recently-started generating run must survive (not abandoned under an active process)
+        expect((await runs.get("fresh1"))?.status).toBe("generating");
 
         // 'ready' run must be untouched
-        const ready = await runs.get("ready1");
-        expect(ready?.status).toBe("ready");
+        expect((await runs.get("ready1"))?.status).toBe("ready");
       });
     });
   });
