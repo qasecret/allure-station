@@ -68,6 +68,24 @@ describe("RunRepository", () => {
     expect(ready.map((r) => r.id)).toEqual(["r1"]);
   });
 
+  it("listReadyByProject with limit returns the most recent N, oldest-first", async () => {
+    await projects.create("lim-p", "2026-06-06T00:00:00.000Z");
+    await runs.create("lim-p", "lr1", "R", "2026-06-06T00:00:01.000Z");
+    await runs.markReady("lr1", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0 }, "2026-06-06T00:00:02.000Z");
+    await runs.create("lim-p", "lr2", "R", "2026-06-06T00:00:03.000Z");
+    await runs.markReady("lr2", { total: 2, passed: 2, failed: 0, broken: 0, skipped: 0 }, "2026-06-06T00:00:04.000Z");
+    await runs.create("lim-p", "lr3", "R", "2026-06-06T00:00:05.000Z");
+    await runs.markReady("lr3", { total: 3, passed: 3, failed: 0, broken: 0, skipped: 0 }, "2026-06-06T00:00:06.000Z");
+
+    // With limit=2, should get the 2 newest (lr2, lr3), returned oldest-first
+    const limited = await runs.listReadyByProject("lim-p", 2);
+    expect(limited.map((r) => r.id)).toEqual(["lr2", "lr3"]);
+
+    // Without limit, all 3 returned oldest-first
+    const all = await runs.listReadyByProject("lim-p");
+    expect(all.map((r) => r.id)).toEqual(["lr1", "lr2", "lr3"]);
+  });
+
   it("failStaleGenerating marks 'generating' runs as failed and leaves other statuses untouched", async () => {
     await projects.create("stale-p", "2026-06-06T00:00:00.000Z");
 

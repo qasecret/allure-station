@@ -7,11 +7,9 @@ import { generateReport } from "./generate.js";
 
 const fixtures = fileURLToPath(new URL("../test/fixtures/allure-results", import.meta.url));
 let out: string;
-let history: string;
 
 beforeEach(async () => {
   out = await mkdtemp(join(tmpdir(), "as-out-"));
-  history = join(await mkdtemp(join(tmpdir(), "as-hist-")), "history.jsonl");
 });
 afterEach(async () => { await rm(out, { recursive: true, force: true }); });
 
@@ -20,7 +18,6 @@ describe("generateReport", () => {
     const result = await generateReport({
       resultsDirs: [fixtures],
       outputDir: out,
-      historyPath: history,
       reportName: "Test",
       dumps: [],
     });

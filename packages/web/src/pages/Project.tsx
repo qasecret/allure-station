@@ -68,7 +68,7 @@ function TrendBar({ points }: { points: TrendPoint[] }) {
   if (points.length < 2) {
     return <span style={{ color: "#888", fontSize: 12 }}>Trends appear after 2+ runs.</span>;
   }
-  const w = Math.min(points.length * 14, 600);
+  const w = points.length * 14;
   return (
     <svg width={w} height={44} role="img" aria-label="pass-rate trend by run">
       {points.map((p, i) => {

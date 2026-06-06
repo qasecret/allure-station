@@ -81,13 +81,20 @@ export class RunRepository {
     return res.changes;
   }
 
-  /** Ready runs for a project, OLDEST first (chronological) — trend series source. */
-  async listReadyByProject(projectId: string): Promise<Run[]> {
+  /** Ready runs for a project, OLDEST first (chronological) — trend series source.
+   * Pass `limit` to cap to the most-recent N runs (still returned oldest-first). */
+  async listReadyByProject(projectId: string, limit?: number): Promise<Run[]> {
+    if (limit !== undefined) {
+      const recent = this.db.select().from(runs)
+        .where(and(eq(runs.projectId, projectId), eq(runs.status, "ready")))
+        .orderBy(desc(runs.createdAt), desc(runs.id)).limit(limit).all().map(this.#toRun);
+      return recent.reverse(); // newest-N, returned oldest-first
+    }
     return this.db
       .select()
       .from(runs)
       .where(and(eq(runs.projectId, projectId), eq(runs.status, "ready")))
-      .orderBy(asc(runs.createdAt))
+      .orderBy(asc(runs.createdAt), asc(runs.id))
       .all()
       .map(this.#toRun);
   }

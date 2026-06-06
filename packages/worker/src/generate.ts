@@ -4,7 +4,6 @@ import type { RunStats } from "@allure-station/shared";
 export interface GenerateParams {
   resultsDirs: string[];
   outputDir: string;
-  historyPath: string;
   reportName: string;
   /** Paths to dump archives from prior runs, for trend/history continuity. */
   dumps: string[];
@@ -17,25 +16,20 @@ export interface GenerateResult {
 /**
  * Embeds Allure 3 in-process. Mirrors the CLI's generate flow
  * (packages/cli/src/commands/commons/generate.ts) but driven programmatically.
- * Each call builds its own AllureReport (instance-scoped store/output/history),
- * so concurrent calls with distinct outputDir/historyPath are safe.
+ * Each call builds its own AllureReport (instance-scoped store/output),
+ * so concurrent calls with distinct outputDir are safe.
  *
- * NOTE on `historyLimit: 0`: `@allurereport/core@3.9.0`'s `store.appendHistory()`
- * (the on-disk history write inside `report.done()`) deadlocks when invoked
- * programmatically outside the CLI — `done()` never resolves even though the
- * report (index.html + store) is fully produced. This was confirmed empirically:
- * with a `historyPath` set, `done()` hangs indefinitely on `appendHistory`;
- * setting `historyLimit: 0` short-circuits the history file write
- * (`appendHistory` returns early when `limit === 0`) and `done()` resolves in
- * ~150ms with a complete report. `historyPath`/`dumps` remain on the public API
- * so callers can supply trend continuity once core ships a fix.
+ * NOTE: `historyPath` and `historyLimit` are intentionally NOT configured.
+ * Setting `historyPath` in `@allurereport/core@3.9.0` triggers `store.appendHistory()`
+ * inside `report.done()`, which deadlocks when invoked programmatically outside the
+ * CLI — `done()` never resolves. Dump-chaining (trend/history continuity across runs)
+ * is deferred; once that feature is implemented, core must be verified to have fixed
+ * the hang before re-introducing historyPath.
  */
 export async function generateReport(params: GenerateParams): Promise<GenerateResult> {
   const fullConfig = await resolveConfig({
     name: params.reportName,
     output: params.outputDir,
-    historyPath: params.historyPath,
-    historyLimit: 0,
     plugins: { awesome: { options: { reportName: params.reportName } } },
   });
 

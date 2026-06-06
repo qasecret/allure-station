@@ -10,17 +10,19 @@ import type { AppDeps } from "./app.js";
 export async function runGeneration(deps: AppDeps, projectId: string, runId: string): Promise<void> {
   const jobDir = join(deps.workDir, runId);
   const outDir = join(jobDir, "report");
-  const historyFile = join(jobDir, "history.jsonl");
 
   try {
+    const resultsKey = `${projectId}/runs/${runId}/results`;
+    if (!(await deps.storage.exists(resultsKey))) {
+      throw new Error(`no results staged for run ${runId}`);
+    }
+    const resultsDir = await deps.storage.resolveLocalPath(resultsKey);
     await mkdir(jobDir, { recursive: true });
-    const resultsDir = await deps.storage.resolveLocalPath(`${projectId}/runs/${runId}/results`);
 
     const run = await deps.runs.get(runId);
     const { stats } = await generateReport({
       resultsDirs: [resultsDir],
       outputDir: outDir,
-      historyPath: historyFile,
       reportName: run?.reportName ?? "Allure Report",
       dumps: [],
     });

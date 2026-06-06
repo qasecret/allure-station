@@ -1,11 +1,16 @@
 import type { FastifyInstance } from "fastify";
+import type { TrendPoint } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 
+const TREND_LIMIT = 30;
+
 export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
-  app.get("/projects/:projectId/trends", async (req) => {
+  app.get("/projects/:projectId/trends", async (req): Promise<TrendPoint[]> => {
     const { projectId } = req.params as { projectId: string };
-    const ready = await deps.runs.listReadyByProject(projectId);
-    return ready.map((r) => ({ runId: r.id, createdAt: r.createdAt, stats: r.stats }));
+    const ready = await deps.runs.listReadyByProject(projectId, TREND_LIMIT);
+    return ready
+      .filter((r): r is typeof r & { stats: NonNullable<typeof r.stats> } => r.stats !== null)
+      .map((r) => ({ runId: r.id, createdAt: r.createdAt, stats: r.stats }));
   });
 
   app.get("/projects/:projectId/runs", async (req) => {

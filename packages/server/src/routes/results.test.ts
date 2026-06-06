@@ -117,6 +117,23 @@ describe("send-results + generate", () => {
     await app.close();
   }, 60_000);
 
+  it("generate with no results staged marks the run failed (orphan-pending-run)", async () => {
+    const deps = makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "orphan" } });
+
+    // Create a pending run directly — never upload any result files
+    const runId = deps.newId();
+    await deps.runs.create("orphan", runId, "Orphan Report", deps.now());
+
+    // POST /generate should not 409 (there is a pending run) but generation must fail
+    const gen = await app.inject({ method: "POST", url: "/api/projects/orphan/generate" });
+    expect(gen.statusCode).toBe(200);
+    expect(gen.json().status).toBe("failed");
+
+    await app.close();
+  });
+
   it("second POST /generate returns 409 after first succeeds (no pending run)", async () => {
     const app = buildApp(makeTestDeps());
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p3" } });
