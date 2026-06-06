@@ -211,6 +211,10 @@ List endpoints accept optional query params and return the total match count in 
 
 `limit` is capped at 200; invalid `limit`/`offset`/`status` return 400. The web UI uses server-side search + Prev/Next pagination on the project list.
 
+### Trends
+
+`GET /api/projects/:projectId/trends` returns the most recent ready runs (oldest-first) as a stats series — pass/fail/broken/skipped plus a **flaky** count (tests Allure flagged flaky via retries / `statusDetails.flaky`). The UI renders a per-run pass-rate bar chart with an orange cap marking runs that had flaky tests.
+
 ### Run comparison
 
 `GET /api/projects/:projectId/compare?base=<runId>&target=<runId>` diffs two ready runs and returns tests bucketed as `newlyFailing`, `fixed`, `stillFailing`, `added`, `removed`, and `flaky`. Per-test results (`historyId`, `status`, `duration`, `flaky`) are persisted at generation time; tests are matched across runs by Allure's stable `historyId` (falling back to `fullName`/`name`). The UI exposes this as a compare panel on the project page.
