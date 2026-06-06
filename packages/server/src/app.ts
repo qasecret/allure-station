@@ -6,6 +6,7 @@ import fastifyStatic from "@fastify/static";
 import type { ProjectRepository, RunRepository } from "./db/repositories.js";
 import type { StorageDriver } from "./storage/driver.js";
 import type { JobQueue } from "@allure-station/worker";
+import type { EventBus } from "./events/bus.js";
 import { registerMetaRoutes } from "./routes/meta.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerResultRoutes } from "./routes/results.js";
@@ -16,6 +17,7 @@ export interface AppDeps {
   runs: RunRepository;
   storage: StorageDriver;
   queue: JobQueue;
+  bus: EventBus;
   workDir: string;
   version: string;
   now: () => string;
