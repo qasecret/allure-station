@@ -123,17 +123,22 @@ export class S3Driver implements StorageDriver {
   ): Promise<{ dir: string; dispose(): Promise<void> }> {
     const norm = prefix.endsWith("/") ? prefix : `${prefix}/`;
     const dir = await mkdtemp(join(tmpdir(), "s3mat-"));
-    for await (const batch of this.#listKeys(norm)) {
-      for (const k of batch) {
-        const rel = k.slice(norm.length);
-        if (!rel) continue;
-        const dest = join(dir, rel);
-        await mkdir(dirname(dest), { recursive: true });
-        const obj = await this.#c.send(
-          new GetObjectCommand({ Bucket: this.#bucket, Key: k }),
-        );
-        await pipeline(obj.Body as Readable, createWriteStream(dest));
+    try {
+      for await (const batch of this.#listKeys(norm)) {
+        for (const k of batch) {
+          const rel = k.slice(norm.length);
+          if (!rel) continue;
+          const dest = join(dir, rel);
+          await mkdir(dirname(dest), { recursive: true });
+          const obj = await this.#c.send(
+            new GetObjectCommand({ Bucket: this.#bucket, Key: k }),
+          );
+          await pipeline(obj.Body as Readable, createWriteStream(dest));
+        }
       }
+    } catch (err) {
+      await rm(dir, { recursive: true, force: true });
+      throw err;
     }
     return { dir, dispose: () => rm(dir, { recursive: true, force: true }) };
   }
