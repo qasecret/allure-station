@@ -120,6 +120,8 @@ for (const backend of backends) {
         expect((await projects.list({ limit: 2 })).map((p) => p.id)).toEqual(["p1", "p2"]);
         expect((await projects.list({ limit: 2, offset: 2 })).map((p) => p.id)).toEqual(["p3", "p4"]);
         expect((await projects.list({ limit: 2, offset: 4 })).map((p) => p.id)).toEqual(["p5"]);
+        // offset without limit must not emit OFFSET-without-LIMIT (a SQLite syntax error) — offset is ignored.
+        expect((await projects.list({ offset: 3 })).map((p) => p.id)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
       });
     });
 

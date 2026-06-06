@@ -22,8 +22,12 @@ export class ProjectRepository {
   async list(opts: { q?: string; limit?: number; offset?: number } = {}): Promise<Project[]> {
     const where = opts.q ? likeContains(projects.id, opts.q) : undefined;
     let query = this.db.select().from(projects).where(where).orderBy(projects.id).$dynamic();
-    if (opts.limit !== undefined) query = query.limit(opts.limit);
-    if (opts.offset !== undefined) query = query.offset(opts.offset);
+    // SQLite/libsql rejects OFFSET without LIMIT (syntax error), and LIMIT -1 isn't valid on pg —
+    // so offset only applies alongside a limit (which is how pagination is actually used).
+    if (opts.limit !== undefined) {
+      query = query.limit(opts.limit);
+      if (opts.offset !== undefined) query = query.offset(opts.offset);
+    }
     const rows = await query;
     return Promise.all(rows.map((r) => this.#withLatest(r.id, r.createdAt)));
   }
@@ -131,8 +135,11 @@ export class RunRepository {
       ? [asc(runs.createdAt), asc(runs.id)]
       : [desc(runs.createdAt), desc(runs.id)];
     let query = this.db.select().from(runs).where(and(...conds)).orderBy(...ord).$dynamic();
-    if (opts.limit !== undefined) query = query.limit(opts.limit);
-    if (opts.offset !== undefined) query = query.offset(opts.offset);
+    // offset only with limit — SQLite rejects OFFSET without LIMIT (see ProjectRepository.list).
+    if (opts.limit !== undefined) {
+      query = query.limit(opts.limit);
+      if (opts.offset !== undefined) query = query.offset(opts.offset);
+    }
     return (await query).map(this.#toRun);
   }
 

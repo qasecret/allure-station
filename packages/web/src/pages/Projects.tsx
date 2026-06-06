@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../main.js";
 
@@ -11,12 +11,14 @@ export function Projects() {
   const [page, setPage] = useState(0);
   const [newId, setNewId] = useState("");
 
-  // Reset to the first page whenever the search changes.
-  useEffect(() => { setPage(0); }, [q]);
+  // Reset to the first page synchronously with the search change, so we never fetch a stale
+  // (non-zero) offset against the new query.
+  const onSearch = (value: string) => { setQ(value); setPage(0); };
 
   const { data, isLoading } = useQuery({
     queryKey: ["projects", q, page],
     queryFn: () => api.listProjects({ q, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
+    placeholderData: keepPreviousData, // keep the current page visible while the next loads
   });
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -31,7 +33,7 @@ export function Projects() {
     <main style={{ maxWidth: 720, margin: "2rem auto", fontFamily: "system-ui" }}>
       <h1>Allure Station</h1>
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <input placeholder="search…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input placeholder="search…" value={q} onChange={(e) => onSearch(e.target.value)} />
         <input placeholder="new project id" value={newId} onChange={(e) => setNewId(e.target.value)} />
         <button disabled={!newId || create.isPending} onClick={() => create.mutate()}>Create</button>
       </div>
