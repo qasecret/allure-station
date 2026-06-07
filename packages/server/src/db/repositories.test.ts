@@ -350,8 +350,8 @@ for (const backend of backends) {
 
     describe("TestResultRepository", () => {
       const sample: TestSummary[] = [
-        { historyId: "h-pass", name: "passing test", fullName: "suite#passing", status: "passed", duration: 1000, flaky: false },
-        { historyId: "h-fail", name: "failing test", fullName: "suite#failing", status: "failed", duration: 2000, flaky: true },
+        { historyId: "h-pass", name: "passing test", fullName: "suite#passing", status: "passed", duration: 1000, flaky: false, message: null, trace: null },
+        { historyId: "h-fail", name: "failing test", fullName: "suite#failing", status: "failed", duration: 2000, flaky: true, message: "boom", trace: "at x:1" },
         { historyId: null, name: "no-history test", fullName: null, status: "skipped", duration: null, flaky: false },
       ];
 
@@ -360,14 +360,14 @@ for (const backend of backends) {
         await runs.create("p", "r1", "R", "2026-06-06T00:00:00.000Z");
       });
 
-      it("replaceForRun inserts and listByRun round-trips status/duration/flaky/null", async () => {
+      it("replaceForRun inserts and listByRun round-trips status/duration/flaky/message/trace/null", async () => {
         await tests.replaceForRun("r1", sample);
         const got = await tests.listByRun("r1");
         expect(got).toHaveLength(3);
         const byName = Object.fromEntries(got.map((t) => [t.name, t]));
-        expect(byName["passing test"]).toMatchObject({ status: "passed", duration: 1000, flaky: false, historyId: "h-pass" });
-        expect(byName["failing test"]).toMatchObject({ status: "failed", duration: 2000, flaky: true });
-        expect(byName["no-history test"]).toMatchObject({ status: "skipped", duration: null, flaky: false, historyId: null, fullName: null });
+        expect(byName["passing test"]).toMatchObject({ status: "passed", duration: 1000, flaky: false, historyId: "h-pass", message: null, trace: null });
+        expect(byName["failing test"]).toMatchObject({ status: "failed", duration: 2000, flaky: true, message: "boom", trace: "at x:1" });
+        expect(byName["no-history test"]).toMatchObject({ status: "skipped", duration: null, flaky: false, historyId: null, fullName: null, message: null, trace: null });
       });
 
       it("replaceForRun replaces (no duplicates) on re-generation", async () => {

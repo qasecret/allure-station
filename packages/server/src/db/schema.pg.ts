@@ -108,6 +108,8 @@ export const testResults = pgTable("test_results", {
   status: text("status").notNull(),
   duration: text("duration"),
   flaky: text("flaky").notNull(),
+  message: text("message"),
+  trace: text("trace"),
 }, (t) => ({
   byRun: index("idx_test_results_run").on(t.runId),
 }));

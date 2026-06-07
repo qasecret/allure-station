@@ -58,6 +58,10 @@ export const testSummarySchema = z.object({
   status: testStatusSchema,
   duration: z.number().nullable(),
   flaky: z.boolean(),
+  // Failure detail captured on ingest (F0). nullable().optional() so summaries created before this
+  // field existed (and helpers that omit it) still parse — mirrors runSchema's CI-metadata fields.
+  message: z.string().nullable().optional(),
+  trace: z.string().nullable().optional(),
 });
 
 // One test's cross-run difference.

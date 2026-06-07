@@ -107,6 +107,8 @@ export const testResults = sqliteTable("test_results", {
   status: text("status").notNull(), // passed|failed|broken|skipped|unknown
   duration: text("duration"),        // ms, stringified | null
   flaky: text("flaky").notNull(),    // "true" | "false"
+  message: text("message"),          // failure message | null (truncated by the worker on write)
+  trace: text("trace"),              // failure stack/trace | null (truncated by the worker on write)
 }, (t) => ({
   byRun: index("idx_test_results_run").on(t.runId),
 }));

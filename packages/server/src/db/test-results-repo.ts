@@ -24,6 +24,8 @@ export class TestResultRepository {
         status: t.status,
         duration: t.duration === null ? null : String(t.duration),
         flaky: t.flaky ? "true" : "false",
+        message: t.message ?? null,
+        trace: t.trace ?? null,
       })),
     );
   }
@@ -37,6 +39,8 @@ export class TestResultRepository {
       status: r.status as TestStatus,
       duration: r.duration === null ? null : Number(r.duration),
       flaky: r.flaky === "true",
+      message: r.message ?? null,
+      trace: r.trace ?? null,
     }));
   }
 }
