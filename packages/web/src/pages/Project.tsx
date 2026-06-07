@@ -134,7 +134,7 @@ export function Project() {
         {current
           ? <iframe title="report" className="min-h-0 flex-1 rounded-lg border bg-card"
               src={`/api/projects/${id}/runs/${current}/report/index.html`} />
-          : <EmptyState icon={FileBarChart} title="No ready report yet" description="Upload results to generate one." action={<UploadDialog projectId={id} />} />}
+          : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use “Upload & generate” to create the first report.'} />}
       </div>
     </>
   );
@@ -176,8 +176,8 @@ function TrendBar({ points }: { points: TrendPoint[] }) {
 }
 
 function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: Run[] }) {
-  const [base, setBase] = useState<string>("");
-  const [target, setTarget] = useState<string>("");
+  const [base, setBase] = useState<string>(() => readyRuns[1]?.id ?? "");
+  const [target, setTarget] = useState<string>(() => readyRuns[0]?.id ?? "");
   const [touched, setTouched] = useState(false);
   useEffect(() => { setTouched(false); }, [projectId]);
   const readyIds = readyRuns.map((r) => r.id).join(",");
