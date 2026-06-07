@@ -11,11 +11,11 @@ export function PassRateDonut({ pct, size = 88, className }: { pct: number; size
   const safePct = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
   const r = Math.max(1, size / 2 - 8);
   const { dash, circ } = donutDash(safePct, r);
-  const color = safePct >= 90 ? "#22C55E" : safePct >= 60 ? "#F59E0B" : "#EF4444";
+  const color = safePct >= 90 ? "#1DB980" : safePct >= 60 ? "#F59E0B" : "#EF4444";
   return (
     <div className={cn("relative inline-grid place-items-center", className)} style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90" role="img" aria-label={`${safePct}% passed`}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={8} className="stroke-muted" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={8} className="stroke-border" />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={8} stroke={color}
           strokeLinecap="round" strokeDasharray={`${dash} ${circ - dash}`} />
       </svg>

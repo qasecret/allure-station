@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import type { Run, RunStatus, TestDiff, TrendPoint } from "@allure-station/shared";
-import { Settings, FileBarChart } from "lucide-react";
+import { Settings, FileBarChart, TrendingUp, GitCompareArrows } from "lucide-react";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
 import { Topbar } from "@/components/Topbar";
@@ -128,11 +128,16 @@ export function Project() {
           {cur?.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">CI build ↗</a>}
         </div>
         <div className="flex flex-wrap gap-3">
-          <Card className="min-w-[260px] flex-1"><CardContent className="p-4"><TrendBar points={trends} /></CardContent></Card>
+          <Card className="min-w-[260px] flex-1">
+            <CardContent className="flex items-center gap-3 p-4">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><TrendingUp className="size-5" /></span>
+              <TrendBar points={trends} />
+            </CardContent>
+          </Card>
           <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
         </div>
         {current
-          ? <iframe title="report" className="min-h-0 flex-1 rounded-lg border bg-card"
+          ? <iframe title="report" className="min-h-0 flex-1 rounded-xl border bg-card shadow-sm"
               src={`/api/projects/${id}/runs/${current}/report/index.html`} />
           : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use “Upload & generate” to create the first report.'} />}
       </div>
@@ -157,7 +162,7 @@ function TrendBar({ points }: { points: TrendPoint[] }) {
           const durMs = p.stats.durationMs ?? 0;
           return (
             <g key={p.runId}>
-              <rect x={i * 14} y={42 - h} width={10} height={h} fill={p.stats.failed || p.stats.broken ? "#EF4444" : "#22C55E"}>
+              <rect x={i * 14} y={42 - h} width={10} height={h} fill={p.stats.failed || p.stats.broken ? "#EF4444" : "#1DB980"}>
                 <title>{`${new Date(p.createdAt).toLocaleString()}\n${p.stats.passed}/${p.stats.total} passed, ${p.stats.failed} failed, ${p.stats.broken} broken${flaky ? `, ${flaky} flaky` : ""}${durMs ? `\n${(durMs / 1000).toFixed(1)}s total` : ""}`}</title>
               </rect>
               {flaky > 0 && <rect x={i * 14} y={Math.max(0, 42 - h - 3)} width={10} height={3} fill="#F59E0B" pointerEvents="none" />}
@@ -202,7 +207,8 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
     <Card className="min-w-[300px] flex-1">
       <CardContent className="space-y-3 p-4">
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="font-medium">Compare</span>
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><GitCompareArrows className="size-5" /></span>
+          <span className="mr-1 font-semibold">Compare</span>
           <Select value={base} onValueChange={pick(setBase)}><SelectTrigger className="h-8 w-[180px]" aria-label="Base run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
           <span className="text-muted-foreground">→</span>
           <Select value={target} onValueChange={pick(setTarget)}><SelectTrigger className="h-8 w-[180px]" aria-label="Target run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>

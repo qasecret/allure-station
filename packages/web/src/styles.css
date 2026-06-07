@@ -5,75 +5,94 @@
 @layer base {
   :root {
     color-scheme: light dark;
-    --radius: 0.5rem;
-    --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+    --radius: 0.625rem;
+    --font-sans: "Geist", system-ui, -apple-system, sans-serif;
+    --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
 
-    --background: 208 100% 97%;
-    --foreground: 215 19% 27%;
+    /* cool slate canvas / surfaces */
+    --background: 210 33% 97%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 215 19% 27%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 215 19% 27%;
+    --popover-foreground: 222 47% 11%;
 
-    /* green — Allure-native interactive accent */
-    --primary: 142 71% 45%;
+    /* teal-emerald accent (#1db980) */
+    --primary: 158 73% 42%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 204 94% 94%;
-    --secondary-foreground: 215 14% 34%;
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 46%;
-    --accent: 149 80% 90%;
-    --accent-foreground: 215 19% 27%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 215 25% 27%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 142 71% 45%;
+    --border: 214 32% 91%;
+    --input: 213 27% 84%;
+    --ring: 158 73% 42%;
 
-    --sidebar: 204 94% 94%;
-    --sidebar-foreground: 215 19% 27%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-accent: 149 80% 90%;
-    --sidebar-accent-foreground: 215 19% 27%;
-    --sidebar-primary: 142 71% 45%;
+    /* cool light-blue sidebar (#e8f1fa) */
+    --sidebar: 208 60% 95%;
+    --sidebar-foreground: 215 25% 27%;
+    --sidebar-border: 214 32% 88%;
+    --sidebar-accent: 158 52% 90%;
+    --sidebar-accent-foreground: 158 75% 30%;
+    --sidebar-primary: 158 75% 33%;
     --sidebar-primary-foreground: 0 0% 100%;
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 216 12% 84%;
-    --card: 217 33% 17%;
-    --card-foreground: 216 12% 84%;
-    --popover: 217 33% 17%;
-    --popover-foreground: 216 12% 84%;
+    --background: 222 47% 8%;
+    --foreground: 210 40% 96%;
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 96%;
 
-    --primary: 158 64% 52%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 159 64% 50%;
+    --primary-foreground: 222 47% 9%;
 
-    --secondary: 218 23% 23%;
-    --secondary-foreground: 240 5% 65%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 96%;
     --muted: 217 33% 17%;
-    --muted-foreground: 220 9% 46%;
-    --accent: 215 19% 27%;
-    --accent-foreground: 240 5% 65%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 222 47% 11%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 96%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 215 14% 34%;
-    --input: 215 14% 34%;
-    --ring: 158 64% 52%;
+    --border: 217 25% 22%;
+    --input: 215 25% 27%;
+    --ring: 159 64% 50%;
 
-    --sidebar: 217 33% 17%;
-    --sidebar-foreground: 216 12% 84%;
-    --sidebar-border: 215 14% 34%;
-    --sidebar-accent: 215 19% 27%;
-    --sidebar-accent-foreground: 240 5% 65%;
-    --sidebar-primary: 158 64% 52%;
-    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar: 222 47% 11%;
+    --sidebar-foreground: 215 20% 80%;
+    --sidebar-border: 217 25% 20%;
+    --sidebar-accent: 215 28% 18%;
+    --sidebar-accent-foreground: 159 64% 55%;
+    --sidebar-primary: 159 64% 50%;
+    --sidebar-primary-foreground: 222 47% 9%;
   }
 
   * { @apply border-border; }
   body { @apply bg-background text-foreground; font-family: var(--font-sans); }
+
+  /* Keyboard focus fallback for links/nav (shadcn controls ring themselves). */
+  a:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+    border-radius: var(--radius);
+  }
+}
+
+/* Honor reduced-motion: neutralize transitions/animations app-wide. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
