@@ -114,12 +114,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     const redirectUri = env.OIDC_REDIRECT_URI || (publicUrl ? `${publicUrl}/api/auth/oidc/callback` : undefined);
     if (!env.OIDC_CLIENT_ID || !env.OIDC_CLIENT_SECRET) throw new Error("OIDC_CLIENT_ID and OIDC_CLIENT_SECRET are required when OIDC_ISSUER is set");
     if (!redirectUri) throw new Error("OIDC_REDIRECT_URI (or PUBLIC_URL) is required when OIDC_ISSUER is set");
+    const scopes = env.OIDC_SCOPES || "openid email profile";
+    if (!scopes.split(/\s+/).includes("openid")) throw new Error("OIDC_SCOPES must include 'openid'");
     oidc = {
       issuer: env.OIDC_ISSUER,
       clientId: env.OIDC_CLIENT_ID,
       clientSecret: env.OIDC_CLIENT_SECRET,
       redirectUri,
-      scopes: env.OIDC_SCOPES || "openid email profile",
+      scopes,
       label: env.OIDC_LABEL || "SSO",
       allowedDomains: (env.OIDC_ALLOWED_DOMAINS ?? "").split(",").map((d) => d.trim().toLowerCase()).filter(Boolean),
       allowUnverifiedEmail: env.OIDC_ALLOW_UNVERIFIED_EMAIL === "true",

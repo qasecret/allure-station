@@ -45,7 +45,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
       return reply.code(401).send({ error: "invalid credentials" });
     }
     await startSession(reply, deps, user.id);
-    await recordAudit(deps, { actorType: "user", actorId: user.id, actorLabel: user.email, action: "login", targetType: "user", targetId: user.id });
+    await recordAudit(deps, { actorType: "user", actorId: user.id, actorLabel: user.email, action: "login", targetType: "user", targetId: user.id, metadata: { via: "local" } });
     const body: SessionUser = { id: user.id, email: user.email, role: user.role, createdAt: user.createdAt };
     return reply.code(200).send(body);
   });
@@ -101,30 +101,26 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
     app.get("/auth/oidc/callback", async (req, reply) => {
       const raw = req.cookies?.[OIDC_COOKIE];
       reply.clearCookie(OIDC_COOKIE, { path: OIDC_COOKIE_PATH });
-      if (!raw) return reply.redirect("/login?error=sso");
-      let flow: { state: string; nonce: string; codeVerifier: string };
-      try {
-        flow = JSON.parse(raw);
-      } catch {
+      // Record abnormal callbacks (state mismatch / replay / IdP error) so SSO abuse leaves a trail.
+      const fail = async (reason: string) => {
+        await recordAudit(deps, { actorType: "anonymous", actorId: null, actorLabel: "anonymous", action: "login_failed", metadata: { via: "oidc", reason } });
         return reply.redirect("/login?error=sso");
-      }
-
-      let claims;
+      };
+      if (!raw) return fail("missing_state");
       try {
-        claims = await provider.completeLogin({ query: req.query as Record<string, unknown>, state: flow.state, nonce: flow.nonce, codeVerifier: flow.codeVerifier });
+        const flow = JSON.parse(raw) as { state: string; nonce: string; codeVerifier: string };
+        const claims = await provider.completeLogin({ query: req.query as Record<string, unknown>, state: flow.state, nonce: flow.nonce, codeVerifier: flow.codeVerifier });
+        const resolved = await resolveOidcUser(deps, claims, oidcConfig);
+        if ("error" in resolved) return fail(resolved.error);
+        await startSession(reply, deps, resolved.userId);
+        if (resolved.provisioned) {
+          await recordAudit(deps, { actorType: "user", actorId: resolved.userId, actorLabel: resolved.email, action: "user_created", targetType: "user", targetId: resolved.userId, metadata: { via: "oidc" } });
+        }
+        await recordAudit(deps, { actorType: "user", actorId: resolved.userId, actorLabel: resolved.email, action: "login", targetType: "user", targetId: resolved.userId, metadata: { via: "oidc" } });
+        return reply.redirect("/");
       } catch {
-        return reply.redirect("/login?error=sso"); // bad code / state mismatch / token error
+        return fail("exchange_error"); // bad code / state mismatch / token error / DB error
       }
-
-      const resolved = await resolveOidcUser(deps, claims, oidcConfig);
-      if ("error" in resolved) return reply.redirect("/login?error=sso");
-
-      await startSession(reply, deps, resolved.userId);
-      if (resolved.provisioned) {
-        await recordAudit(deps, { actorType: "user", actorId: resolved.userId, actorLabel: resolved.email, action: "user_created", targetType: "user", targetId: resolved.userId, metadata: { via: "oidc" } });
-      }
-      await recordAudit(deps, { actorType: "user", actorId: resolved.userId, actorLabel: resolved.email, action: "login", targetType: "user", targetId: resolved.userId, metadata: { via: "oidc" } });
-      return reply.redirect("/");
     });
   }
 }

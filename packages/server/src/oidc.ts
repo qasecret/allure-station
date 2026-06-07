@@ -65,10 +65,12 @@ export function createOidcProvider(cfg: OidcConfig): OidcProvider {
       const client = await getClient();
       const tokenSet = await client.callback(cfg.redirectUri, query, { state, nonce, code_verifier: codeVerifier });
       const c = tokenSet.claims();
+      const ev = c.email_verified;
       return {
         sub: c.sub,
         email: typeof c.email === "string" ? c.email : undefined,
-        emailVerified: typeof c.email_verified === "boolean" ? c.email_verified : undefined,
+        // Some IdPs serialize email_verified as the string "true"/"false" — accept both forms.
+        emailVerified: typeof ev === "boolean" ? ev : ev === "true" ? true : ev === "false" ? false : undefined,
         name: typeof c.name === "string" ? c.name : undefined,
       };
     },
@@ -97,6 +99,13 @@ export async function resolveOidcUser(
   const existing = await deps.users.findByEmail(email);
   if (existing) return { userId: existing.id, email: existing.email, provisioned: false };
   // Auto-provision: random unusable local password (they sign in via SSO; can reset to use local login).
-  const user = await deps.users.create(email, await hashPassword(randomBytes(32).toString("hex")), "user", deps.now());
-  return { userId: user.id, email: user.email, provisioned: true };
+  try {
+    const user = await deps.users.create(email, await hashPassword(randomBytes(32).toString("hex")), "user", deps.now());
+    return { userId: user.id, email: user.email, provisioned: true };
+  } catch (err) {
+    // Lost a concurrent first-login race (unique-email violation) — the row now exists; link to it.
+    const raced = await deps.users.findByEmail(email);
+    if (raced) return { userId: raced.id, email: raced.email, provisioned: false };
+    throw err;
+  }
 }

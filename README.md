@@ -60,7 +60,7 @@ Endpoints (auth-gated — they expose webhook URLs): `POST` / `GET` / `DELETE /a
 Auth is **opt-in per project**. A project with no tokens is fully open (zero-config dev mode). The moment a project has at least one token, its **write** endpoints require a bearer token scoped to that project:
 
 - gated writes: `POST /send-results`, `POST /generate`, `DELETE /projects/:id`, and the token-management endpoints below;
-- reads (list/runs/report/trends/compare/events) stay open — **tokens protect integrity (who can push/delete), not confidentiality**: report contents remain publicly readable. Read-gating arrives with Phase 5 RBAC.
+- reads (list/runs/report/trends/compare/events) stay open — **tokens protect integrity (who can push/delete), not confidentiality**: report contents remain publicly readable. (Per-project private visibility is a planned follow-up; see Accounts, RBAC & SSO below.)
 
 Tokens are stored hashed (sha256) — the plaintext is shown **once**, at creation.
 
@@ -75,7 +75,31 @@ curl -XPOST host/api/projects/myapp/send-results -H 'authorization: Bearer ast_x
 
 Endpoints: `POST /api/projects/:id/tokens` (create), `GET /api/projects/:id/tokens` (list — prefixes only, no secrets), `DELETE /api/projects/:id/tokens/:tokenId` (revoke). Deleting the last token re-opens the project.
 
-> A token scoped to project A cannot authorize writes to project B. **Caveat:** while a project is open, anyone can create its first token (and thus lock it). Project-ownership/RBAC and OIDC come in Phase 5.
+> A token scoped to project A cannot authorize writes to project B. **Caveat:** while a project is open, anyone can create its first token (and thus lock it).
+
+## Accounts, RBAC & SSO
+
+Beyond CI tokens, Allure Station has **user accounts** with per-project roles. It stays zero-config until you create an account: set `ADMIN_EMAIL`/`ADMIN_PASSWORD` to seed (idempotently, on every boot) a global **admin**, then sign in at `/login`.
+
+- **Roles:** global `admin` (manage users, create/delete any project) + per-project `owner` / `maintainer` / `viewer` (granted by an owner/admin via `PUT /api/projects/:id/members`). Writes require `maintainer+` or a project token; member management requires `owner`/admin. **Reads stay public.**
+- **Sessions:** local email+password login issues an httpOnly, DB-backed session cookie (the cookie value is sha256-hashed at rest). `SESSION_TTL_MS` (default 7d); `COOKIE_SECURE=true` to force the Secure flag behind TLS (auto-on when `PUBLIC_URL` is https).
+- **Audit log:** sensitive actions (logins, user/token/member/project/gate/notification changes) are recorded. `GET /api/audit` (admin) and `GET /api/projects/:id/audit` (owner).
+
+### Single sign-on (OIDC)
+
+Configure any OIDC provider (Keycloak, Okta, Auth0, Entra, Google) to add a **"Sign in with …"** option alongside local login. Users authenticating for the first time are **auto-provisioned** as role `user` (keyed on their verified email; an existing local account with the same email is linked). Roles are still managed in-app.
+
+| Env var | Required | Notes |
+| --- | --- | --- |
+| `OIDC_ISSUER` | yes | Issuer URL; OIDC discovery is used (`…/.well-known/openid-configuration`). |
+| `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | yes | From your IdP's client registration. |
+| `OIDC_REDIRECT_URI` | yes* | `…/api/auth/oidc/callback`. *Defaults from `PUBLIC_URL` if set. Must match the IdP registration. |
+| `OIDC_SCOPES` | no | Default `openid email profile` (must include `openid`). |
+| `OIDC_LABEL` | no | Button text (default `SSO`). |
+| `OIDC_ALLOWED_DOMAINS` | no | Comma-separated email-domain allowlist. Not a security boundary against a permissive multi-tenant issuer. |
+| `OIDC_ALLOW_UNVERIFIED_EMAIL` | no | `true` disables the `email_verified` requirement — **dangerous** (enables email-based account takeover); leave off unless your IdP omits the claim and you fully trust it. |
+
+Flow: `GET /api/auth/oidc/login` → IdP (authorization-code + PKCE, with `state`/`nonce`) → `GET /api/auth/oidc/callback` → session cookie. Local password login remains available.
 
 ## Storage
 
