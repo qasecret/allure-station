@@ -112,4 +112,6 @@ export const testResults = pgTable("test_results", {
   trace: text("trace"),
 }, (t) => ({
   byRun: index("idx_test_results_run").on(t.runId),
+  byHistory: index("idx_test_results_history").on(t.historyId),
+  byFullName: index("idx_test_results_fullname").on(t.fullName),
 }));

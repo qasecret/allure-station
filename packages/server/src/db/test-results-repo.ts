@@ -1,7 +1,9 @@
-import { eq } from "drizzle-orm";
-import type { TestStatus, TestSummary } from "@allure-station/shared";
+import { and, desc, eq } from "drizzle-orm";
+import type { TestHistoryEntry, TestStatus, TestSummary } from "@allure-station/shared";
 import type { Db } from "./client.js";
-import { testResults } from "./schema.sqlite.js";
+import { runs, testResults } from "./schema.sqlite.js";
+
+const HISTORY_MAX = 200;
 
 export class TestResultRepository {
   constructor(private readonly db: Db, private readonly newId: () => string) {}
@@ -42,5 +44,44 @@ export class TestResultRepository {
       message: r.message ?? null,
       trace: r.trace ?? null,
     }));
+  }
+
+  /** A single test's outcomes across the project's READY runs, newest first, capped at HISTORY_MAX.
+   *  Matched by historyId (preferred) or fullName. flakeRate = flaky runs / runs in the window. */
+  async historyByKey(
+    projectId: string,
+    key: { historyId: string } | { fullName: string },
+    limit: number,
+  ): Promise<{ entries: TestHistoryEntry[]; flakeRate: number; latestName: string | null }> {
+    const cap = Math.min(Math.max(Math.trunc(limit) || 1, 1), HISTORY_MAX);
+    const match = "historyId" in key
+      ? eq(testResults.historyId, key.historyId)
+      : eq(testResults.fullName, key.fullName);
+    const rows = await this.db
+      .select({
+        runId: runs.id, createdAt: runs.createdAt, branch: runs.branch, commit: runs.commit, ciUrl: runs.ciUrl,
+        name: testResults.name, status: testResults.status, duration: testResults.duration,
+        flaky: testResults.flaky, message: testResults.message, trace: testResults.trace,
+      })
+      .from(testResults)
+      .innerJoin(runs, eq(testResults.runId, runs.id))
+      .where(and(eq(runs.projectId, projectId), eq(runs.status, "ready"), match))
+      .orderBy(desc(runs.createdAt), desc(runs.id))
+      .limit(cap);
+
+    const entries: TestHistoryEntry[] = rows.map((r) => ({
+      runId: r.runId,
+      createdAt: r.createdAt,
+      branch: r.branch,
+      commit: r.commit,
+      ciUrl: r.ciUrl,
+      status: r.status as TestStatus,
+      duration: r.duration === null ? null : Number(r.duration),
+      flaky: r.flaky === "true",
+      message: r.message ?? null,
+      trace: r.trace ?? null,
+    }));
+    const flakyCount = entries.filter((e) => e.flaky).length;
+    return { entries, flakeRate: entries.length ? flakyCount / entries.length : 0, latestName: rows[0]?.name ?? null };
   }
 }

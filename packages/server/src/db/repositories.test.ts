@@ -541,6 +541,46 @@ for (const backend of backends) {
       });
     });
 
+    describe("historyByKey (cross-run timeline)", () => {
+      const mk = async (proj: string, runId: string, createdAt: string, status: TestSummary["status"], ready = true) => {
+        await runs.create(proj, runId, "R", createdAt, { branch: "main", commit: "c1", ciUrl: "http://ci/" + runId });
+        await runs.claimPending(runId, createdAt);
+        await tests.replaceForRun(runId, [{
+          historyId: "h1", name: "t", fullName: "s#t", status,
+          duration: 5, flaky: status === "failed", message: status === "failed" ? "boom" : null, trace: null,
+        }]);
+        if (ready) await runs.markReady(runId, { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0 }, createdAt);
+      };
+
+      beforeEach(async () => {
+        await projects.create("p", "2026-06-06T00:00:00.000Z");
+        await projects.create("other", "2026-06-06T00:00:00.000Z");
+        await mk("p", "r1", "2026-06-01T00:00:00.000Z", "passed");
+        await mk("p", "r2", "2026-06-02T00:00:00.000Z", "failed");
+        await mk("p", "r3", "2026-06-03T00:00:00.000Z", "passed");
+        await mk("other", "o1", "2026-06-02T12:00:00.000Z", "failed");           // different project
+        await mk("p", "pending", "2026-06-04T00:00:00.000Z", "failed", false);   // not ready
+      });
+
+      it("returns the test's ready runs newest-first, scoped to the project, with flake rate", async () => {
+        const res = await tests.historyByKey("p", { historyId: "h1" }, 50);
+        expect(res.entries.map((e) => e.runId)).toEqual(["r3", "r2", "r1"]);
+        expect(res.latestName).toBe("t");
+        expect(res.entries[1]).toMatchObject({ runId: "r2", status: "failed", flaky: true, message: "boom", branch: "main", ciUrl: "http://ci/r2" });
+        expect(res.flakeRate).toBeCloseTo(1 / 3);
+      });
+
+      it("clamps the limit to [1,200]", async () => {
+        expect((await tests.historyByKey("p", { historyId: "h1" }, 1)).entries).toHaveLength(1);
+        expect((await tests.historyByKey("p", { historyId: "h1" }, 9999)).entries.length).toBeLessThanOrEqual(200);
+      });
+
+      it("matches by fullName when historyId is not given", async () => {
+        const res = await tests.historyByKey("p", { fullName: "s#t" }, 50);
+        expect(res.entries.map((e) => e.runId)).toEqual(["r3", "r2", "r1"]);
+      });
+    });
+
     describe("AuditRepository", () => {
       it("records, lists recent-first, filters by project, paginates, round-trips metadata", async () => {
         await audit.record({ actorType: "user", actorId: "u1", actorLabel: "a@x", action: "login", targetType: "user", targetId: "u1" }, "2026-06-06T00:00:01.000Z");

@@ -111,4 +111,6 @@ export const testResults = sqliteTable("test_results", {
   trace: text("trace"),              // failure stack/trace | null (truncated by the worker on write)
 }, (t) => ({
   byRun: index("idx_test_results_run").on(t.runId),
+  byHistory: index("idx_test_results_history").on(t.historyId),
+  byFullName: index("idx_test_results_fullname").on(t.fullName),
 }));
