@@ -1,0 +1,131 @@
+name: Release
+
+# Builds the Allure Station container image and publishes it to one or more
+# registries, then keeps the moving major tag (e.g. v1) pointed at the latest
+# release so `…/github-action@v1` and `:1` image consumers track it.
+#
+# Registries:
+#   • GHCR (ghcr.io)  — always on, uses the built-in GITHUB_TOKEN, no setup.
+#   • Docker Hub      — optional. Enabled when the repo VARIABLE `DOCKERHUB_IMAGE`
+#                       is set (e.g. "qasecret/allure-station"). Also requires the
+#                       secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN
+#                       (a Docker Hub access token, not your password).
+#
+# Triggers:
+#   • a pushed semver tag  vX.Y.Z   → normal release
+#   • manual dispatch with an existing tag → (re)publish that tag
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing git tag to publish (e.g. v1.0.0)"
+        required: true
+
+# Don't run two publishes for the same tag at once; let queued ones finish.
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  GHCR_IMAGE: ghcr.io/${{ github.repository }} # → ghcr.io/qasecret/allure-station
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # move the v<major> alias tag
+      packages: write # push the image to GHCR
+    steps:
+      - name: Resolve release tag
+        id: rel
+        run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.rel.outputs.tag }}
+          fetch-depth: 0 # full history so we can move the major alias tag
+
+      - name: Assemble target image list
+        id: images
+        # GHCR is always included; Docker Hub is appended only when DOCKERHUB_IMAGE is set.
+        run: |
+          set -euo pipefail
+          IMAGES="${GHCR_IMAGE}"
+          if [ -n "${{ vars.DOCKERHUB_IMAGE }}" ]; then
+            IMAGES="${IMAGES}"$'\n'"docker.io/${{ vars.DOCKERHUB_IMAGE }}"
+            echo "Publishing to GHCR + Docker Hub"
+          else
+            echo "Publishing to GHCR only (set the DOCKERHUB_IMAGE variable to add Docker Hub)"
+          fi
+          {
+            echo "list<<EOF"
+            echo "${IMAGES}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU (multi-arch emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: vars.DOCKERHUB_IMAGE != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Derive image tags & labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.images.outputs.list }}
+          # value= pins the version for both the tag-push and manual-dispatch paths.
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.rel.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.rel.outputs.tag }}
+            type=semver,pattern={{major}},value=${{ steps.rel.outputs.tag }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
+          labels: |
+            org.opencontainers.image.title=Allure Station
+            org.opencontainers.image.description=Self-hosted, multi-project Allure 3 report hub
+
+      - name: Build & push image
+        uses: docker/build-push-action@v6
+        with:
+          context: . # Dockerfile expects the repo root (pnpm workspace)
+          file: docker/Dockerfile
+          # arm64 builds emulated; drop it here if release build time matters more than coverage.
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Move v<major> alias to this release
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.rel.outputs.tag }}"
+          MAJOR="${TAG%%.*}"            # v1.2.3 -> v1
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f "$MAJOR" "$(git rev-parse HEAD)"
+          # Force-push the alias. Pushes via GITHUB_TOKEN don't re-trigger this workflow,
+          # and the trigger only matches three-part vX.Y.Z tags anyway — no recursion.
+          git push -f origin "$MAJOR"
+          echo "Moved $MAJOR -> $(git rev-parse --short HEAD)"
