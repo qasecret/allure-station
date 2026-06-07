@@ -27,13 +27,16 @@ caption with a CI link) with a client-side branch filter, and exposed via `GET �
 GitHub Action auto-derives branch/commit/ci_url from the GitHub context (+ an `environment` input).
 **Remaining stretch:** branch-aware *trend deltas* and PR-vs-base comparison scoping (now unblocked).
 
-### 2. Private / read-gated reports
-**Problem:** reads are currently **public** (deliberate 5b decision). **Why it matters:** test output
-is often confidential (endpoints, data, screenshots) — likely the #1 blocker for an internal corporate
-deployment. **Sketch:** per-project `visibility` (`public` | `members`); when `members`, gate
-reads (`/projects/:id`, runs, report, trends, compare, events, badge) behind `viewer+` membership or
-admin. Decide badge/embeds behavior (per-project public-badge exception). The 5b RBAC foundation makes
-this straightforward.
+### 2. Private / read-gated reports  ✅ DONE (Slice 6b, 2026-06-07)
+Per-project `visibility` (`public` default | `private`). Private gates all reads (project/runs/report/
+trends/compare/events/summary) behind admin / `viewer+` membership / project token via `readGate`
+(returns 404 — existence hidden); the project list is filtered by the caller; **badge stays public**
+(aggregate counts only — accepted trade-off). Owner/admin toggle via `PUT /projects/:id/visibility`
+(audited); web toggle in the Members panel + a "private/sign in" message on denied access.
+**Deferred hardening:** write routes still 404-then-401 (existence disclosure via management endpoints —
+pre-existing, instance-wide; make all management routes 404-on-unauthorized to fully hide); a central
+read preHandler (fail-closed default vs per-route readGate); `inArray` bound limit for users in 1000+
+projects (use a membership subquery); badge optionally per-project opt-out.
 
 ### 3. Per-test history + cross-run search
 **Problem:** the daily triage question — "is this test *newly* failing or always flaky, and when did

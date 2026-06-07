@@ -42,8 +42,8 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
   app.get("/projects/:id", async (req, reply) => {
     const id = projectIdSchema.safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.code(400).send({ error: id.error.message });
-    const project = await readGate(deps, req, id.data);
-    return project ? project : reply.code(404).send({ error: "not found" });
+    if (!(await readGate(deps, req, id.data))) return reply.code(404).send({ error: "not found" });
+    return deps.projects.get(id.data);
   });
 
   app.delete("/projects/:id", async (req, reply) => {

@@ -24,6 +24,8 @@ Outputs: `run-id`, `status` (`ready`|`failed`|`generating`), `report-url`.
 
 On `pull_request` events the action posts a **commit status** and an (upserted) **PR comment** with pass/fail, the **quality-gate verdict**, run stats, and the **trend delta vs the previous run**. It fails the job if generation failed or the quality gate breached.
 
+> For a **private** project, the PR-comment step reads `/summary` and `/compare`, so it needs the `token` input (a project-scoped token grants read of its own project). Public projects need no token to read.
+
 ```yaml
 permissions:
   pull-requests: write   # PR comment

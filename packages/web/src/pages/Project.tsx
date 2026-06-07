@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import type { ProjectRole, Run, RunStatus, TestDiff, TrendPoint } from "@allure-station/shared";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
@@ -19,6 +19,10 @@ export function Project() {
     setSelectedRun(null);
     setBranchFilter(""); // don't carry a previous project's branch filter (could hide all its runs)
   }, [id]);
+
+  // A read-gated project 404s for anonymous/non-members — surface that as a clear message
+  // instead of a silently-empty page.
+  const { isError: projectDenied } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
 
   // SSE drives instant updates; a slow refetch is kept only as a backstop while a run is
   // generating, so the UI still self-heals if SSE is unavailable or an event is missed.
@@ -73,6 +77,16 @@ export function Project() {
   const selectedVisible = selectedRun && visibleRuns.some((r) => r.id === selectedRun) ? selectedRun : null;
   const current = selectedVisible ?? visibleRuns.find((r) => r.status === "ready")?.id ?? visibleRuns[0]?.id ?? null;
   const cur = runs.find((r) => r.id === current);
+
+  if (projectDenied) {
+    return (
+      <main style={{ maxWidth: 420, margin: "12vh auto", padding: 16, textAlign: "center" }}>
+        <h1 style={{ fontSize: 18 }}>Project unavailable</h1>
+        <p style={{ color: "var(--muted)" }}>This project is private or doesn’t exist. If it’s private, <Link to="/login">sign in</Link> with an account that has access.</p>
+      </main>
+    );
+  }
+
   return (
     <main style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       <header style={{ borderBottom: "1px solid var(--border)" }}>

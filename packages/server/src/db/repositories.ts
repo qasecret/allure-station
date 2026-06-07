@@ -62,6 +62,13 @@ export class ProjectRepository {
     await this.db.update(projects).set({ visibility }).where(eq(projects.id, id));
   }
 
+  /** Cheap id+visibility lookup for the read gate — avoids #withLatest's latest-run subquery on the
+   *  hot report-asset path. Returns null if the project doesn't exist. */
+  async getVisibility(id: string): Promise<{ id: string; visibility: ProjectVisibility } | null> {
+    const [row] = await this.db.select({ id: projects.id, visibility: projects.visibility }).from(projects).where(eq(projects.id, id));
+    return row ? { id: row.id, visibility: row.visibility as ProjectVisibility } : null;
+  }
+
   async remove(id: string): Promise<void> {
     // libsql doesn't enforce FK ON DELETE CASCADE (pragma off), so delete children explicitly,
     // deepest first: test_results -> runs -> project. (Sequential, not a transaction: the libsql

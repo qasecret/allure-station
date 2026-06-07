@@ -34,8 +34,13 @@ describe("private projects / read gating", () => {
     expect(setRes.statusCode).toBe(200);
     expect(setRes.json().visibility).toBe("private");
 
-    // anonymous is now 404 across every read surface (existence hidden) — but the badge stays public
-    for (const url of ["/api/projects/p", "/api/projects/p/runs", "/api/projects/p/trends", "/api/projects/p/quality-gate", "/api/projects/p/compare?base=a&target=b"]) {
+    // anonymous is now 404 across every read surface (existence hidden) — but the badge stays public.
+    // Includes the high-leak surfaces (report HTML, run, summary, SSE) which the gate must close.
+    for (const url of [
+      "/api/projects/p", "/api/projects/p/runs", "/api/projects/p/trends", "/api/projects/p/quality-gate",
+      "/api/projects/p/compare?base=a&target=b", "/api/projects/p/runs/anyid", "/api/projects/p/runs/anyid/report/index.html",
+      "/api/projects/p/runs/anyid/summary", "/api/projects/p/events",
+    ]) {
       expect(sc(await app.inject({ method: "GET", url })), url).toBe(404);
     }
     expect(sc(await app.inject({ method: "GET", url: "/api/projects/p/badge.svg" }))).toBe(200);
