@@ -46,6 +46,22 @@ export async function generateReport(params: GenerateParams): Promise<GenerateRe
 
 const KNOWN_STATUSES: readonly string[] = ["passed", "failed", "broken", "skipped"];
 
+const MESSAGE_CAP = 2 * 1024;   // bytes
+const TRACE_CAP = 16 * 1024;    // bytes
+
+/**
+ * Truncate `text` to ~`capBytes` UTF-8 bytes, appending a marker when cut. Null/empty input returns
+ * null (so absent error detail stores as NULL). A multibyte char split at the boundary is re-encoded
+ * by `toString` as the U+FFFD replacement char, so the result stays valid UTF-8 but may run up to
+ * `capBytes + 2` bytes — fine here since the storage columns are unbounded `text`, not byte-capped.
+ */
+export function truncate(text: string | undefined | null, capBytes: number): string | null {
+  if (!text) return null;
+  const buf = Buffer.from(text, "utf8");
+  if (buf.length <= capBytes) return text;
+  return buf.subarray(0, capBytes).toString("utf8") + "\n…[truncated]";
+}
+
 /**
  * Derive run stats AND per-test summaries from the report's store in one pass.
  * `AllureReport` exposes a public `store` getter, and `DefaultAllureStore` exposes
@@ -76,6 +92,8 @@ async function summarize(report: AllureReport): Promise<GenerateResult> {
       status,
       duration: r.duration ?? null,
       flaky: r.flaky ?? false,
+      message: truncate(r.error?.message, MESSAGE_CAP),
+      trace: truncate(r.error?.trace, TRACE_CAP),
     });
   }
   return { stats, tests };
