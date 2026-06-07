@@ -92,6 +92,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.images.outputs.list }}
+          # Disable the implicit latest=auto so `latest` is governed solely by the
+          # explicit, push-gated line below — a manual re-publish of an older tag
+          # then can't drag `latest` backward.
+          flavor: latest=false
           # value= pins the version for both the tag-push and manual-dispatch paths.
           tags: |
             type=semver,pattern={{version}},value=${{ steps.rel.outputs.tag }}
