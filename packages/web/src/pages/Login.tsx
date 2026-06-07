@@ -3,6 +3,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export function Login() {
   const { login } = useAuth();
@@ -30,34 +33,30 @@ export function Login() {
   };
 
   return (
-    <main style={{ maxWidth: 360, margin: "10vh auto", padding: 16 }}>
-      <div style={{ textAlign: "center", marginBottom: 18 }}>
-        <img src="/favicon.svg" alt="Allure Station" width={56} height={56} style={{ display: "inline-block" }} />
-        <h1 style={{ fontSize: 20, margin: "10px 0 0" }}>Sign in to Allure Station</h1>
+    <div className="grid min-h-screen lg:grid-cols-2">
+      <div className="relative hidden flex-col justify-between bg-gradient-to-br from-[#1ED6B2] via-[#12B58F] to-[#0A916F] p-10 text-white lg:flex">
+        <div className="flex items-center gap-2 font-semibold"><img src="/favicon.svg" alt="" className="size-8" /> Allure Station</div>
+        <div><h2 className="text-2xl font-semibold">Your test reports, beautifully hosted.</h2><p className="mt-2 max-w-sm text-white/80">Multi-project Allure 3 reports with trends, run comparison, and access control.</p></div>
+        <span className="text-sm text-white/60">Self-hosted report hub</span>
       </div>
-      {config?.oidc.enabled && (
-        <>
-          {/* Plain link, not fetch: the browser must follow the 302 to the IdP. */}
-          <a href="/api/auth/oidc/login" style={{ display: "block", textAlign: "center", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: 4, marginBottom: 12 }}>
-            Sign in with {config.oidc.label ?? "SSO"}
-          </a>
-          <div style={{ textAlign: "center", color: "var(--muted)", fontSize: 12, margin: "8px 0" }}>or</div>
-        </>
-      )}
-      <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          Email
-          <input aria-label="Email" type="email" autoComplete="username" value={email}
-            onChange={(e) => setEmail(e.target.value)} required />
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          Password
-          <input aria-label="Password" type="password" autoComplete="current-password" value={password}
-            onChange={(e) => setPassword(e.target.value)} required />
-        </label>
-        {error && <p role="alert" style={{ color: "#d9534f", margin: 0 }}>{error}</p>}
-        <button type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
-      </form>
-    </main>
+      <div className="flex items-center justify-center p-6">
+        <div className="w-full max-w-sm space-y-6">
+          <div className="text-center lg:hidden"><img src="/favicon.svg" alt="Allure Station" className="mx-auto size-12" /></div>
+          <div><h1 className="text-xl font-semibold">Sign in to Allure Station</h1><p className="mt-1 text-sm text-muted-foreground">Use SSO or your email and password.</p></div>
+          {config?.oidc.enabled && (
+            <>
+              <Button asChild variant="outline" className="w-full"><a href="/api/auth/oidc/login">Sign in with {config.oidc.label ?? "SSO"}</a></Button>
+              <div className="relative text-center text-xs text-muted-foreground"><span className="bg-background px-2">or</span><div className="absolute inset-x-0 top-1/2 -z-10 border-t" /></div>
+            </>
+          )}
+          <form onSubmit={submit} className="space-y-3">
+            <div className="space-y-1"><Label htmlFor="email">Email</Label><Input id="email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
+            <div className="space-y-1"><Label htmlFor="password">Password</Label><Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" className="w-full" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</Button>
+          </form>
+        </div>
+      </div>
+    </div>
   );
 }

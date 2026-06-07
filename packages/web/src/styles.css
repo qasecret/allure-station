@@ -1,57 +1,79 @@
-:root {
-  color-scheme: light dark;
-  --bg: #ffffff;
-  --fg: #1a1a1a;
-  --muted: #666666;
-  --border: #dddddd;
-  --link: #1a5fb4;
-  --panel: #f7f7f7;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* Explicit dark theme (manual toggle). */
-[data-theme="dark"] {
-  --bg: #16181c;
-  --fg: #e6e6e6;
-  --muted: #9aa0a6;
-  --border: #2c2f36;
-  --link: #6ab0ff;
-  --panel: #1e2127;
-}
+@layer base {
+  :root {
+    color-scheme: light dark;
+    --radius: 0.5rem;
+    --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
 
-/* System dark — applies only when the user hasn't forced light. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #16181c;
-    --fg: #e6e6e6;
-    --muted: #9aa0a6;
-    --border: #2c2f36;
-    --link: #6ab0ff;
-    --panel: #1e2127;
+    --background: 208 100% 97%;
+    --foreground: 215 19% 27%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 19% 27%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 19% 27%;
+
+    /* green — Allure-native interactive accent */
+    --primary: 142 71% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 204 94% 94%;
+    --secondary-foreground: 215 14% 34%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 149 80% 90%;
+    --accent-foreground: 215 19% 27%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 142 71% 45%;
+
+    --sidebar: 204 94% 94%;
+    --sidebar-foreground: 215 19% 27%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-accent: 149 80% 90%;
+    --sidebar-accent-foreground: 215 19% 27%;
+    --sidebar-primary: 142 71% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
   }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 216 12% 84%;
+    --card: 217 33% 17%;
+    --card-foreground: 216 12% 84%;
+    --popover: 217 33% 17%;
+    --popover-foreground: 216 12% 84%;
+
+    --primary: 158 64% 52%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 218 23% 23%;
+    --secondary-foreground: 240 5% 65%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 215 19% 27%;
+    --accent-foreground: 240 5% 65%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 222 47% 11%;
+
+    --border: 215 14% 34%;
+    --input: 215 14% 34%;
+    --ring: 158 64% 52%;
+
+    --sidebar: 217 33% 17%;
+    --sidebar-foreground: 216 12% 84%;
+    --sidebar-border: 215 14% 34%;
+    --sidebar-accent: 215 19% 27%;
+    --sidebar-accent-foreground: 240 5% 65%;
+    --sidebar-primary: 158 64% 52%;
+    --sidebar-primary-foreground: 222 47% 11%;
+  }
+
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; font-family: var(--font-sans); }
 }
-
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: system-ui, -apple-system, sans-serif;
-}
-
-a { color: var(--link); }
-
-input, select, button {
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 8px;
-  font: inherit;
-}
-
-button:not(:disabled) { cursor: pointer; }
-button:disabled { opacity: 0.5; }
-
-/* Visible keyboard focus for accessibility. */
-:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
