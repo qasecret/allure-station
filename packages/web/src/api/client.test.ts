@@ -94,6 +94,14 @@ describe("api client", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/members", expect.objectContaining({ method: "PUT", credentials: "include" }));
   });
 
+  it("listAudit GETs /audit with paging and surfaces X-Total-Count", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, headers: headers({ "X-Total-Count": "7" }), json: async () => [{ id: "a1", action: "login" }] });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    const res = await client.listAudit({ limit: 50, offset: 50 });
+    expect(fetchMock).toHaveBeenCalledWith("/api/audit?limit=50&offset=50", expect.objectContaining({ method: "GET", credentials: "include" }));
+    expect(res.total).toBe(7);
+  });
+
   it("subscribeRuns is a no-op when EventSource is unavailable", () => {
     vi.stubGlobal("EventSource", undefined);
     const client = createClient("/api");

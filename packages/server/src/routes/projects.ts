@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { createProjectSchema, projectIdSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { parsePage } from "./pagination.js";
-import { authenticate, authorizeProjectCreate, requireProjectWrite } from "../auth.js";
+import { authenticate, authorizeProjectCreate, authorizeProjectWrite } from "../auth.js";
+import { actorFromPrincipal, recordAudit } from "../audit.js";
 
 export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.post("/projects", async (req, reply) => {
@@ -10,13 +11,15 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
 
     // Creating a project is admin-only once accounts exist; open in zero-config mode (no users).
-    if ((await authorizeProjectCreate(deps, await authenticate(deps, req))) === "unauthorized") {
+    const principal = await authenticate(deps, req);
+    if ((await authorizeProjectCreate(deps, principal)) === "unauthorized") {
       return reply.code(401).send({ error: "unauthorized" });
     }
     if (await deps.projects.get(parsed.data.id)) {
       return reply.code(409).send({ error: "project already exists" });
     }
     const project = await deps.projects.create(parsed.data.id, deps.now());
+    await recordAudit(deps, { ...actorFromPrincipal(principal), action: "project_created", targetType: "project", targetId: project.id, projectId: project.id });
     return reply.code(201).send(project);
   });
 
@@ -43,7 +46,8 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
   app.delete("/projects/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!(await deps.projects.get(id))) return reply.code(404).send({ error: "not found" });
-    if ((await requireProjectWrite(deps, req, id)) === "unauthorized") {
+    const principal = await authenticate(deps, req);
+    if ((await authorizeProjectWrite(deps, principal, id)) === "unauthorized") {
       return reply.code(401).send({ error: "unauthorized" });
     }
     await deps.projects.remove(id);
@@ -52,6 +56,7 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     } catch {
       // ignore: project metadata is already gone; orphaned artifacts are harmless
     }
+    await recordAudit(deps, { ...actorFromPrincipal(principal), action: "project_deleted", targetType: "project", targetId: id, projectId: id });
     return reply.code(204).send();
   });
 }

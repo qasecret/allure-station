@@ -180,6 +180,30 @@ export const setMembershipRequestSchema = z.object({
   role: projectRoleSchema,
 });
 
+// --- Audit log (Phase 5c) ---
+export const auditActionSchema = z.enum([
+  "login", "login_failed", "logout",
+  "user_created", "user_deleted",
+  "token_created", "token_deleted",
+  "member_set", "member_removed",
+  "project_created", "project_deleted",
+  "quality_gate_set",
+  "notification_created", "notification_deleted",
+]);
+export const auditActorTypeSchema = z.enum(["user", "token", "anonymous"]);
+export const auditEntrySchema = z.object({
+  id: z.string(),
+  at: z.string(),
+  actorType: auditActorTypeSchema,
+  actorId: z.string().nullable(),
+  actorLabel: z.string(),
+  action: auditActionSchema,
+  targetType: z.string().nullable(),
+  targetId: z.string().nullable(),
+  projectId: z.string().nullable(),
+  metadata: z.record(z.unknown()).nullable(),
+});
+
 export type ProjectId = z.infer<typeof projectIdSchema>;
 export type Run = z.infer<typeof runSchema>;
 export type RunStats = z.infer<typeof runStatsSchema>;
@@ -207,3 +231,6 @@ export type CreateUserRequest = z.infer<typeof createUserRequestSchema>;
 export type Membership = z.infer<typeof membershipSchema>;
 export type MembershipWithUser = z.infer<typeof membershipWithUserSchema>;
 export type SetMembershipRequest = z.infer<typeof setMembershipRequestSchema>;
+export type AuditAction = z.infer<typeof auditActionSchema>;
+export type AuditActorType = z.infer<typeof auditActorTypeSchema>;
+export type AuditEntry = z.infer<typeof auditEntrySchema>;

@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { qualityGateConfigSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
-import { requireProjectWrite } from "../auth.js";
+import { authenticate, authorizeProjectWrite } from "../auth.js";
+import { actorFromPrincipal, recordAudit } from "../audit.js";
 import { evaluateGate } from "../gate.js";
 
 export function registerQualityGateRoutes(app: FastifyInstance, deps: AppDeps): void {
@@ -15,13 +16,15 @@ export function registerQualityGateRoutes(app: FastifyInstance, deps: AppDeps): 
   app.put("/projects/:projectId/quality-gate", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
-    if ((await requireProjectWrite(deps, req, projectId)) === "unauthorized") {
+    const principal = await authenticate(deps, req);
+    if ((await authorizeProjectWrite(deps, principal, projectId)) === "unauthorized") {
       return reply.code(401).send({ error: "unauthorized" });
     }
     const parsed = qualityGateConfigSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
     const config = Object.keys(parsed.data).length === 0 ? null : parsed.data;
     await deps.projects.setQualityGate(projectId, config);
+    await recordAudit(deps, { ...actorFromPrincipal(principal), action: "quality_gate_set", targetType: "quality_gate", targetId: projectId, projectId, metadata: { cleared: config === null } });
     return config ?? {};
   });
 

@@ -77,6 +77,22 @@ export const memberships = pgTable("memberships", {
   byUser: index("idx_memberships_user").on(t.userId),
 }));
 
+export const auditLog = pgTable("audit_log", {
+  id: text("id").primaryKey(),
+  at: text("at").notNull(),
+  actorType: text("actor_type").notNull(), // user|token|anonymous
+  actorId: text("actor_id"),
+  actorLabel: text("actor_label").notNull(), // email / token prefix / "anonymous" (denormalized)
+  action: text("action").notNull(),
+  targetType: text("target_type"),
+  targetId: text("target_id"),
+  projectId: text("project_id"), // nullable; no FK — audit rows outlive the project they reference
+  metadata: text("metadata"),    // JSON | null
+}, (t) => ({
+  byAt: index("idx_audit_at").on(t.at),
+  byProjectAt: index("idx_audit_project_at").on(t.projectId, t.at),
+}));
+
 export const testResults = pgTable("test_results", {
   id: text("id").primaryKey(),
   runId: text("run_id").notNull().references(() => runs.id, { onDelete: "cascade" }),

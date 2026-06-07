@@ -8,6 +8,7 @@ import { NotificationRepository } from "./db/notifications-repo.js";
 import { UserRepository } from "./db/user-repo.js";
 import { SessionRepository } from "./db/session-repo.js";
 import { MembershipRepository } from "./db/membership-repo.js";
+import { AuditRepository } from "./db/audit-repo.js";
 import { createStorage } from "./storage/factory.js";
 import type { AppDeps } from "./app.js";
 import type { AppConfig } from "./config.js";
@@ -28,6 +29,7 @@ export function buildDeps(config: AppConfig, queue: JobQueue, db: Db, bus: Event
     users: new UserRepository(db, () => nanoid(12)),
     sessions: new SessionRepository(db, () => nanoid(12)),
     memberships: new MembershipRepository(db, () => nanoid(12)),
+    audit: new AuditRepository(db, () => nanoid(12)),
     storage: createStorage(config.storage),
     queue,
     bus,

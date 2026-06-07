@@ -11,6 +11,7 @@ import type { NotificationRepository } from "./db/notifications-repo.js";
 import type { UserRepository } from "./db/user-repo.js";
 import type { SessionRepository } from "./db/session-repo.js";
 import type { MembershipRepository } from "./db/membership-repo.js";
+import type { AuditRepository } from "./db/audit-repo.js";
 import type { StorageDriver } from "./storage/driver.js";
 import type { JobQueue } from "@allure-station/worker";
 import type { EventBus } from "./events/bus.js";
@@ -27,6 +28,7 @@ import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerUserRoutes } from "./routes/users.js";
 import { registerMemberRoutes } from "./routes/members.js";
+import { registerAuditRoutes } from "./routes/audit.js";
 
 export interface AppDeps {
   projects: ProjectRepository;
@@ -37,6 +39,7 @@ export interface AppDeps {
   users: UserRepository;
   sessions: SessionRepository;
   memberships: MembershipRepository;
+  audit: AuditRepository;
   storage: StorageDriver;
   queue: JobQueue;
   bus: EventBus;
@@ -74,6 +77,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       registerAuthRoutes(api, deps);
       registerUserRoutes(api, deps);
       registerMemberRoutes(api, deps);
+      registerAuditRoutes(api, deps);
     },
     { prefix: "/api" },
   );

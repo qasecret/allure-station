@@ -8,6 +8,7 @@ import { NotificationRepository } from "./notifications-repo.js";
 import { UserRepository } from "./user-repo.js";
 import { SessionRepository } from "./session-repo.js";
 import { MembershipRepository } from "./membership-repo.js";
+import { AuditRepository } from "./audit-repo.js";
 import type { TestSummary } from "@allure-station/shared";
 
 // Deterministic id generator per handle (matches the deps `newId` contract).
@@ -25,6 +26,7 @@ type BackendHandle = {
   users: UserRepository;
   sessions: SessionRepository;
   members: MembershipRepository;
+  audit: AuditRepository;
   cleanup: () => Promise<void>;
 };
 
@@ -48,6 +50,7 @@ const backends: Backend[] = [
         users: new UserRepository(db, idGen()),
         sessions: new SessionRepository(db, idGen()),
         members: new MembershipRepository(db, idGen()),
+        audit: new AuditRepository(db, idGen()),
         cleanup: async () => {},
       };
     },
@@ -71,7 +74,7 @@ if (process.env.PG_TEST_URL) {
       // Cast to any: Db is typed as LibSQLDatabase which lacks execute(); the pg
       // handle cast as Db at the factory retains execute() at runtime (node-postgres).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (db as any).execute(sql`TRUNCATE memberships, sessions, users, notifications, api_tokens, test_results, runs, projects CASCADE`);
+      await (db as any).execute(sql`TRUNCATE audit_log, memberships, sessions, users, notifications, api_tokens, test_results, runs, projects CASCADE`);
       return {
         projects: new ProjectRepository(db),
         runs: new RunRepository(db),
@@ -81,6 +84,7 @@ if (process.env.PG_TEST_URL) {
         users: new UserRepository(db, idGen()),
         sessions: new SessionRepository(db, idGen()),
         members: new MembershipRepository(db, idGen()),
+        audit: new AuditRepository(db, idGen()),
         cleanup: async () => {},
       };
     },
@@ -97,10 +101,11 @@ for (const backend of backends) {
     let users: UserRepository;
     let sessions: SessionRepository;
     let members: MembershipRepository;
+    let audit: AuditRepository;
     let cleanup: () => Promise<void>;
 
     beforeEach(async () => {
-      ({ projects, runs, tests, tokens, notifs, users, sessions, members, cleanup } = await backend.make());
+      ({ projects, runs, tests, tokens, notifs, users, sessions, members, audit, cleanup } = await backend.make());
     });
 
     // -------------------------------------------------------------------------
@@ -502,6 +507,43 @@ for (const backend of backends) {
         expect(await members.remove("other", u.id)).toBe(false);
         await projects.remove("p");
         expect(await members.find("p", u.id)).toBeNull();
+      });
+    });
+
+    describe("AuditRepository", () => {
+      it("records, lists recent-first, filters by project, paginates, round-trips metadata", async () => {
+        await audit.record({ actorType: "user", actorId: "u1", actorLabel: "a@x", action: "login", targetType: "user", targetId: "u1" }, "2026-06-06T00:00:01.000Z");
+        await audit.record({ actorType: "user", actorId: "u1", actorLabel: "a@x", action: "project_created", targetType: "project", targetId: "p", projectId: "p", metadata: { foo: "bar" } }, "2026-06-06T00:00:02.000Z");
+        await audit.record({ actorType: "anonymous", actorId: null, actorLabel: "anonymous", action: "login_failed", metadata: { email: "x@x" } }, "2026-06-06T00:00:03.000Z");
+
+        const all = await audit.list();
+        expect(all.map((e) => e.action)).toEqual(["login_failed", "project_created", "login"]); // recent-first
+        expect(await audit.count()).toBe(3);
+
+        // metadata round-trips; null metadata stays null
+        expect(all.find((e) => e.action === "project_created")?.metadata).toEqual({ foo: "bar" });
+        expect(all.find((e) => e.action === "login")?.metadata).toBeNull();
+
+        // project filter
+        expect((await audit.list({ projectId: "p" })).map((e) => e.action)).toEqual(["project_created"]);
+        expect(await audit.count({ projectId: "p" })).toBe(1);
+
+        // pagination
+        expect((await audit.list({ limit: 1 })).map((e) => e.action)).toEqual(["login_failed"]);
+        expect((await audit.list({ limit: 1, offset: 1 })).map((e) => e.action)).toEqual(["project_created"]);
+      });
+
+      it("is NOT cascade-deleted when the referenced project or user is removed", async () => {
+        await projects.create("p", "2026-06-06T00:00:00.000Z");
+        const u = await users.create("u@x.com", "h", "user", "2026-06-06T00:00:00.000Z");
+        await audit.record({ actorType: "user", actorId: u.id, actorLabel: u.email, action: "project_created", targetType: "project", targetId: "p", projectId: "p" }, "2026-06-06T00:00:01.000Z");
+
+        await projects.remove("p");
+        await users.remove(u.id);
+
+        // The audit row survives — it outlives the entities it references (the whole point of an audit log).
+        expect(await audit.count()).toBe(1);
+        expect((await audit.list())[0].targetId).toBe("p");
       });
     });
   });

@@ -7,6 +7,7 @@ import { Projects } from "./pages/Projects.js";
 import { Project } from "./pages/Project.js";
 import { Login } from "./pages/Login.js";
 import { Users } from "./pages/Users.js";
+import { Audit } from "./pages/Audit.js";
 import { ThemeToggle } from "./components/ThemeToggle.js";
 import { TopBar } from "./components/TopBar.js";
 import { AuthProvider } from "./auth.js";
@@ -30,6 +31,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/projects/:id" element={<Project />} />
             <Route path="/login" element={<Login />} />
             <Route path="/users" element={<Users />} />
+          <Route path="/audit" element={<Audit />} />
           </Routes>
         </AuthProvider>
       </BrowserRouter>

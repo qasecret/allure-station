@@ -13,6 +13,7 @@ export function TopBar() {
       {user ? (
         <>
           {user.role === "admin" && <Link to="/users">Users</Link>}
+          {user.role === "admin" && <Link to="/audit">Audit</Link>}
           <span style={{ color: "var(--muted)" }}>{user.email}</span>
           <button onClick={async () => { await logout(); navigate("/"); }}>Sign out</button>
         </>

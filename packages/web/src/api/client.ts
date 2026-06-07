@@ -1,6 +1,6 @@
 import type {
   Project, Run, TrendPoint, RunEvent, CompareResult,
-  SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole,
+  SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry,
 } from "@allure-station/shared";
 
 export interface ApiClient {
@@ -23,6 +23,7 @@ export interface ApiClient {
   listUsers(): Promise<User[]>;
   createUser(email: string, password: string, role: GlobalRole): Promise<User>;
   deleteUser(id: string): Promise<void>;
+  listAudit(opts?: { limit?: number; offset?: number }): Promise<{ items: AuditEntry[]; total: number }>;
 }
 
 export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
@@ -78,6 +79,7 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     createUser: (email, password, role) =>
       json<User>("/users", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password, role }) }),
     deleteUser: (id) => noContent(`/users/${id}`, { method: "DELETE" }),
+    listAudit: (opts = {}) => listWithTotal<AuditEntry>(`/audit${qs(opts)}`),
     subscribeRuns: (projectId, onEvent) => {
       // No-op where EventSource is unavailable (e.g. jsdom/SSR); the page still works via fetch.
       if (typeof EventSource === "undefined") return () => {};
