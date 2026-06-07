@@ -121,7 +121,7 @@ docs/           architecture spec, per-slice plans, FUTURE-WORK.md
 **Run the published image** — single container, zero config, data persisted in a named volume:
 
 ```bash
-docker run -p 5050:5050 -v allure-data:/data ghcr.io/qasecret/allure-station:latest
+docker run -p 5050:5050 -v allure-data:/data ghcr.io/qasecret/allure-station:1
 ```
 
 <details>
