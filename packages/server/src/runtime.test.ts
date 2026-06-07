@@ -23,6 +23,7 @@ function testConfig(): AppConfig {
     cookieSecure: false,
     adminEmail: undefined,
     adminPassword: undefined,
+    oidc: undefined,
     storage: { backend: "local", localRoot: join(root, "storage") },
   };
 }

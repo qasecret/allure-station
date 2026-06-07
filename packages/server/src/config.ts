@@ -2,6 +2,17 @@ export type StorageBackend = "local" | "s3";
 export type DbDriver = "sqlite" | "postgres";
 export type QueueDriver = "inprocess" | "bullmq";
 
+export interface OidcConfig {
+  issuer: string;
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  scopes: string;            // space-delimited, default "openid email profile"
+  label: string;             // button text, e.g. "SSO" / "Google"
+  allowedDomains: string[];  // empty = any verified email allowed
+  allowUnverifiedEmail: boolean;
+}
+
 export interface AppConfig {
   port: number;
   db: { driver: DbDriver; url: string };
@@ -16,6 +27,7 @@ export interface AppConfig {
   cookieSecure: boolean;
   adminEmail: string | undefined;    // seeded/upserted as a global admin on startup (with adminPassword)
   adminPassword: string | undefined;
+  oidc: OidcConfig | undefined;      // external SSO; present only when OIDC_ISSUER is set
   storage: {
     backend: StorageBackend;
     localRoot: string;
@@ -96,6 +108,24 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error("REDIS_URL is required when QUEUE_DRIVER=bullmq");
   }
 
+  const publicUrl = env.PUBLIC_URL ? env.PUBLIC_URL.replace(/\/$/, "") : undefined;
+  let oidc: OidcConfig | undefined;
+  if (env.OIDC_ISSUER) {
+    const redirectUri = env.OIDC_REDIRECT_URI || (publicUrl ? `${publicUrl}/api/auth/oidc/callback` : undefined);
+    if (!env.OIDC_CLIENT_ID || !env.OIDC_CLIENT_SECRET) throw new Error("OIDC_CLIENT_ID and OIDC_CLIENT_SECRET are required when OIDC_ISSUER is set");
+    if (!redirectUri) throw new Error("OIDC_REDIRECT_URI (or PUBLIC_URL) is required when OIDC_ISSUER is set");
+    oidc = {
+      issuer: env.OIDC_ISSUER,
+      clientId: env.OIDC_CLIENT_ID,
+      clientSecret: env.OIDC_CLIENT_SECRET,
+      redirectUri,
+      scopes: env.OIDC_SCOPES || "openid email profile",
+      label: env.OIDC_LABEL || "SSO",
+      allowedDomains: (env.OIDC_ALLOWED_DOMAINS ?? "").split(",").map((d) => d.trim().toLowerCase()).filter(Boolean),
+      allowUnverifiedEmail: env.OIDC_ALLOW_UNVERIFIED_EMAIL === "true",
+    };
+  }
+
   return {
     port: parsePositiveInt("PORT", env.PORT, 5050),
     db: { driver: dbDriver, url: dbUrl },
@@ -105,7 +135,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     queueDriver,
     redisUrl: env.REDIS_URL,
     version: env.APP_VERSION ?? "0.1.0",
-    publicUrl: env.PUBLIC_URL ? env.PUBLIC_URL.replace(/\/$/, "") : undefined,
+    publicUrl,
     sessionTtlMs: parsePositiveInt("SESSION_TTL_MS", env.SESSION_TTL_MS, 7 * 24 * 60 * 60 * 1000),
     // Default Secure cookies on when serving over https (PUBLIC_URL); COOKIE_SECURE overrides explicitly.
     cookieSecure:
@@ -114,6 +144,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         : (env.PUBLIC_URL ?? "").startsWith("https://"),
     adminEmail: env.ADMIN_EMAIL || undefined,
     adminPassword: env.ADMIN_PASSWORD || undefined,
+    oidc,
     storage,
   };
 }

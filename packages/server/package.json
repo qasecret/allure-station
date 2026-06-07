@@ -26,6 +26,7 @@
     "ioredis": "5.10.1",
     "mrmime": "2",
     "nanoid": "5.0.7",
+    "openid-client": "5.7.1",
     "pg": "8.21.0",
     "zod": "3.23.8"
   },

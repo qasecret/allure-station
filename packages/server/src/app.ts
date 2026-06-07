@@ -12,6 +12,8 @@ import type { UserRepository } from "./db/user-repo.js";
 import type { SessionRepository } from "./db/session-repo.js";
 import type { MembershipRepository } from "./db/membership-repo.js";
 import type { AuditRepository } from "./db/audit-repo.js";
+import type { OidcProvider } from "./oidc.js";
+import type { OidcConfig } from "./config.js";
 import type { StorageDriver } from "./storage/driver.js";
 import type { JobQueue } from "@allure-station/worker";
 import type { EventBus } from "./events/bus.js";
@@ -40,6 +42,8 @@ export interface AppDeps {
   sessions: SessionRepository;
   memberships: MembershipRepository;
   audit: AuditRepository;
+  oidc: OidcProvider | null;     // external SSO provider, or null when OIDC isn't configured
+  oidcConfig: OidcConfig | null; // the validated OIDC config (domain allowlist etc.), or null
   storage: StorageDriver;
   queue: JobQueue;
   bus: EventBus;

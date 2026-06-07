@@ -4,6 +4,10 @@ import type { AppDeps } from "../app.js";
 import { authenticate, generateSessionToken, hashSessionToken, SESSION_COOKIE } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 import { hashPassword, verifyPassword } from "../password.js";
+import { resolveOidcUser } from "../oidc.js";
+
+const OIDC_COOKIE = "as_oidc";
+const OIDC_COOKIE_PATH = "/api/auth/oidc";
 
 // A throwaway hash verified against when the email is unknown, so a missing account costs the same
 // scrypt work as a wrong password — closing the login timing oracle that would enumerate emails.
@@ -19,6 +23,15 @@ function setSessionCookie(reply: FastifyReply, deps: AppDeps, token: string): vo
   });
 }
 
+/** Create a DB-backed session for a user and set the session cookie. Shared by local + OIDC login. */
+async function startSession(reply: FastifyReply, deps: AppDeps, userId: string): Promise<void> {
+  const token = generateSessionToken();
+  const expiresAt = new Date(Date.parse(deps.now()) + deps.sessionTtlMs).toISOString();
+  await deps.sessions.create(hashSessionToken(token), userId, deps.now(), expiresAt);
+  void deps.sessions.deleteExpired(deps.now()).catch(() => {}); // opportunistic, best-effort
+  setSessionCookie(reply, deps, token);
+}
+
 export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.post("/auth/login", async (req, reply) => {
     const parsed = loginRequestSchema.safeParse(req.body);
@@ -31,13 +44,8 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
       await recordAudit(deps, { actorType: "anonymous", actorId: null, actorLabel: "anonymous", action: "login_failed", metadata: { email: parsed.data.email } });
       return reply.code(401).send({ error: "invalid credentials" });
     }
-    const token = generateSessionToken();
-    const expiresAt = new Date(Date.parse(deps.now()) + deps.sessionTtlMs).toISOString();
-    await deps.sessions.create(hashSessionToken(token), user.id, deps.now(), expiresAt);
-    // Opportunistic, best-effort sweep of expired rows so the table doesn't grow unbounded.
-    void deps.sessions.deleteExpired(deps.now()).catch(() => {});
+    await startSession(reply, deps, user.id);
     await recordAudit(deps, { actorType: "user", actorId: user.id, actorLabel: user.email, action: "login", targetType: "user", targetId: user.id });
-    setSessionCookie(reply, deps, token);
     const body: SessionUser = { id: user.id, email: user.email, role: user.role, createdAt: user.createdAt };
     return reply.code(200).send(body);
   });
@@ -64,4 +72,59 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
     };
     return reply.code(200).send(body);
   });
+
+  // --- OIDC / SSO (Phase 5d) — registered only when a provider is configured ---
+  if (deps.oidc && deps.oidcConfig) {
+    const provider = deps.oidc;
+    const oidcConfig = deps.oidcConfig;
+
+    app.get("/auth/oidc/login", async (_req, reply) => {
+      let start;
+      try {
+        start = await provider.startLogin();
+      } catch {
+        // IdP unreachable / discovery failed — don't 500, send the user back with an error.
+        return reply.redirect("/login?error=sso");
+      }
+      // Short-lived cookie carries the CSRF state, nonce, and PKCE verifier across the IdP round-trip.
+      // sameSite=lax so it survives the top-level GET redirect back to the callback.
+      reply.setCookie(OIDC_COOKIE, JSON.stringify({ state: start.state, nonce: start.nonce, codeVerifier: start.codeVerifier }), {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: deps.cookieSecure,
+        path: OIDC_COOKIE_PATH,
+        maxAge: 600,
+      });
+      return reply.redirect(start.url);
+    });
+
+    app.get("/auth/oidc/callback", async (req, reply) => {
+      const raw = req.cookies?.[OIDC_COOKIE];
+      reply.clearCookie(OIDC_COOKIE, { path: OIDC_COOKIE_PATH });
+      if (!raw) return reply.redirect("/login?error=sso");
+      let flow: { state: string; nonce: string; codeVerifier: string };
+      try {
+        flow = JSON.parse(raw);
+      } catch {
+        return reply.redirect("/login?error=sso");
+      }
+
+      let claims;
+      try {
+        claims = await provider.completeLogin({ query: req.query as Record<string, unknown>, state: flow.state, nonce: flow.nonce, codeVerifier: flow.codeVerifier });
+      } catch {
+        return reply.redirect("/login?error=sso"); // bad code / state mismatch / token error
+      }
+
+      const resolved = await resolveOidcUser(deps, claims, oidcConfig);
+      if ("error" in resolved) return reply.redirect("/login?error=sso");
+
+      await startSession(reply, deps, resolved.userId);
+      if (resolved.provisioned) {
+        await recordAudit(deps, { actorType: "user", actorId: resolved.userId, actorLabel: resolved.email, action: "user_created", targetType: "user", targetId: resolved.userId, metadata: { via: "oidc" } });
+      }
+      await recordAudit(deps, { actorType: "user", actorId: resolved.userId, actorLabel: resolved.email, action: "login", targetType: "user", targetId: resolved.userId, metadata: { via: "oidc" } });
+      return reply.redirect("/");
+    });
+  }
 }

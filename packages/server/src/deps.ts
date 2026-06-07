@@ -9,6 +9,7 @@ import { UserRepository } from "./db/user-repo.js";
 import { SessionRepository } from "./db/session-repo.js";
 import { MembershipRepository } from "./db/membership-repo.js";
 import { AuditRepository } from "./db/audit-repo.js";
+import { createOidcProvider } from "./oidc.js";
 import { createStorage } from "./storage/factory.js";
 import type { AppDeps } from "./app.js";
 import type { AppConfig } from "./config.js";
@@ -30,6 +31,8 @@ export function buildDeps(config: AppConfig, queue: JobQueue, db: Db, bus: Event
     sessions: new SessionRepository(db, () => nanoid(12)),
     memberships: new MembershipRepository(db, () => nanoid(12)),
     audit: new AuditRepository(db, () => nanoid(12)),
+    oidc: config.oidc ? createOidcProvider(config.oidc) : null,
+    oidcConfig: config.oidc ?? null,
     storage: createStorage(config.storage),
     queue,
     bus,

@@ -30,6 +30,8 @@ export async function makeTestDeps(): Promise<AppDeps> {
     sessions: new SessionRepository(db, (() => { let n = 0; return () => `ses${++n}`; })()),
     memberships: new MembershipRepository(db, (() => { let n = 0; return () => `mem${++n}`; })()),
     audit: new AuditRepository(db, (() => { let n = 0; return () => `aud${++n}`; })()),
+    oidc: null,
+    oidcConfig: null,
     storage: new LocalDriver(join(root, "storage")),
     queue: new InProcessQueue(2),
     bus: new InProcessBus(),

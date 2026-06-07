@@ -3,7 +3,14 @@ import type {
   SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry,
 } from "@allure-station/shared";
 
+export interface AppConfigInfo {
+  securityEnabled: boolean;
+  oidc: { enabled: boolean; label?: string };
+  allure: string;
+}
+
 export interface ApiClient {
+  getConfig(): Promise<AppConfigInfo>;
   listProjects(opts?: { q?: string; limit?: number; offset?: number }): Promise<{ items: Project[]; total: number }>;
   createProject(id: string): Promise<Project>;
   listRuns(projectId: string, opts?: { status?: string; limit?: number; offset?: number }): Promise<Run[]>;
@@ -55,6 +62,7 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     return s ? `?${s}` : "";
   };
   return {
+    getConfig: () => json<AppConfigInfo>("/config", { method: "GET" }),
     listProjects: (opts = {}) => listWithTotal<Project>(`/projects${qs(opts)}`),
     createProject: (id) =>
       json<Project>("/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }),
