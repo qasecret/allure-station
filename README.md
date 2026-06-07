@@ -14,7 +14,7 @@ Push test results from any CI, generate rich reports, track trends and flakiness
 
 </div>
 
-> The modern successor to `allure-docker-service` + `allure-docker-service-ui`, rebuilt natively on **Allure 3** in a single TypeScript codebase — Allure 3 is **embedded** (no Java CLI, no bash glue), storage and database are **pluggable**, and it scales from one container to a multi-replica deployment **by configuration, not rewrite**.
+> A single TypeScript codebase built natively on **Allure 3** — Allure is **embedded** (no Java CLI, no bash glue), storage and database are **pluggable**, and it scales from one container to a multi-replica deployment **by configuration, not rewrite**.
 
 ---
 
