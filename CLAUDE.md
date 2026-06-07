@@ -103,6 +103,7 @@ Secure-by-default through progressive disclosure: fully open in zero-config dev,
 ## Reference docs
 
 - `README.md` — full feature/config/API reference and deployment topologies.
+- `design-system/allure-station/MASTER.md` — **UI source of truth** (Geist + teal `#1db980` + cool-slate tokens, shadcn/Tailwind conventions, a11y rules). Read it before any `packages/web` UI work; check `design-system/allure-station/pages/<page>.md` for per-page overrides.
 - `docs/FUTURE-WORK.md` — roadmap, gap analysis, and slice plans.
 - `docker/` — `Dockerfile` + compose files (`postgres`/`bullmq`/`minio` profiles; `docker-compose.test.yml` for integration suites).
 - `github-action/` — reusable upload → generate → gate Action (+ GitLab/Jenkins recipes).
