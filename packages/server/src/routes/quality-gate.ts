@@ -3,12 +3,13 @@ import { qualityGateConfigSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { authenticate, authorizeProjectWrite } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
+import { readGate } from "./read-gate.js";
 import { evaluateGate } from "../gate.js";
 
 export function registerQualityGateRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.get("/projects/:projectId/quality-gate", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
-    if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
+    if (!(await readGate(deps, req, projectId))) return reply.code(404).send({ error: "not found" });
     return (await deps.projects.getQualityGate(projectId)) ?? {};
   });
 
@@ -31,6 +32,7 @@ export function registerQualityGateRoutes(app: FastifyInstance, deps: AppDeps): 
   // Run summary for CI / PR checks: run + report path + previous ready run + quality-gate verdict.
   app.get("/projects/:projectId/runs/:runId/summary", async (req, reply) => {
     const { projectId, runId } = req.params as { projectId: string; runId: string };
+    if (!(await readGate(deps, req, projectId))) return reply.code(404).send({ error: "not found" });
     const run = await deps.runs.get(runId);
     if (!run || run.projectId !== projectId) return reply.code(404).send({ error: "not found" });
     const [gate, previous] = await Promise.all([

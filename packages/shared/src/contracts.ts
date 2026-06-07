@@ -131,10 +131,15 @@ export const trendPointSchema = z.object({
 });
 export type TrendPoint = z.infer<typeof trendPointSchema>;
 
+export const projectVisibilitySchema = z.enum(["public", "private"]);
+export const setVisibilityRequestSchema = z.object({ visibility: projectVisibilitySchema });
+
 export const projectSchema = z.object({
   id: projectIdSchema,
   createdAt: z.string(),
   latestRunId: z.string().nullable(),
+  // public = readable by anyone; private = reads require viewer+ / admin / project token.
+  visibility: projectVisibilitySchema.default("public"),
 });
 
 // Pushed to the UI over SSE on every run lifecycle transition (created/generating/ready/failed).
@@ -201,6 +206,7 @@ export const auditActionSchema = z.enum([
   "token_created", "token_deleted",
   "member_set", "member_removed",
   "project_created", "project_deleted",
+  "project_visibility_set",
   "quality_gate_set",
   "notification_created", "notification_deleted",
 ]);
@@ -223,6 +229,8 @@ export type Run = z.infer<typeof runSchema>;
 export type RunStats = z.infer<typeof runStatsSchema>;
 export type RunMetadata = z.infer<typeof runMetadataSchema>;
 export type Project = z.infer<typeof projectSchema>;
+export type ProjectVisibility = z.infer<typeof projectVisibilitySchema>;
+export type SetVisibilityRequest = z.infer<typeof setVisibilityRequestSchema>;
 export type RunStatus = z.infer<typeof runStatusSchema>;
 export type RunEvent = z.infer<typeof runEventSchema>;
 export type TestStatus = z.infer<typeof testStatusSchema>;

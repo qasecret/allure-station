@@ -54,6 +54,12 @@ export class MembershipRepository {
     return rows.map((r) => ({ ...r, role: r.role as ProjectRole }));
   }
 
+  /** Project ids the user is a member of (any role) — powers the project-list visibility filter. */
+  async listProjectIdsForUser(userId: string): Promise<string[]> {
+    const rows = await this.db.select({ projectId: memberships.projectId }).from(memberships).where(eq(memberships.userId, userId));
+    return rows.map((r) => r.projectId);
+  }
+
   async remove(projectId: string, userId: string): Promise<boolean> {
     const deleted = await this.db
       .delete(memberships)

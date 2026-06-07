@@ -145,6 +145,21 @@ for (const backend of backends) {
         expect(await projects.count()).toBe(4);
       });
 
+      it("visibility defaults to public, setVisibility flips it, and list/count scope filters", async () => {
+        await projects.create("pub", "2026-06-06T00:00:00.000Z");
+        await projects.create("prv", "2026-06-06T00:00:00.000Z");
+        await projects.setVisibility("prv", "private");
+        expect((await projects.get("pub"))?.visibility).toBe("public");
+        expect((await projects.get("prv"))?.visibility).toBe("private");
+
+        expect((await projects.list({ scope: { mode: "public" } })).map((p) => p.id)).toEqual(["pub"]);
+        expect(await projects.count({ scope: { mode: "public" } })).toBe(1);
+        expect((await projects.list({ scope: { mode: "all" } })).map((p) => p.id).sort()).toEqual(["prv", "pub"]);
+        expect((await projects.list({ scope: { mode: "member", projectIds: ["prv"] } })).map((p) => p.id).sort()).toEqual(["prv", "pub"]);
+        expect((await projects.list({ scope: { mode: "member", projectIds: [] } })).map((p) => p.id)).toEqual(["pub"]);
+        expect((await projects.list()).map((p) => p.id).sort()).toEqual(["prv", "pub"]); // no scope → all (back-compat)
+      });
+
       it("quality gate config round-trips and clears", async () => {
         await projects.create("qg", "2026-06-06T00:00:00.000Z");
         expect(await projects.getQualityGate("qg")).toBeNull();

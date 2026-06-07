@@ -1,6 +1,6 @@
 import type {
   Project, Run, TrendPoint, RunEvent, CompareResult,
-  SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry,
+  SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry, ProjectVisibility,
 } from "@allure-station/shared";
 
 export interface AppConfigInfo {
@@ -13,6 +13,8 @@ export interface ApiClient {
   getConfig(): Promise<AppConfigInfo>;
   listProjects(opts?: { q?: string; limit?: number; offset?: number }): Promise<{ items: Project[]; total: number }>;
   createProject(id: string): Promise<Project>;
+  getProject(id: string): Promise<Project>;
+  setVisibility(id: string, visibility: ProjectVisibility): Promise<Project>;
   listRuns(projectId: string, opts?: { status?: string; limit?: number; offset?: number }): Promise<Run[]>;
   sendResults(projectId: string, files: File[]): Promise<{ runId: string }>;
   generate(projectId: string): Promise<Run>;
@@ -66,6 +68,9 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     listProjects: (opts = {}) => listWithTotal<Project>(`/projects${qs(opts)}`),
     createProject: (id) =>
       json<Project>("/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }),
+    getProject: (id) => json<Project>(`/projects/${id}`, { method: "GET" }),
+    setVisibility: (id, visibility) =>
+      json<Project>(`/projects/${id}/visibility`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ visibility }) }),
     listRuns: (projectId, opts = {}) => json<Run[]>(`/projects/${projectId}/runs${qs(opts)}`, { method: "GET" }),
     sendResults: (projectId, files) => {
       const fd = new FormData();

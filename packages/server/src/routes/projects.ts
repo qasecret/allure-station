@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { createProjectSchema, projectIdSchema } from "@allure-station/shared";
+import { createProjectSchema, projectIdSchema, setVisibilityRequestSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { parsePage } from "./pagination.js";
-import { authenticate, authorizeProjectCreate, authorizeProjectWrite } from "../auth.js";
+import { authenticate, authorizeProjectCreate, authorizeProjectOwner, authorizeProjectWrite, visibilityScopeFor } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
+import { readGate } from "./read-gate.js";
 
 export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.post("/projects", async (req, reply) => {
@@ -28,9 +29,11 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     let page;
     try { page = parsePage(req.query as Record<string, unknown>); }
     catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    // Filter to what the caller may see — private projects don't leak to non-members via the list.
+    const scope = await visibilityScopeFor(deps, await authenticate(deps, req));
     const [items, total] = await Promise.all([
-      deps.projects.list({ q, ...page }),
-      deps.projects.count({ q }),
+      deps.projects.list({ q, ...page, scope }),
+      deps.projects.count({ q, scope }),
     ]);
     reply.header("X-Total-Count", String(total));
     return items;
@@ -39,7 +42,7 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
   app.get("/projects/:id", async (req, reply) => {
     const id = projectIdSchema.safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.code(400).send({ error: id.error.message });
-    const project = await deps.projects.get(id.data);
+    const project = await readGate(deps, req, id.data);
     return project ? project : reply.code(404).send({ error: "not found" });
   });
 
@@ -58,5 +61,18 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     }
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "project_deleted", targetType: "project", targetId: id, projectId: id });
     return reply.code(204).send();
+  });
+
+  // Set project visibility (public/private) — owner or global admin.
+  app.put("/projects/:id/visibility", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!(await deps.projects.get(id))) return reply.code(404).send({ error: "not found" });
+    const principal = await authenticate(deps, req);
+    if ((await authorizeProjectOwner(deps, principal, id)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    const parsed = setVisibilityRequestSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
+    await deps.projects.setVisibility(id, parsed.data.visibility);
+    await recordAudit(deps, { ...actorFromPrincipal(principal), action: "project_visibility_set", targetType: "project", targetId: id, projectId: id, metadata: { visibility: parsed.data.visibility } });
+    return reply.send(await deps.projects.get(id));
   });
 }

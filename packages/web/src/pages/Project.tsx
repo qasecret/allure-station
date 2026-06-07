@@ -112,6 +112,25 @@ export function Project() {
   );
 }
 
+// Public/private toggle — rendered inside the owner/admin-only MembersPanel.
+function VisibilityControl({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const { data: project } = useQuery({ queryKey: ["project", projectId], queryFn: () => api.getProject(projectId) });
+  const setVis = useMutation({
+    mutationFn: (visibility: "public" | "private") => api.setVisibility(projectId, visibility),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["project", projectId] }),
+  });
+  if (!project) return null;
+  const next = project.visibility === "private" ? "public" : "private";
+  return (
+    <div style={{ margin: "6px 0" }}>
+      Visibility: <strong>{project.visibility}</strong>
+      <button style={{ marginLeft: 8 }} disabled={setVis.isPending} onClick={() => setVis.mutate(next)}>Make {next}</button>
+      {project.visibility === "private" && <span style={{ marginLeft: 8, color: "var(--muted)" }}>(reads require viewer+; the badge stays public)</span>}
+    </div>
+  );
+}
+
 // Run selector label: timestamp — status (passed/total) — branch@commit · env (metadata when present).
 function runLabel(r: Run): string {
   const base = `${r.createdAt} — ${r.status}${r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}`;
@@ -153,6 +172,7 @@ function MembersPanel({ projectId }: { projectId: string }) {
   return (
     <details style={{ padding: "4px 12px", fontSize: 13 }}>
       <summary style={{ cursor: "pointer" }}>Members ({members.length})</summary>
+      <VisibilityControl projectId={projectId} />
       <form onSubmit={(e) => { e.preventDefault(); setMember.mutate(); }} style={{ display: "flex", gap: 8, alignItems: "center", margin: "6px 0", flexWrap: "wrap" }}>
         <input aria-label="Member email" type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         <select aria-label="Member role" value={role} onChange={(e) => setRole(e.target.value as ProjectRole)}>

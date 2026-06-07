@@ -2,12 +2,14 @@ import type { FastifyInstance } from "fastify";
 import { runStatusSchema, type RunStatus, type TrendPoint } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { parsePage } from "./pagination.js";
+import { readGate } from "./read-gate.js";
 
 const TREND_LIMIT = 30;
 
 export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
-  app.get("/projects/:projectId/trends", async (req): Promise<TrendPoint[]> => {
+  app.get("/projects/:projectId/trends", async (req, reply): Promise<TrendPoint[] | undefined> => {
     const { projectId } = req.params as { projectId: string };
+    if (!(await readGate(deps, req, projectId))) { reply.code(404).send({ error: "not found" }); return; }
     const ready = await deps.runs.listReadyByProject(projectId, TREND_LIMIT);
     return ready
       .filter((r): r is typeof r & { stats: NonNullable<typeof r.stats> } => r.stats !== null)
@@ -16,6 +18,7 @@ export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
 
   app.get("/projects/:projectId/runs", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
+    if (!(await readGate(deps, req, projectId))) return reply.code(404).send({ error: "not found" });
     const { status, branch } = req.query as { status?: string; branch?: string };
     if (status !== undefined && !runStatusSchema.safeParse(status).success) {
       return reply.code(400).send({ error: `invalid status "${status}"` });
@@ -35,6 +38,7 @@ export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
 
   app.get("/projects/:projectId/runs/:runId", async (req, reply) => {
     const { projectId, runId } = req.params as { projectId: string; runId: string };
+    if (!(await readGate(deps, req, projectId))) return reply.code(404).send({ error: "not found" });
     const run = await deps.runs.get(runId);
     if (!run || run.projectId !== projectId) return reply.code(404).send({ error: "not found" });
     return run;
@@ -44,6 +48,7 @@ export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
     const { projectId, runId } = req.params as { projectId: string; runId: string };
     const rel = (req.params as Record<string, string>)["*"] || "index.html";
     if (rel.split("/").some((seg) => seg === "..")) return reply.code(400).send({ error: "bad path" });
+    if (!(await readGate(deps, req, projectId))) return reply.code(404).send({ error: "not found" });
 
     const run = await deps.runs.get(runId);
     if (!run || run.projectId !== projectId || run.status !== "ready") {

@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `visibility` text DEFAULT 'public' NOT NULL;

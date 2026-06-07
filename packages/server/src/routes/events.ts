@@ -1,11 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import type { AppDeps } from "../app.js";
+import { readGate } from "./read-gate.js";
 
 export function registerEventRoutes(app: FastifyInstance, deps: AppDeps): void {
   // SSE stream of run lifecycle events for one project. Clients reconnect automatically (EventSource).
   app.get("/projects/:projectId/events", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
-    if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
+    // Gate before hijacking the socket (a private project's stream requires read access).
+    if (!(await readGate(deps, req, projectId))) return reply.code(404).send({ error: "not found" });
 
     reply.hijack(); // we own the socket from here; Fastify will not send a response
     const res = reply.raw;

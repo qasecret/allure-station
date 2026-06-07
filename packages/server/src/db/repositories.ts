@@ -1,6 +1,10 @@
 import { and, asc, count, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import type { Project, QualityGateConfig, Run, RunMetadata, RunStats, RunStatus } from "@allure-station/shared";
+import type { Project, ProjectVisibility, QualityGateConfig, Run, RunMetadata, RunStats, RunStatus } from "@allure-station/shared";
+
+// Who may see which projects in a listing. admin → all; member → public ∪ their projects;
+// public → public only (anonymous / token).
+export type VisibilityScope = { mode: "all" } | { mode: "public" } | { mode: "member"; projectIds: string[] };
 import type { Db } from "./client.js";
 import { apiTokens, memberships, notifications, projects, runs, testResults } from "./schema.sqlite.js";
 
@@ -15,13 +19,25 @@ export class ProjectRepository {
   constructor(private readonly db: Db) {}
 
   async create(id: string, now: string): Promise<Project> {
-    await this.db.insert(projects).values({ id, createdAt: now });
-    return { id, createdAt: now, latestRunId: null };
+    await this.db.insert(projects).values({ id, createdAt: now, visibility: "public" });
+    return { id, createdAt: now, latestRunId: null, visibility: "public" };
   }
 
-  async list(opts: { q?: string; limit?: number; offset?: number } = {}): Promise<Project[]> {
-    const where = opts.q ? likeContains(projects.id, opts.q) : undefined;
-    let query = this.db.select().from(projects).where(where).orderBy(projects.id).$dynamic();
+  // Combine the optional substring filter with the visibility scope into a single WHERE.
+  #where(q: string | undefined, scope: VisibilityScope | undefined) {
+    const clauses = [];
+    if (q) clauses.push(likeContains(projects.id, q));
+    if (scope?.mode === "public") clauses.push(eq(projects.visibility, "public"));
+    if (scope?.mode === "member") {
+      clauses.push(scope.projectIds.length > 0
+        ? or(eq(projects.visibility, "public"), inArray(projects.id, scope.projectIds))!
+        : eq(projects.visibility, "public"));
+    }
+    return clauses.length === 0 ? undefined : clauses.length === 1 ? clauses[0] : and(...clauses);
+  }
+
+  async list(opts: { q?: string; limit?: number; offset?: number; scope?: VisibilityScope } = {}): Promise<Project[]> {
+    let query = this.db.select().from(projects).where(this.#where(opts.q, opts.scope)).orderBy(projects.id).$dynamic();
     // SQLite/libsql rejects OFFSET without LIMIT (syntax error), and LIMIT -1 isn't valid on pg —
     // so offset only applies alongside a limit (which is how pagination is actually used).
     if (opts.limit !== undefined) {
@@ -29,18 +45,21 @@ export class ProjectRepository {
       if (opts.offset !== undefined) query = query.offset(opts.offset);
     }
     const rows = await query;
-    return Promise.all(rows.map((r) => this.#withLatest(r.id, r.createdAt)));
+    return Promise.all(rows.map((r) => this.#withLatest(r.id, r.createdAt, r.visibility as ProjectVisibility)));
   }
 
-  async count(opts: { q?: string } = {}): Promise<number> {
-    const where = opts.q ? likeContains(projects.id, opts.q) : undefined;
-    const [row] = await this.db.select({ c: count() }).from(projects).where(where);
+  async count(opts: { q?: string; scope?: VisibilityScope } = {}): Promise<number> {
+    const [row] = await this.db.select({ c: count() }).from(projects).where(this.#where(opts.q, opts.scope));
     return Number(row?.c ?? 0);
   }
 
   async get(id: string): Promise<Project | null> {
     const [row] = await this.db.select().from(projects).where(eq(projects.id, id));
-    return row ? this.#withLatest(row.id, row.createdAt) : null;
+    return row ? this.#withLatest(row.id, row.createdAt, row.visibility as ProjectVisibility) : null;
+  }
+
+  async setVisibility(id: string, visibility: ProjectVisibility): Promise<void> {
+    await this.db.update(projects).set({ visibility }).where(eq(projects.id, id));
   }
 
   async remove(id: string): Promise<void> {
@@ -67,14 +86,14 @@ export class ProjectRepository {
     await this.db.update(projects).set({ qualityGate: config ? JSON.stringify(config) : null }).where(eq(projects.id, id));
   }
 
-  async #withLatest(id: string, createdAt: string): Promise<Project> {
+  async #withLatest(id: string, createdAt: string, visibility: ProjectVisibility): Promise<Project> {
     const [latest] = await this.db
       .select({ id: runs.id })
       .from(runs)
       .where(eq(runs.projectId, id))
       .orderBy(desc(runs.createdAt))
       .limit(1);
-    return { id, createdAt, latestRunId: latest?.id ?? null };
+    return { id, createdAt, latestRunId: latest?.id ?? null, visibility };
   }
 }
 
