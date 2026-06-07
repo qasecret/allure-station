@@ -3,6 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { GlobalRole } from "@allure-station/shared";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
+import { Topbar } from "@/components/Topbar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function Users() {
   const { user, isLoading } = useAuth();
@@ -24,35 +31,45 @@ export function Users() {
   });
 
   if (isLoading) return null;
-  if (user?.role !== "admin") return <main style={{ padding: 16 }}><p>Admins only.</p></main>;
+  if (user?.role !== "admin") return (<><Topbar title="Users" /><main className="grid flex-1 place-items-center p-6"><p className="text-sm text-muted-foreground">Admins only.</p></main></>);
 
   return (
-    <main style={{ maxWidth: 640, margin: "0 auto", padding: 16 }}>
-      <h1 style={{ fontSize: 20 }}>Users</h1>
-      <form onSubmit={(e) => { e.preventDefault(); create.mutate(); }} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "12px 0" }}>
-        <input aria-label="New user email" type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <input aria-label="New user password" type="password" placeholder="password (8+)" value={password} onChange={(e) => setPassword(e.target.value)} required />
-        <select aria-label="New user role" value={role} onChange={(e) => setRole(e.target.value as GlobalRole)}>
-          <option value="user">user</option>
-          <option value="admin">admin</option>
-        </select>
-        <button type="submit" disabled={create.isPending}>Add user</button>
-      </form>
-      {error && <p role="alert" style={{ color: "#d9534f" }}>{error}</p>}
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-        <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th>Email</th><th>Role</th><th></th></tr></thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id} style={{ borderTop: "1px solid var(--border)" }}>
-              <td>{u.email}</td>
-              <td>{u.role}</td>
-              <td style={{ textAlign: "right" }}>
-                {u.id !== user.id && <button onClick={() => remove.mutate(u.id)}>Remove</button>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </main>
+    <>
+      <Topbar title="Users" />
+      <main className="flex-1 overflow-auto p-6">
+        <div className="mx-auto max-w-3xl space-y-6">
+          <Card>
+            <CardContent className="p-4">
+              <form onSubmit={(e) => { e.preventDefault(); if (create.isPending) return; create.mutate(); }} className="flex flex-wrap items-end gap-2">
+                <Input aria-label="New user email" type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="max-w-[220px]" />
+                <Input aria-label="New user password" type="password" placeholder="password (8+)" value={password} onChange={(e) => setPassword(e.target.value)} required className="max-w-[200px]" />
+                <Select value={role} onValueChange={(v) => setRole(v as GlobalRole)}>
+                  <SelectTrigger aria-label="New user role" className="w-[120px]"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="user">user</SelectItem><SelectItem value="admin">admin</SelectItem></SelectContent>
+                </Select>
+                <Button type="submit" disabled={create.isPending}>Add user</Button>
+              </form>
+              {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader><TableRow><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead /></TableRow></TableHeader>
+                <TableBody>
+                  {users.map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell>{u.email}</TableCell>
+                      <TableCell><Badge variant="secondary">{u.role}</Badge></TableCell>
+                      <TableCell className="text-right">{u.id !== user.id && <Button variant="ghost" size="sm" disabled={remove.isPending && remove.variables === u.id} onClick={() => remove.mutate(u.id)}>Remove</Button>}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    </>
   );
 }
