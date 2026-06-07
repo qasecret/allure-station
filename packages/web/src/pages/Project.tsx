@@ -1,9 +1,19 @@
-import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import type { ProjectRole, Run, RunStatus, TestDiff, TrendPoint } from "@allure-station/shared";
+import type { Run, RunStatus, TestDiff, TrendPoint } from "@allure-station/shared";
+import { Settings, FileBarChart } from "lucide-react";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
+import { Topbar } from "@/components/Topbar";
+import { RunSelector } from "@/components/RunSelector";
+import { UploadDialog } from "@/components/UploadDialog";
+import { EmptyState } from "@/components/EmptyState";
+import { StatusBadge } from "@/components/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
 const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
@@ -11,9 +21,9 @@ const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, read
 export function Project() {
   const { id = "" } = useParams();
   const qc = useQueryClient();
-  const fileInput = useRef<HTMLInputElement>(null);
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [branchFilter, setBranchFilter] = useState("");
+  const { user } = useAuth();
 
   useEffect(() => {
     setSelectedRun(null);
@@ -57,18 +67,6 @@ export function Project() {
     return unsub;
   }, [id, qc]);
 
-  const upload = useMutation({
-    mutationFn: async () => {
-      const files = Array.from(fileInput.current?.files ?? []);
-      await api.sendResults(id, files);
-      await api.generate(id);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["runs", id] });
-      qc.invalidateQueries({ queryKey: ["trends", id] });
-    },
-  });
-
   // Distinct branches across loaded runs power a client-side filter (no extra fetch).
   const branches = Array.from(new Set(runs.map((r) => r.branch).filter((b): b is string => !!b))).sort();
   const visibleRuns = branchFilter ? runs.filter((r) => r.branch === branchFilter) : runs;
@@ -80,256 +78,77 @@ export function Project() {
 
   if (projectDenied) {
     return (
-      <main style={{ maxWidth: 420, margin: "12vh auto", padding: 16, textAlign: "center" }}>
-        <h1 style={{ fontSize: 18 }}>Project unavailable</h1>
-        <p style={{ color: "var(--muted)" }}>This project is private or doesn’t exist. If it’s private, <Link to="/login">sign in</Link> with an account that has access.</p>
-      </main>
+      <>
+        <Topbar title="Project unavailable" />
+        <main className="grid flex-1 place-items-center p-6">
+          <div className="max-w-sm text-center">
+            <h1 className="text-lg font-semibold">Project unavailable</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This project is private or doesn't exist. If it's private, <Link to="/login" className="text-primary underline">sign in</Link> with an account that has access.
+            </p>
+          </div>
+        </main>
+      </>
     );
   }
 
   return (
-    <main style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-      <header style={{ borderBottom: "1px solid var(--border)" }}>
-        <div style={{ padding: 12, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <strong>{id}</strong>
-          <input aria-label="Allure result files" type="file" multiple ref={fileInput} />
-          <button disabled={upload.isPending} onClick={() => upload.mutate()}>Upload &amp; generate</button>
+    <>
+      <Topbar
+        title={<span className="flex items-center gap-2"><Link to="/" className="text-muted-foreground hover:text-foreground">Projects</Link><span className="text-muted-foreground">/</span><span className="truncate">{id}</span></span>}
+        actions={<>
           {branches.length > 0 && (
-            <select aria-label="Filter by branch" value={branchFilter} onChange={(e) => { setBranchFilter(e.target.value); setSelectedRun(null); }}>
-              <option value="">all branches</option>
-              {branches.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
+            <Select value={branchFilter || "__all"} onValueChange={(v) => { setBranchFilter(v === "__all" ? "" : v); setSelectedRun(null); }}>
+              <SelectTrigger aria-label="Filter by branch" className="w-[150px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all">all branches</SelectItem>
+                {branches.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+              </SelectContent>
+            </Select>
           )}
-          <select aria-label="Select run to view" value={current ?? ""} onChange={(e) => setSelectedRun(e.target.value)}>
-            {visibleRuns.map((r) => (
-              <option key={r.id} value={r.id}>{runLabel(r)}</option>
-            ))}
-          </select>
+          {current && <RunSelector runs={visibleRuns} value={current} onChange={setSelectedRun} />}
+          <UploadDialog projectId={id} />
+          {user && <Button variant="outline" size="icon" asChild aria-label="Project settings"><Link to={`/projects/${id}/settings`}><Settings className="size-4" /></Link></Button>}
+        </>}
+      />
+      <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {cur && <StatusBadge status={cur.status} />}
+          {cur?.stats && (
+            <span className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{cur.stats.passed}/{cur.stats.total}</span> passed
+              {cur.stats.failed ? <> · <span className="text-status-fail">{cur.stats.failed} failed</span></> : null}
+              {cur.stats.broken ? <> · <span className="text-status-broken">{cur.stats.broken} broken</span></> : null}
+              {cur.stats.flaky ? <> · <span className="text-status-broken">{cur.stats.flaky} flaky</span></> : null}
+              {cur.stats.durationMs ? <> · {(cur.stats.durationMs / 1000).toFixed(1)}s</> : null}
+            </span>
+          )}
+          {cur?.branch && <Badge variant="secondary">branch {cur.branch}{cur.commit ? `@${cur.commit.slice(0, 7)}` : ""}</Badge>}
+          {cur?.environment && <Badge variant="secondary">env {cur.environment}</Badge>}
+          {cur?.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">CI build ↗</a>}
         </div>
-        {cur && (cur.branch || cur.environment || cur.ciUrl) && (
-          <div style={{ padding: "0 12px 6px", fontSize: 12, color: "var(--muted)", display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {cur.branch && <span>branch <code>{cur.branch}</code>{cur.commit ? <> @ <code>{cur.commit.slice(0, 7)}</code></> : null}</span>}
-            {cur.environment && <span>env <code>{cur.environment}</code></span>}
-            {cur.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer">CI build ↗</a>}
-          </div>
-        )}
-        <div style={{ padding: "4px 12px" }}><TrendBar points={trends} /></div>
-        <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
-        <MembersPanel projectId={id} />
-        <AuditPanel projectId={id} />
-      </header>
-      {current
-        ? <iframe title="report" style={{ flex: 1, border: 0 }}
-            src={`/api/projects/${id}/runs/${current}/report/index.html`} />
-        : <p style={{ padding: 12 }}>No ready report yet. Upload results to generate one.</p>}
-    </main>
-  );
-}
-
-// Public/private toggle — rendered inside the owner/admin-only MembersPanel.
-function VisibilityControl({ projectId }: { projectId: string }) {
-  const qc = useQueryClient();
-  const { data: project } = useQuery({ queryKey: ["project", projectId], queryFn: () => api.getProject(projectId) });
-  const setVis = useMutation({
-    mutationFn: (visibility: "public" | "private") => api.setVisibility(projectId, visibility),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["project", projectId] }),
-  });
-  if (!project) return null;
-  const next = project.visibility === "private" ? "public" : "private";
-  return (
-    <div style={{ margin: "6px 0" }}>
-      Visibility: <strong>{project.visibility}</strong>
-      <button style={{ marginLeft: 8 }} disabled={setVis.isPending} onClick={() => setVis.mutate(next)}>Make {next}</button>
-      {project.visibility === "private" && <span style={{ marginLeft: 8, color: "var(--muted)" }}>(reads require viewer+; the badge stays public)</span>}
-    </div>
-  );
-}
-
-// Run selector label: timestamp — status (passed/total) — branch@commit · env (metadata when present).
-function runLabel(r: Run): string {
-  const base = `${r.createdAt} — ${r.status}${r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}`;
-  const meta = [
-    r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : null,
-    r.environment || null,
-  ].filter(Boolean).join(" · ");
-  return meta ? `${base} — ${meta}` : base;
-}
-
-const PROJECT_ROLES: ProjectRole[] = ["viewer", "maintainer", "owner"];
-
-// Member management — visible only to owners/admins. We detect that capability by attempting the
-// owner-gated members fetch: a 401 (non-owner) leaves the query in error state and we render nothing.
-function MembersPanel({ projectId }: { projectId: string }) {
-  const { user } = useAuth();
-  const qc = useQueryClient();
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<ProjectRole>("viewer");
-
-  const { data: members, isError } = useQuery({
-    queryKey: ["members", projectId],
-    queryFn: () => api.listMembers(projectId),
-    enabled: !!user, // anonymous can't manage members; skip the request entirely
-    retry: false,
-  });
-
-  const setMember = useMutation({
-    mutationFn: () => api.setMember(projectId, email, role),
-    onSuccess: () => { setEmail(""); qc.invalidateQueries({ queryKey: ["members", projectId] }); },
-  });
-  const removeMember = useMutation({
-    mutationFn: (userId: string) => api.removeMember(projectId, userId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["members", projectId] }),
-  });
-
-  if (!user || isError || members === undefined) return null;
-
-  return (
-    <details style={{ padding: "4px 12px", fontSize: 13 }}>
-      <summary style={{ cursor: "pointer" }}>Members ({members.length})</summary>
-      <VisibilityControl projectId={projectId} />
-      <form onSubmit={(e) => { e.preventDefault(); setMember.mutate(); }} style={{ display: "flex", gap: 8, alignItems: "center", margin: "6px 0", flexWrap: "wrap" }}>
-        <input aria-label="Member email" type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <select aria-label="Member role" value={role} onChange={(e) => setRole(e.target.value as ProjectRole)}>
-          {PROJECT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
-        <button type="submit" disabled={setMember.isPending}>Add / update</button>
-      </form>
-      <ul style={{ margin: "2px 0", paddingLeft: 16 }}>
-        {members.map((m) => (
-          <li key={m.userId}>
-            {m.email} — {m.role}
-            <button style={{ marginLeft: 8 }} onClick={() => removeMember.mutate(m.userId)}>remove</button>
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
-}
-
-// Per-project audit trail — owner/admin only (detected like MembersPanel: the owner-gated fetch
-// errors for everyone else and the panel hides).
-function AuditPanel({ projectId }: { projectId: string }) {
-  const { user } = useAuth();
-  const { data, isError } = useQuery({
-    queryKey: ["project-audit", projectId],
-    queryFn: () => api.listProjectAudit(projectId, { limit: 50 }),
-    enabled: !!user,
-    retry: false,
-  });
-  if (!user || isError || data === undefined) return null;
-  return (
-    <details style={{ padding: "4px 12px", fontSize: 13 }}>
-      <summary style={{ cursor: "pointer" }}>Audit ({data.total})</summary>
-      <ul style={{ margin: "2px 0", paddingLeft: 16, maxHeight: 200, overflow: "auto" }}>
-        {data.items.map((e) => (
-          <li key={e.id}>
-            <span style={{ color: "var(--muted)" }}>{new Date(e.at).toLocaleString()}</span>{" "}
-            <strong>{e.action}</strong> by {e.actorLabel}
-            {e.metadata ? <span style={{ color: "var(--muted)" }}> {JSON.stringify(e.metadata)}</span> : null}
-          </li>
-        ))}
-      </ul>
-      {data.items.length === 0 && <p style={{ color: "var(--muted)" }}>No events yet.</p>}
-    </details>
-  );
-}
-
-function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: Run[] }) {
-  // readyRuns arrive newest-first. Default: compare the newest (target) against the previous (base),
-  // auto-following the latest run until the user picks their own pair.
-  const [base, setBase] = useState<string>("");
-  const [target, setTarget] = useState<string>("");
-  const [touched, setTouched] = useState(false);
-
-  // Re-default when switching projects.
-  useEffect(() => { setTouched(false); }, [projectId]);
-
-  // Keyed on the ready-run id set (stable string) rather than the array identity, so this runs only
-  // when the set of ready runs actually changes — not on every parent re-render.
-  const readyIds = readyRuns.map((r) => r.id).join(",");
-  useEffect(() => {
-    const ids = readyIds ? readyIds.split(",") : [];
-    if (touched) {
-      // Respect the user's choice; only clamp if a selected run disappeared.
-      setTarget((t) => (ids.includes(t) ? t : ids[0] ?? ""));
-      setBase((b) => (ids.includes(b) ? b : ids[1] ?? ""));
-    } else {
-      setTarget(ids[0] ?? "");
-      setBase(ids[1] ?? "");
-    }
-  }, [readyIds, touched]);
-
-  const { data: diff } = useQuery({
-    queryKey: ["compare", projectId, base, target],
-    queryFn: () => api.compareRuns(projectId, base, target),
-    enabled: !!base && !!target && base !== target,
-  });
-
-  if (readyRuns.length < 2) return null;
-
-  const pick = (set: (v: string) => void) => (e: { target: { value: string } }) => { setTouched(true); set(e.target.value); };
-
-  const runOption = (r: Run) => (
-    <option key={r.id} value={r.id}>{r.createdAt}{r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}</option>
-  );
-
-  return (
-    <details style={{ padding: "4px 12px", fontSize: 13 }}>
-      <summary style={{ cursor: "pointer" }}>Compare runs</summary>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "6px 0" }}>
-        <label>Base <select value={base} onChange={pick(setBase)}>{readyRuns.map(runOption)}</select></label>
-        <span>→</span>
-        <label>Target <select value={target} onChange={pick(setTarget)}>{readyRuns.map(runOption)}</select></label>
+        <div className="flex flex-wrap gap-3">
+          <Card className="min-w-[260px] flex-1"><CardContent className="p-4"><TrendBar points={trends} /></CardContent></Card>
+          <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
+        </div>
+        {current
+          ? <iframe title="report" className="min-h-0 flex-1 rounded-lg border bg-card"
+              src={`/api/projects/${id}/runs/${current}/report/index.html`} />
+          : <EmptyState icon={FileBarChart} title="No ready report yet" description="Upload results to generate one." action={<UploadDialog projectId={id} />} />}
       </div>
-      {base === target ? (
-        <p style={{ color: "var(--muted)" }}>Pick two different runs.</p>
-      ) : !diff ? (
-        <p style={{ color: "var(--muted)" }}>Loading comparison…</p>
-      ) : (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-          <Bucket label="Newly failing" color="#d9534f" tests={diff.newlyFailing} />
-          <Bucket label="Fixed" color="#5cb85c" tests={diff.fixed} />
-          <Bucket label="Flaky" color="#f0ad4e" tests={diff.flaky} />
-          <Bucket label="Still failing" color="#d9534f" tests={diff.stillFailing} />
-          <Bucket label="Added" color="#5bc0de" tests={diff.added} />
-          <Bucket label="Removed" color="var(--muted)" tests={diff.removed} />
-        </div>
-      )}
-    </details>
-  );
-}
-
-function Bucket({ label, color, tests }: { label: string; color: string; tests: TestDiff[] }) {
-  if (tests.length === 0) return null;
-  return (
-    <div style={{ minWidth: 180 }}>
-      <div style={{ fontWeight: 600, color }}>{label} ({tests.length})</div>
-      <ul style={{ margin: "2px 0", paddingLeft: 16 }}>
-        {tests.map((t) => (
-          <li key={(t.historyId ?? t.fullName ?? t.name) + label}>
-            {t.name}
-            {t.baseStatus && t.targetStatus ? <span style={{ color: "var(--muted)" }}> ({t.baseStatus}→{t.targetStatus})</span> : null}
-          </li>
-        ))}
-      </ul>
-    </div>
+    </>
   );
 }
 
 function TrendBar({ points }: { points: TrendPoint[] }) {
-  if (points.length < 2) {
-    return <span style={{ color: "var(--muted)", fontSize: 12 }}>Trends appear after 2+ runs.</span>;
-  }
+  if (points.length < 2) return <span className="text-xs text-muted-foreground">Trends appear after 2+ runs.</span>;
   const w = points.length * 14;
   const anyFlaky = points.some((p) => (p.stats.flaky ?? 0) > 0);
   const maxDur = Math.max(1, ...points.map((p) => p.stats.durationMs ?? 0));
   const anyDur = points.some((p) => (p.stats.durationMs ?? 0) > 0);
-  // Duration sparkline: per-run total test time, normalized to the max, drawn over the bars.
-  const durLine = points
-    .map((p, i) => `${i * 14 + 5},${42 - Math.round(((p.stats.durationMs ?? 0) / maxDur) * 36) - 2}`)
-    .join(" ");
+  const durLine = points.map((p, i) => `${i * 14 + 5},${42 - Math.round(((p.stats.durationMs ?? 0) / maxDur) * 36) - 2}`).join(" ");
   return (
-    <span style={{ display: "inline-flex", gap: 8, alignItems: "flex-end" }}>
+    <div className="flex items-end gap-3">
       <svg width={w} height={44} role="img" aria-label="pass-rate, flakiness and duration trend by run">
         {points.map((p, i) => {
           const rate = p.stats.total ? p.stats.passed / p.stats.total : 0;
@@ -338,19 +157,86 @@ function TrendBar({ points }: { points: TrendPoint[] }) {
           const durMs = p.stats.durationMs ?? 0;
           return (
             <g key={p.runId}>
-              <rect x={i * 14} y={42 - h} width={10} height={h}
-                fill={p.stats.failed || p.stats.broken ? "#d9534f" : "#5cb85c"}>
+              <rect x={i * 14} y={42 - h} width={10} height={h} fill={p.stats.failed || p.stats.broken ? "#EF4444" : "#22C55E"}>
                 <title>{`${new Date(p.createdAt).toLocaleString()}\n${p.stats.passed}/${p.stats.total} passed, ${p.stats.failed} failed, ${p.stats.broken} broken${flaky ? `, ${flaky} flaky` : ""}${durMs ? `\n${(durMs / 1000).toFixed(1)}s total` : ""}`}</title>
               </rect>
-              {/* Orange cap marks runs with flaky tests (the flakiness trend); clamped into view. */}
-              {flaky > 0 && <rect x={i * 14} y={Math.max(0, 42 - h - 3)} width={10} height={3} fill="#f0ad4e" pointerEvents="none" />}
+              {flaky > 0 && <rect x={i * 14} y={Math.max(0, 42 - h - 3)} width={10} height={3} fill="#F59E0B" pointerEvents="none" />}
             </g>
           );
         })}
-        {anyDur && <polyline points={durLine} fill="none" stroke="#337ab7" strokeWidth={1} opacity={0.7} pointerEvents="none" />}
+        {anyDur && <polyline points={durLine} fill="none" stroke="hsl(var(--primary))" strokeWidth={1.5} opacity={0.8} pointerEvents="none" />}
       </svg>
-      {anyFlaky && <span style={{ fontSize: 11, color: "#f0ad4e" }}>▮ flaky</span>}
-      {anyDur && <span style={{ fontSize: 11, color: "#337ab7" }}>╱ duration</span>}
-    </span>
+      <div className="flex flex-col gap-0.5 text-[11px] text-muted-foreground">
+        <span className="font-medium text-foreground">Trend</span>
+        {anyFlaky && <span className="text-status-broken">▮ flaky</span>}
+        {anyDur && <span className="text-primary">╱ duration</span>}
+      </div>
+    </div>
+  );
+}
+
+function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: Run[] }) {
+  const [base, setBase] = useState<string>("");
+  const [target, setTarget] = useState<string>("");
+  const [touched, setTouched] = useState(false);
+  useEffect(() => { setTouched(false); }, [projectId]);
+  const readyIds = readyRuns.map((r) => r.id).join(",");
+  useEffect(() => {
+    const ids = readyIds ? readyIds.split(",") : [];
+    if (touched) {
+      setTarget((t) => (ids.includes(t) ? t : ids[0] ?? ""));
+      setBase((b) => (ids.includes(b) ? b : ids[1] ?? ""));
+    } else { setTarget(ids[0] ?? ""); setBase(ids[1] ?? ""); }
+  }, [readyIds, touched]);
+  const { data: diff } = useQuery({
+    queryKey: ["compare", projectId, base, target],
+    queryFn: () => api.compareRuns(projectId, base, target),
+    enabled: !!base && !!target && base !== target,
+  });
+  if (readyRuns.length < 2) return null;
+  const pick = (set: (v: string) => void) => (v: string) => { setTouched(true); set(v); };
+  const runItems = readyRuns.map((r) => (
+    <SelectItem key={r.id} value={r.id}>{r.createdAt}{r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}</SelectItem>
+  ));
+  return (
+    <Card className="min-w-[300px] flex-1">
+      <CardContent className="space-y-3 p-4">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-medium">Compare</span>
+          <Select value={base} onValueChange={pick(setBase)}><SelectTrigger className="h-8 w-[180px]" aria-label="Base run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
+          <span className="text-muted-foreground">→</span>
+          <Select value={target} onValueChange={pick(setTarget)}><SelectTrigger className="h-8 w-[180px]" aria-label="Target run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
+        </div>
+        {base === target ? <p className="text-sm text-muted-foreground">Pick two different runs.</p>
+          : !diff ? <p className="text-sm text-muted-foreground">Loading comparison…</p>
+          : (
+            <div className="flex flex-wrap gap-4">
+              <Bucket label="Newly failing" color="text-status-fail" tests={diff.newlyFailing} />
+              <Bucket label="Fixed" color="text-status-pass" tests={diff.fixed} />
+              <Bucket label="Flaky" color="text-status-broken" tests={diff.flaky} />
+              <Bucket label="Still failing" color="text-status-fail" tests={diff.stillFailing} />
+              <Bucket label="Added" color="text-primary" tests={diff.added} />
+              <Bucket label="Removed" color="text-muted-foreground" tests={diff.removed} />
+            </div>
+          )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function Bucket({ label, color, tests }: { label: string; color: string; tests: TestDiff[] }) {
+  if (tests.length === 0) return null;
+  return (
+    <div className="min-w-[180px]">
+      <div className={`text-sm font-semibold ${color}`}>{label} ({tests.length})</div>
+      <ul className="mt-1 space-y-0.5 text-sm">
+        {tests.map((t) => (
+          <li key={(t.historyId ?? t.fullName ?? t.name) + label}>
+            {t.name}
+            {t.baseStatus && t.targetStatus ? <span className="text-muted-foreground"> ({t.baseStatus}→{t.targetStatus})</span> : null}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
