@@ -28,10 +28,13 @@ export default {
           primary: "hsl(var(--sidebar-primary))",
           "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
         },
-        brand: { DEFAULT: "#12B58F", light: "#1ED6B2", dark: "#0A916F" },
-        status: { pass: "#22C55E", fail: "#EF4444", broken: "#F59E0B", skip: "#94A3B8" },
+        brand: { DEFAULT: "#1DB980", light: "#34D3A0", dark: "#15966A" },
+        status: { pass: "#1DB980", fail: "#EF4444", broken: "#F59E0B", skip: "#94A3B8" },
       },
-      fontFamily: { sans: ["DM Sans", "system-ui", "-apple-system", "sans-serif"] },
+      fontFamily: {
+        sans: ["Geist", "system-ui", "-apple-system", "sans-serif"],
+        mono: ["Geist Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+      },
       borderRadius: { lg: "var(--radius)", md: "calc(var(--radius) - 2px)", sm: "calc(var(--radius) - 4px)" },
       keyframes: {
         "accordion-down": { from: { height: "0" }, to: { height: "var(--radix-accordion-content-height)" } },
