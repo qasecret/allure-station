@@ -19,6 +19,10 @@ function testConfig(): AppConfig {
     redisUrl: undefined,
     version: "test",
     publicUrl: undefined,
+    sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
+    cookieSecure: false,
+    adminEmail: undefined,
+    adminPassword: undefined,
     storage: { backend: "local", localRoot: join(root, "storage") },
   };
 }
@@ -33,6 +37,23 @@ describe("buildRuntime", () => {
       const p = await deps.projects.create("p", deps.now());
       expect(p.id).toBe("p");
       expect(await deps.projects.get("p")).toBeTruthy();
+      // No admin seeded when ADMIN_EMAIL/PASSWORD unset.
+      expect(await deps.users.count()).toBe(0);
+    } finally {
+      stopReconciler();
+      await bus.close();
+      await queue.close();
+    }
+  });
+
+  it("seeds (and re-upserts) the global admin from ADMIN_EMAIL/ADMIN_PASSWORD", async () => {
+    const cfg = { ...testConfig(), adminEmail: "boss@x.com", adminPassword: "supersecret1" };
+    const { deps, queue, bus, stopReconciler } = await buildRuntime(cfg);
+    try {
+      const admin = await deps.users.findByEmail("boss@x.com");
+      expect(admin?.role).toBe("admin");
+      expect(admin?.passwordHash.startsWith("scrypt$")).toBe(true);
+      expect(await deps.users.count()).toBe(1);
     } finally {
       stopReconciler();
       await bus.close();

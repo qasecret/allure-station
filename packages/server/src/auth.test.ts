@@ -1,5 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
-import { generateToken, hashToken, tokenPrefix, authorizeProjectWrite } from "./auth.js";
+import { describe, it, expect } from "vitest";
+import {
+  generateToken, hashToken, tokenPrefix,
+  authorizeProjectWrite, authorizeProjectOwner, authorizeProjectCreate, requireAdmin,
+  type Principal,
+} from "./auth.js";
+import type { ProjectRole } from "@allure-station/shared";
 import type { AppDeps } from "./app.js";
 
 describe("token helpers", () => {
@@ -14,33 +19,66 @@ describe("token helpers", () => {
   });
 });
 
-// Minimal deps stub exposing just the token surface authorizeProjectWrite uses.
-function depsWith(tokensForHash: Record<string, { id: string; projectId: string }>, count: number): AppDeps {
+// Minimal deps stub: users.count, tokens.countByProject, and one membership(project,user)->role.
+function depsWith(opts: { userCount?: number; tokenCount?: number; membership?: { role: ProjectRole } | null } = {}): AppDeps {
   return {
-    tokens: {
-      countByProject: async () => count,
-      findByHash: async (h: string) => tokensForHash[h] ?? null,
-      touchLastUsed: vi.fn(async () => {}),
-    },
-    now: () => "2026-06-06T00:00:00.000Z",
+    users: { count: async () => opts.userCount ?? 0 },
+    tokens: { countByProject: async () => opts.tokenCount ?? 0 },
+    memberships: { find: async () => (opts.membership ? { role: opts.membership.role } : null) },
   } as unknown as AppDeps;
 }
 
+const anon: Principal = { kind: "anonymous" };
+const admin: Principal = { kind: "user", userId: "a", email: "a@x", role: "admin", createdAt: "t" };
+const plainUser: Principal = { kind: "user", userId: "u", email: "u@x", role: "user", createdAt: "t" };
+const tokenFor = (projectId: string): Principal => ({ kind: "token", projectId, tokenId: "t1" });
+
 describe("authorizeProjectWrite", () => {
-  it("is open when the project has no tokens", async () => {
-    expect(await authorizeProjectWrite(depsWith({}, 0), "p", undefined)).toBe("ok");
+  it("zero-config: anonymous is allowed only when no users AND no tokens exist", async () => {
+    expect(await authorizeProjectWrite(depsWith({ userCount: 0, tokenCount: 0 }), anon, "p")).toBe("ok");
+    expect(await authorizeProjectWrite(depsWith({ userCount: 0, tokenCount: 1 }), anon, "p")).toBe("unauthorized");
+    // Once any account exists, the open-token fallback is closed even for a token-less project.
+    expect(await authorizeProjectWrite(depsWith({ userCount: 1, tokenCount: 0 }), anon, "p")).toBe("unauthorized");
   });
 
-  it("requires a token once any exist", async () => {
-    const deps = depsWith({}, 1);
-    expect(await authorizeProjectWrite(deps, "p", undefined)).toBe("unauthorized");
-    expect(await authorizeProjectWrite(deps, "p", "Bearer nope")).toBe("unauthorized");
+  it("a project-scoped token authorizes its own project only", async () => {
+    expect(await authorizeProjectWrite(depsWith(), tokenFor("p"), "p")).toBe("ok");
+    expect(await authorizeProjectWrite(depsWith(), tokenFor("p"), "other")).toBe("unauthorized");
   });
 
-  it("accepts a valid token scoped to the project and rejects a foreign-project token", async () => {
-    const token = "ast_secret";
-    const deps = depsWith({ [hashToken(token)]: { id: "t1", projectId: "p" } }, 1);
-    expect(await authorizeProjectWrite(deps, "p", `Bearer ${token}`)).toBe("ok");
-    expect(await authorizeProjectWrite(deps, "other", `Bearer ${token}`)).toBe("unauthorized");
+  it("admin always; member needs maintainer+; viewer cannot write", async () => {
+    expect(await authorizeProjectWrite(depsWith({ userCount: 1 }), admin, "p")).toBe("ok");
+    expect(await authorizeProjectWrite(depsWith({ userCount: 1, membership: { role: "maintainer" } }), plainUser, "p")).toBe("ok");
+    expect(await authorizeProjectWrite(depsWith({ userCount: 1, membership: { role: "owner" } }), plainUser, "p")).toBe("ok");
+    expect(await authorizeProjectWrite(depsWith({ userCount: 1, membership: { role: "viewer" } }), plainUser, "p")).toBe("unauthorized");
+    expect(await authorizeProjectWrite(depsWith({ userCount: 1, membership: null }), plainUser, "p")).toBe("unauthorized");
+  });
+});
+
+describe("authorizeProjectOwner", () => {
+  it("admin or owner only; tokens never qualify", async () => {
+    expect(await authorizeProjectOwner(depsWith(), admin, "p")).toBe("ok");
+    expect(await authorizeProjectOwner(depsWith({ membership: { role: "owner" } }), plainUser, "p")).toBe("ok");
+    expect(await authorizeProjectOwner(depsWith({ membership: { role: "maintainer" } }), plainUser, "p")).toBe("unauthorized");
+    expect(await authorizeProjectOwner(depsWith(), tokenFor("p"), "p")).toBe("unauthorized");
+  });
+});
+
+describe("authorizeProjectCreate", () => {
+  it("admin always; anonymous only in zero-config; tokens never", async () => {
+    expect(await authorizeProjectCreate(depsWith({ userCount: 5 }), admin)).toBe("ok");
+    expect(await authorizeProjectCreate(depsWith({ userCount: 1 }), plainUser)).toBe("unauthorized");
+    expect(await authorizeProjectCreate(depsWith({ userCount: 0 }), anon)).toBe("ok");
+    expect(await authorizeProjectCreate(depsWith({ userCount: 1 }), anon)).toBe("unauthorized");
+    expect(await authorizeProjectCreate(depsWith(), tokenFor("p"))).toBe("unauthorized");
+  });
+});
+
+describe("requireAdmin", () => {
+  it("only global admins pass", () => {
+    expect(requireAdmin(admin)).toBe("ok");
+    expect(requireAdmin(plainUser)).toBe("unauthorized");
+    expect(requireAdmin(anon)).toBe("unauthorized");
+    expect(requireAdmin(tokenFor("p"))).toBe("unauthorized");
   });
 });

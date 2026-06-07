@@ -1,14 +1,14 @@
 import { basename } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { AppDeps } from "../app.js";
-import { authorizeProjectWrite } from "../auth.js";
+import { requireProjectWrite } from "../auth.js";
 
 export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void {
   // Upload result files; stages them in storage under a new pending run.
   app.post("/projects/:projectId/send-results", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
-    if ((await authorizeProjectWrite(deps, projectId, req.headers.authorization)) === "unauthorized") {
+    if ((await requireProjectWrite(deps, req, projectId)) === "unauthorized") {
       return reply.code(401).send({ error: "unauthorized" });
     }
 
@@ -38,7 +38,7 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
     const { projectId } = req.params as { projectId: string };
     const { runId } = req.query as { runId?: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
-    if ((await authorizeProjectWrite(deps, projectId, req.headers.authorization)) === "unauthorized") {
+    if ((await requireProjectWrite(deps, req, projectId)) === "unauthorized") {
       return reply.code(401).send({ error: "unauthorized" });
     }
     let pending;

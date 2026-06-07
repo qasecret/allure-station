@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import multipart from "@fastify/multipart";
+import cookie from "@fastify/cookie";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import fastifyStatic from "@fastify/static";
@@ -7,6 +8,9 @@ import type { ProjectRepository, RunRepository } from "./db/repositories.js";
 import type { TestResultRepository } from "./db/test-results-repo.js";
 import type { ApiTokenRepository } from "./db/api-tokens-repo.js";
 import type { NotificationRepository } from "./db/notifications-repo.js";
+import type { UserRepository } from "./db/user-repo.js";
+import type { SessionRepository } from "./db/session-repo.js";
+import type { MembershipRepository } from "./db/membership-repo.js";
 import type { StorageDriver } from "./storage/driver.js";
 import type { JobQueue } from "@allure-station/worker";
 import type { EventBus } from "./events/bus.js";
@@ -20,6 +24,9 @@ import { registerTokenRoutes } from "./routes/tokens.js";
 import { registerBadgeRoutes } from "./routes/badge.js";
 import { registerQualityGateRoutes } from "./routes/quality-gate.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
+import { registerAuthRoutes } from "./routes/auth.js";
+import { registerUserRoutes } from "./routes/users.js";
+import { registerMemberRoutes } from "./routes/members.js";
 
 export interface AppDeps {
   projects: ProjectRepository;
@@ -27,12 +34,17 @@ export interface AppDeps {
   testResults: TestResultRepository;
   tokens: ApiTokenRepository;
   notifications: NotificationRepository;
+  users: UserRepository;
+  sessions: SessionRepository;
+  memberships: MembershipRepository;
   storage: StorageDriver;
   queue: JobQueue;
   bus: EventBus;
   workDir: string;
   version: string;
   publicUrl: string | undefined; // absolute base for links in notifications (no trailing slash)
+  sessionTtlMs: number;          // session cookie/row lifetime
+  cookieSecure: boolean;         // mark the session cookie Secure (https-only) in prod
   now: () => string;
   newId: () => string;
 }
@@ -40,6 +52,7 @@ export interface AppDeps {
 export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify({ logger: false });
   app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024, files: 5000 } });
+  app.register(cookie); // parses req.cookies; we set Set-Cookie manually with explicit attributes
   app.decorate("deps", deps);
 
   // Register @fastify/static once with serve:false so reply.sendFile is decorated
@@ -58,6 +71,9 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       registerBadgeRoutes(api, deps);
       registerQualityGateRoutes(api, deps);
       registerNotificationRoutes(api, deps);
+      registerAuthRoutes(api, deps);
+      registerUserRoutes(api, deps);
+      registerMemberRoutes(api, deps);
     },
     { prefix: "/api" },
   );

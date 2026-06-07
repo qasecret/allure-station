@@ -44,6 +44,38 @@ export const notifications = sqliteTable("notifications", {
   byProject: index("idx_notifications_project").on(t.projectId),
 }));
 
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  role: text("role").notNull(), // admin|user (global role)
+  createdAt: text("created_at").notNull(),
+}, (t) => ({
+  byEmail: uniqueIndex("idx_users_email").on(t.email),
+}));
+
+export const sessions = sqliteTable("sessions", {
+  id: text("id").primaryKey(),
+  tokenHash: text("token_hash").notNull(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+}, (t) => ({
+  byHash: uniqueIndex("idx_sessions_hash").on(t.tokenHash), // unique: a cookie resolves to exactly one session
+  byUser: index("idx_sessions_user").on(t.userId),
+}));
+
+export const memberships = sqliteTable("memberships", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: text("role").notNull(), // owner|maintainer|viewer (per-project role)
+  createdAt: text("created_at").notNull(),
+}, (t) => ({
+  byProjectUser: uniqueIndex("idx_memberships_project_user").on(t.projectId, t.userId), // one role per (project,user)
+  byUser: index("idx_memberships_user").on(t.userId),
+}));
+
 export const testResults = sqliteTable("test_results", {
   id: text("id").primaryKey(),
   runId: text("run_id").notNull().references(() => runs.id, { onDelete: "cascade" }),

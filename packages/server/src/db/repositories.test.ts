@@ -5,6 +5,9 @@ import { ProjectRepository, RunRepository } from "./repositories.js";
 import { TestResultRepository } from "./test-results-repo.js";
 import { ApiTokenRepository } from "./api-tokens-repo.js";
 import { NotificationRepository } from "./notifications-repo.js";
+import { UserRepository } from "./user-repo.js";
+import { SessionRepository } from "./session-repo.js";
+import { MembershipRepository } from "./membership-repo.js";
 import type { TestSummary } from "@allure-station/shared";
 
 // Deterministic id generator per handle (matches the deps `newId` contract).
@@ -19,6 +22,9 @@ type BackendHandle = {
   tests: TestResultRepository;
   tokens: ApiTokenRepository;
   notifs: NotificationRepository;
+  users: UserRepository;
+  sessions: SessionRepository;
+  members: MembershipRepository;
   cleanup: () => Promise<void>;
 };
 
@@ -39,6 +45,9 @@ const backends: Backend[] = [
         tests: new TestResultRepository(db, idGen()),
         tokens: new ApiTokenRepository(db, idGen()),
         notifs: new NotificationRepository(db, idGen()),
+        users: new UserRepository(db, idGen()),
+        sessions: new SessionRepository(db, idGen()),
+        members: new MembershipRepository(db, idGen()),
         cleanup: async () => {},
       };
     },
@@ -62,13 +71,16 @@ if (process.env.PG_TEST_URL) {
       // Cast to any: Db is typed as LibSQLDatabase which lacks execute(); the pg
       // handle cast as Db at the factory retains execute() at runtime (node-postgres).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (db as any).execute(sql`TRUNCATE notifications, api_tokens, test_results, runs, projects CASCADE`);
+      await (db as any).execute(sql`TRUNCATE memberships, sessions, users, notifications, api_tokens, test_results, runs, projects CASCADE`);
       return {
         projects: new ProjectRepository(db),
         runs: new RunRepository(db),
         tests: new TestResultRepository(db, idGen()),
         tokens: new ApiTokenRepository(db, idGen()),
         notifs: new NotificationRepository(db, idGen()),
+        users: new UserRepository(db, idGen()),
+        sessions: new SessionRepository(db, idGen()),
+        members: new MembershipRepository(db, idGen()),
         cleanup: async () => {},
       };
     },
@@ -82,10 +94,13 @@ for (const backend of backends) {
     let tests: TestResultRepository;
     let tokens: ApiTokenRepository;
     let notifs: NotificationRepository;
+    let users: UserRepository;
+    let sessions: SessionRepository;
+    let members: MembershipRepository;
     let cleanup: () => Promise<void>;
 
     beforeEach(async () => {
-      ({ projects, runs, tests, tokens, notifs, cleanup } = await backend.make());
+      ({ projects, runs, tests, tokens, notifs, users, sessions, members, cleanup } = await backend.make());
     });
 
     // -------------------------------------------------------------------------
@@ -403,6 +418,90 @@ for (const backend of backends) {
         await notifs.create("p", "webhook", "https://h/x", ["completed"], "2026-06-06T00:00:01.000Z");
         await projects.remove("p");
         expect(await notifs.countByProject("p")).toBe(0);
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // UserRepository / SessionRepository / MembershipRepository (Phase 5b)
+    // -------------------------------------------------------------------------
+
+    describe("UserRepository", () => {
+      it("create + findByEmail/findById + list + count; email is unique", async () => {
+        const u = await users.create("a@x.com", "scrypt$aa$bb", "admin", "2026-06-06T00:00:00.000Z");
+        expect(u).toMatchObject({ email: "a@x.com", role: "admin" });
+        expect(await users.findByEmail("a@x.com")).toMatchObject({ id: u.id, passwordHash: "scrypt$aa$bb" });
+        expect((await users.findById(u.id))?.email).toBe("a@x.com");
+        expect(await users.count()).toBe(1);
+        await expect(users.create("a@x.com", "h", "user", "2026-06-06T00:00:00.000Z")).rejects.toThrow();
+      });
+
+      it("upsertByEmail inserts then updates password/role in place", async () => {
+        const first = await users.upsertByEmail("admin@x.com", "h1", "admin", "2026-06-06T00:00:00.000Z");
+        const second = await users.upsertByEmail("admin@x.com", "h2", "admin", "2026-06-06T00:01:00.000Z");
+        expect(second.id).toBe(first.id);
+        expect((await users.findByEmail("admin@x.com"))?.passwordHash).toBe("h2");
+        expect(await users.count()).toBe(1);
+      });
+
+      it("remove deletes the user and cascades to its sessions and memberships", async () => {
+        await projects.create("p", "2026-06-06T00:00:00.000Z");
+        const u = await users.create("u@x.com", "h", "user", "2026-06-06T00:00:00.000Z");
+        await sessions.create("sess-hash", u.id, "2026-06-06T00:00:00.000Z", "2026-06-13T00:00:00.000Z");
+        await members.upsert("p", u.id, "viewer", "2026-06-06T00:00:00.000Z");
+
+        expect(await users.remove(u.id)).toBe(true);
+        expect(await users.findById(u.id)).toBeNull();
+        expect(await sessions.findByHash("sess-hash")).toBeNull();
+        expect(await members.find("p", u.id)).toBeNull();
+        expect(await users.remove(u.id)).toBe(false); // already gone
+      });
+    });
+
+    describe("SessionRepository", () => {
+      it("create + findByHash + removeByHash + deleteExpired", async () => {
+        const u = await users.create("u@x.com", "h", "user", "2026-06-06T00:00:00.000Z");
+        await sessions.create("live", u.id, "2026-06-06T00:00:00.000Z", "2026-06-13T00:00:00.000Z");
+        await sessions.create("stale", u.id, "2026-06-01T00:00:00.000Z", "2026-06-02T00:00:00.000Z");
+        expect((await sessions.findByHash("live"))?.userId).toBe(u.id);
+
+        await sessions.deleteExpired("2026-06-06T00:00:00.000Z"); // removes 'stale' (expired 06-02)
+        expect(await sessions.findByHash("stale")).toBeNull();
+        expect(await sessions.findByHash("live")).not.toBeNull();
+
+        await sessions.removeByHash("live");
+        expect(await sessions.findByHash("live")).toBeNull();
+      });
+    });
+
+    describe("MembershipRepository", () => {
+      beforeEach(async () => {
+        await projects.create("p", "2026-06-06T00:00:00.000Z");
+      });
+
+      it("upsert sets then updates a role; one role per (project,user)", async () => {
+        const u = await users.create("u@x.com", "h", "user", "2026-06-06T00:00:00.000Z");
+        const m1 = await members.upsert("p", u.id, "viewer", "2026-06-06T00:00:00.000Z");
+        const m2 = await members.upsert("p", u.id, "maintainer", "2026-06-06T00:01:00.000Z");
+        expect(m2.id).toBe(m1.id);
+        expect((await members.find("p", u.id))?.role).toBe("maintainer");
+      });
+
+      it("listByProject joins the user email, ordered by email", async () => {
+        const a = await users.create("a@x.com", "h", "user", "2026-06-06T00:00:00.000Z");
+        const b = await users.create("b@x.com", "h", "user", "2026-06-06T00:00:00.000Z");
+        await members.upsert("p", b.id, "owner", "2026-06-06T00:00:00.000Z");
+        await members.upsert("p", a.id, "viewer", "2026-06-06T00:00:00.000Z");
+        const list = await members.listByProject("p");
+        expect(list.map((m) => m.email)).toEqual(["a@x.com", "b@x.com"]);
+        expect(list[0]).toMatchObject({ email: "a@x.com", role: "viewer" });
+      });
+
+      it("remove is scoped and removing the project cascades to memberships", async () => {
+        const u = await users.create("u@x.com", "h", "user", "2026-06-06T00:00:00.000Z");
+        await members.upsert("p", u.id, "viewer", "2026-06-06T00:00:00.000Z");
+        expect(await members.remove("other", u.id)).toBe(false);
+        await projects.remove("p");
+        expect(await members.find("p", u.id)).toBeNull();
       });
     });
   });

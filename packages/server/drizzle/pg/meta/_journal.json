@@ -50,6 +50,13 @@
       "when": 1780789266424,
       "tag": "0006_curvy_stark_industries",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780792497984,
+      "tag": "0007_special_ego",
+      "breakpoints": true
     }
   ]
 }

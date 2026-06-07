@@ -2,7 +2,7 @@ import { and, asc, count, desc, eq, inArray, isNull, lt, or, sql } from "drizzle
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { Project, QualityGateConfig, Run, RunStats, RunStatus } from "@allure-station/shared";
 import type { Db } from "./client.js";
-import { apiTokens, notifications, projects, runs, testResults } from "./schema.sqlite.js";
+import { apiTokens, memberships, notifications, projects, runs, testResults } from "./schema.sqlite.js";
 
 // Case-sensitive substring LIKE with wildcards escaped, so user input like "a_b" matches literally
 // rather than treating _/% as wildcards. Works on sqlite + pg via the ESCAPE clause.
@@ -53,6 +53,7 @@ export class ProjectRepository {
     );
     await this.db.delete(apiTokens).where(eq(apiTokens.projectId, id));
     await this.db.delete(notifications).where(eq(notifications.projectId, id));
+    await this.db.delete(memberships).where(eq(memberships.projectId, id));
     await this.db.delete(runs).where(eq(runs.projectId, id));
     await this.db.delete(projects).where(eq(projects.id, id));
   }

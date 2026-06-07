@@ -5,6 +5,7 @@ import { InProcessBus, RedisBus } from "./events/bus.js";
 import type { EventBus } from "./events/bus.js";
 import { buildDeps } from "./deps.js";
 import { reconcileStale, startReconciler } from "./reconcile.js";
+import { hashPassword } from "./password.js";
 import type { AppConfig } from "./config.js";
 import type { AppDeps } from "./app.js";
 
@@ -34,10 +35,21 @@ export async function buildRuntime(config: AppConfig): Promise<Runtime> {
   await migrate();
 
   const deps = buildDeps(config, queue, db, bus);
+  await seedAdmin(deps, config);
   await reconcileStale(deps.runs, config.generateStaleMs, Date.now());
   const stopReconciler = startReconciler(deps.runs, config.generateStaleMs);
 
   return { deps, queue, bus, stopReconciler };
+}
+
+/**
+ * Idempotently seed/upsert the global admin from ADMIN_EMAIL/ADMIN_PASSWORD. This is how an operator
+ * bootstraps the first account; rotating ADMIN_PASSWORD across restarts resets the admin's password.
+ */
+async function seedAdmin(deps: AppDeps, config: AppConfig): Promise<void> {
+  if (!config.adminEmail || !config.adminPassword) return;
+  const hash = await hashPassword(config.adminPassword);
+  await deps.users.upsertByEmail(config.adminEmail, hash, "admin", deps.now());
 }
 
 /** Register a one-shot graceful shutdown on SIGTERM/SIGINT (idempotent across both signals). */

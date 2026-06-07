@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
-import type { Run, RunStatus, TestDiff, TrendPoint } from "@allure-station/shared";
+import type { ProjectRole, Run, RunStatus, TestDiff, TrendPoint } from "@allure-station/shared";
 import { api } from "../main.js";
+import { useAuth } from "../auth.js";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
 const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
@@ -80,12 +81,63 @@ export function Project() {
         </div>
         <div style={{ padding: "4px 12px" }}><TrendBar points={trends} /></div>
         <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
+        <MembersPanel projectId={id} />
       </header>
       {current
         ? <iframe title="report" style={{ flex: 1, border: 0 }}
             src={`/api/projects/${id}/runs/${current}/report/index.html`} />
         : <p style={{ padding: 12 }}>No ready report yet. Upload results to generate one.</p>}
     </main>
+  );
+}
+
+const PROJECT_ROLES: ProjectRole[] = ["viewer", "maintainer", "owner"];
+
+// Member management — visible only to owners/admins. We detect that capability by attempting the
+// owner-gated members fetch: a 401 (non-owner) leaves the query in error state and we render nothing.
+function MembersPanel({ projectId }: { projectId: string }) {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<ProjectRole>("viewer");
+
+  const { data: members, isError } = useQuery({
+    queryKey: ["members", projectId],
+    queryFn: () => api.listMembers(projectId),
+    enabled: !!user, // anonymous can't manage members; skip the request entirely
+    retry: false,
+  });
+
+  const setMember = useMutation({
+    mutationFn: () => api.setMember(projectId, email, role),
+    onSuccess: () => { setEmail(""); qc.invalidateQueries({ queryKey: ["members", projectId] }); },
+  });
+  const removeMember = useMutation({
+    mutationFn: (userId: string) => api.removeMember(projectId, userId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["members", projectId] }),
+  });
+
+  if (!user || isError || members === undefined) return null;
+
+  return (
+    <details style={{ padding: "4px 12px", fontSize: 13 }}>
+      <summary style={{ cursor: "pointer" }}>Members ({members.length})</summary>
+      <form onSubmit={(e) => { e.preventDefault(); setMember.mutate(); }} style={{ display: "flex", gap: 8, alignItems: "center", margin: "6px 0", flexWrap: "wrap" }}>
+        <input aria-label="Member email" type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <select aria-label="Member role" value={role} onChange={(e) => setRole(e.target.value as ProjectRole)}>
+          {PROJECT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        <button type="submit" disabled={setMember.isPending}>Add / update</button>
+      </form>
+      <ul style={{ margin: "2px 0", paddingLeft: 16 }}>
+        {members.map((m) => (
+          <li key={m.userId}>
+            {m.email} — {m.role}
+            <button style={{ marginLeft: 8 }} onClick={() => removeMember.mutate(m.userId)}>remove</button>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

@@ -12,6 +12,10 @@ export interface AppConfig {
   redisUrl: string | undefined;
   version: string;
   publicUrl: string | undefined; // absolute base URL for links in notifications (no trailing slash)
+  sessionTtlMs: number;
+  cookieSecure: boolean;
+  adminEmail: string | undefined;    // seeded/upserted as a global admin on startup (with adminPassword)
+  adminPassword: string | undefined;
   storage: {
     backend: StorageBackend;
     localRoot: string;
@@ -102,6 +106,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     redisUrl: env.REDIS_URL,
     version: env.APP_VERSION ?? "0.1.0",
     publicUrl: env.PUBLIC_URL ? env.PUBLIC_URL.replace(/\/$/, "") : undefined,
+    sessionTtlMs: parsePositiveInt("SESSION_TTL_MS", env.SESSION_TTL_MS, 7 * 24 * 60 * 60 * 1000),
+    // Default Secure cookies on when serving over https (PUBLIC_URL); COOKIE_SECURE overrides explicitly.
+    cookieSecure:
+      env.COOKIE_SECURE !== undefined && env.COOKIE_SECURE !== ""
+        ? env.COOKIE_SECURE === "true"
+        : (env.PUBLIC_URL ?? "").startsWith("https://"),
+    adminEmail: env.ADMIN_EMAIL || undefined,
+    adminPassword: env.ADMIN_PASSWORD || undefined,
     storage,
   };
 }

@@ -2,13 +2,17 @@ import type { FastifyInstance } from "fastify";
 import { createProjectSchema, projectIdSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { parsePage } from "./pagination.js";
-import { authorizeProjectWrite } from "../auth.js";
+import { authenticate, authorizeProjectCreate, requireProjectWrite } from "../auth.js";
 
 export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.post("/projects", async (req, reply) => {
     const parsed = createProjectSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
 
+    // Creating a project is admin-only once accounts exist; open in zero-config mode (no users).
+    if ((await authorizeProjectCreate(deps, await authenticate(deps, req))) === "unauthorized") {
+      return reply.code(401).send({ error: "unauthorized" });
+    }
     if (await deps.projects.get(parsed.data.id)) {
       return reply.code(409).send({ error: "project already exists" });
     }
@@ -39,7 +43,7 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
   app.delete("/projects/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!(await deps.projects.get(id))) return reply.code(404).send({ error: "not found" });
-    if ((await authorizeProjectWrite(deps, id, req.headers.authorization)) === "unauthorized") {
+    if ((await requireProjectWrite(deps, req, id)) === "unauthorized") {
       return reply.code(401).send({ error: "unauthorized" });
     }
     await deps.projects.remove(id);

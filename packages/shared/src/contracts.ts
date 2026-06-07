@@ -143,6 +143,43 @@ export const apiTokenSchema = z.object({
 export const createdTokenSchema = apiTokenSchema.extend({ token: z.string() });
 export const createTokenRequestSchema = z.object({ name: z.string().min(1).max(64) });
 
+// --- Accounts & RBAC (Phase 5b) ---
+export const globalRoleSchema = z.enum(["admin", "user"]);
+export const projectRoleSchema = z.enum(["owner", "maintainer", "viewer"]);
+
+export const userSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  role: globalRoleSchema,
+  createdAt: z.string(),
+});
+// The authenticated principal returned by GET /auth/me (or null when anonymous).
+export const sessionUserSchema = userSchema;
+
+export const loginRequestSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+export const createUserRequestSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8).max(200),
+  role: globalRoleSchema.default("user"),
+});
+
+export const membershipSchema = z.object({
+  id: z.string(),
+  projectId: projectIdSchema,
+  userId: z.string(),
+  role: projectRoleSchema,
+  createdAt: z.string(),
+});
+// Member listing joins the user so the UI can show emails without N+1 lookups.
+export const membershipWithUserSchema = membershipSchema.extend({ email: z.string().email() });
+export const setMembershipRequestSchema = z.object({
+  email: z.string().email(),
+  role: projectRoleSchema,
+});
+
 export type ProjectId = z.infer<typeof projectIdSchema>;
 export type Run = z.infer<typeof runSchema>;
 export type RunStats = z.infer<typeof runStatsSchema>;
@@ -161,3 +198,12 @@ export type RunSummary = z.infer<typeof runSummarySchema>;
 export type NotificationTrigger = z.infer<typeof notificationTriggerSchema>;
 export type NotificationKind = z.infer<typeof notificationKindSchema>;
 export type Notification = z.infer<typeof notificationSchema>;
+export type GlobalRole = z.infer<typeof globalRoleSchema>;
+export type ProjectRole = z.infer<typeof projectRoleSchema>;
+export type User = z.infer<typeof userSchema>;
+export type SessionUser = z.infer<typeof sessionUserSchema>;
+export type LoginRequest = z.infer<typeof loginRequestSchema>;
+export type CreateUserRequest = z.infer<typeof createUserRequestSchema>;
+export type Membership = z.infer<typeof membershipSchema>;
+export type MembershipWithUser = z.infer<typeof membershipWithUserSchema>;
+export type SetMembershipRequest = z.infer<typeof setMembershipRequestSchema>;

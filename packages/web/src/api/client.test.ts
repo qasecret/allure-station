@@ -69,6 +69,31 @@ describe("api client", () => {
     vi.unstubAllGlobals();
   });
 
+  it("me/login/logout hit the auth endpoints with credentials included", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => null }) // me
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: "u", email: "a@x", role: "admin", createdAt: "t" }) }) // login
+      .mockResolvedValueOnce({ ok: true }); // logout (204, no body parsed)
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+
+    expect(await client.me()).toBeNull();
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/auth/me", expect.objectContaining({ method: "GET", credentials: "include" }));
+
+    const user = await client.login("a@x", "pw");
+    expect(user.role).toBe("admin");
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/auth/login", expect.objectContaining({ method: "POST", credentials: "include" }));
+
+    await client.logout(); // must not throw despite no JSON body
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/auth/logout", expect.objectContaining({ method: "POST", credentials: "include" }));
+  });
+
+  it("setMember PUTs the project members endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ userId: "u", email: "a@x", role: "viewer" }) });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.setMember("p", "a@x", "viewer");
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/members", expect.objectContaining({ method: "PUT", credentials: "include" }));
+  });
+
   it("subscribeRuns is a no-op when EventSource is unavailable", () => {
     vi.stubGlobal("EventSource", undefined);
     const client = createClient("/api");
