@@ -15,10 +15,11 @@ Push test results from any CI, generate rich reports, track trends and flakiness
 ![Node](https://img.shields.io/badge/Node-%E2%89%A520-339933?logo=nodedotjs&logoColor=white)
 ![Fastify](https://img.shields.io/badge/API-Fastify%204-black)
 ![Self-hosted](https://img.shields.io/badge/Self--hosted-✓-success)
+[![License](https://img.shields.io/github/license/qasecret/allure-station?color=success)](LICENSE)
 
 </div>
 
-> Built for engineering teams that run tests in CI and need a durable, shared home for the results — with history, trends, and access control. A single TypeScript codebase on **Allure 3**: Allure is **embedded** (no Java CLI, no bash glue), storage and database are **pluggable**, and it scales from one container to a multi-replica deployment **by configuration, not rewrite**.
+> A single TypeScript codebase on **Allure 3**: Allure is **embedded** (no Java CLI, no bash glue), storage and database are **pluggable**, and it scales from one container to a multi-replica deployment **by configuration, not rewrite**.
 
 ---
 
@@ -47,7 +48,7 @@ Push test results from any CI, generate rich reports, track trends and flakiness
 
 The React UI lets you browse projects and runs, view the embedded Allure report, track trends, and diff runs side-by-side — with light/dark themes.
 
-<!-- Drop PNGs into docs/img/ (see docs/img/README.md for the naming) and uncomment:
+<!-- Add the four PNGs to docs/img/ (naming: docs/img/README.md), then delete the note below and uncomment this block:
 <p align="center">
   <img src="docs/img/projects.png" alt="Project list" width="49%" />
   <img src="docs/img/report.png" alt="Embedded Allure report" width="49%" />
@@ -58,7 +59,7 @@ The React UI lets you browse projects and runs, view the embedded Allure report,
 </p>
 -->
 
-> 📸 _Screenshots coming soon. Run the [quick start](#quick-start) to see it live at `http://localhost:5050`._
+> 📸 Prefer to see it for yourself first — the [quick start](#quick-start) brings up the full UI at `http://localhost:5050` in one command.
 
 ## Architecture
 
@@ -118,6 +119,8 @@ docs/           architecture spec, per-slice plans, FUTURE-WORK.md
 **Prerequisites:** Docker is the only requirement to run it. (To develop: Node ≥ 20 and pnpm 9 — see [Development](#development).)
 
 ```bash
+git clone https://github.com/qasecret/allure-station.git
+cd allure-station
 docker compose -f docker/docker-compose.yml up
 ```
 
@@ -243,7 +246,7 @@ Push results from any pipeline with the reusable **[GitHub Action](github-action
 **Quality gates &amp; PR checks.** Configure a per-project gate; on `pull_request` the action posts a **commit status + PR comment** (pass/fail, gate verdict, stats, trend delta) and fails on a breach.
 
 ```bash
-curl -XPUT host/api/projects/my-app/quality-gate -H 'content-type: application/json' \
+curl -XPUT https://allure.example.com/api/projects/my-app/quality-gate -H 'content-type: application/json' \
   -d '{"maxFailures":0,"minPassRate":0.95,"minTests":1}'
 ```
 
@@ -258,7 +261,7 @@ Rules (all configured must pass): `maxFailures` (failed+broken ≤ N) · `minTes
 **Notifications** — Slack or generic webhook, fired when a run finishes:
 
 ```bash
-curl -XPOST host/api/projects/my-app/notifications -H 'content-type: application/json' \
+curl -XPOST https://allure.example.com/api/projects/my-app/notifications -H 'content-type: application/json' \
   -d '{"kind":"slack","url":"https://hooks.slack.com/services/…","events":["failed","gate_failed","regression"]}'
 ```
 
