@@ -8,4 +8,7 @@ describe("donutDash", () => {
     expect(donutDash(0, 16).dash).toBeCloseTo(0, 3);
     expect(donutDash(50, 16).dash).toBeCloseTo(c / 2, 3);
   });
+  it("treats non-finite input as 0", () => {
+    expect(donutDash(NaN, 16).dash).toBe(0);
+  });
 });

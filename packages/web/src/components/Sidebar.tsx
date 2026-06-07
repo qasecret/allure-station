@@ -12,11 +12,11 @@ export function SidebarContent() {
   const { user } = useAuth();
   return (
     <div className="flex h-full flex-col gap-2 p-3">
-      <NavLink to="/" className="flex items-center gap-2 px-2 py-2">
+      <NavLink to="/" aria-label="Allure Station home" className="flex items-center gap-2 px-2 py-2 pr-10">
         <img src="/favicon.svg" alt="" className="size-7" />
         <span className="font-semibold tracking-tight">Allure Station</span>
       </NavLink>
-      <nav className="flex flex-col gap-1">
+      <nav aria-label="Main" className="flex flex-col gap-1">
         <NavLink to="/" end className={linkCls}><LayoutGrid className="size-4" /> Projects</NavLink>
         {user?.role === "admin" && <NavLink to="/users" className={linkCls}><Users className="size-4" /> Users</NavLink>}
         {user?.role === "admin" && <NavLink to="/audit" className={linkCls}><ScrollText className="size-4" /> Audit</NavLink>}

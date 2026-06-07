@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, Monitor, Sun, Moon, ChevronsUpDown } from "lucide-react";
+import { toast } from "sonner";
 import { useAuth } from "@/auth";
 import { getTheme, setTheme, type Theme } from "@/theme";
 import { Button } from "@/components/ui/button";
@@ -19,14 +20,20 @@ const THEMES: { key: Theme; label: string; icon: typeof Sun }[] = [
 export function UserMenu() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [theme, setT] = useState<Theme>(getTheme());
+  const [theme, setThemeState] = useState<Theme>(getTheme());
+  useEffect(() => {
+    const handler = () => setThemeState(getTheme());
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
+  const chooseTheme = (t: Theme) => { setThemeState(t); setTheme(t); };
 
   const themeRow = (
     <div className="flex gap-1 px-2 py-1.5">
       {THEMES.map(({ key, label, icon: Icon }) => (
         <Button key={key} variant={theme === key ? "secondary" : "ghost"} size="sm"
           className="flex-1 h-7" aria-label={label} title={label}
-          onClick={() => { setT(key); setTheme(key); }}>
+          onClick={() => chooseTheme(key)}>
           <Icon className="size-3.5" />
         </Button>
       ))}
@@ -42,7 +49,7 @@ export function UserMenu() {
     );
   }
 
-  const initials = user.email.slice(0, 2).toUpperCase();
+  const initials = user.email.split("@")[0].slice(0, 2).toUpperCase();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -57,7 +64,10 @@ export function UserMenu() {
         <DropdownMenuSeparator />
         {themeRow}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={async () => { await logout(); navigate("/"); }}>
+        <DropdownMenuItem onClick={async () => {
+          try { await logout(); navigate("/"); }
+          catch { toast.error("Sign out failed. Please try again."); }
+        }}>
           <LogOut className="size-4" /> Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>

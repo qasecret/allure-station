@@ -1,4 +1,4 @@
-import { CheckCircle2, XCircle, Loader2, Clock, AlertTriangle } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Clock } from "lucide-react";
 import type { RunStatus } from "@allure-station/shared";
 import { Badge } from "@/components/ui/badge";
 
@@ -10,7 +10,7 @@ const MAP: Record<RunStatus, { label: string; icon: typeof CheckCircle2; cls: st
 };
 
 export function StatusBadge({ status }: { status: RunStatus }) {
-  const m = MAP[status] ?? { label: status, icon: AlertTriangle, cls: "bg-muted text-muted-foreground" };
+  const m = MAP[status];
   const Icon = m.icon;
   return (
     <Badge variant="outline" className={m.cls}>
