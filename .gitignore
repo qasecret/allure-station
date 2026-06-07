@@ -6,3 +6,8 @@ data/
 packages/e2e/.e2e-data
 packages/e2e/test-results
 packages/e2e/playwright-report
+
+# branding pipeline (node_modules already ignored above; these are build temp/artifacts)
+branding/node_modules/
+branding/_fav256.png
+branding/Sora-*.ttf
