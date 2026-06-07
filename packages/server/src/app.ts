@@ -58,7 +58,8 @@ export interface AppDeps {
 
 export function buildApp(deps: AppDeps): FastifyInstance {
   const app = Fastify({ logger: false });
-  app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024, files: 5000 } });
+  // fieldSize caps text fields (run metadata) so an oversized value can't buffer up to busboy's 1 MB default.
+  app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024, files: 5000, fieldSize: 16 * 1024 } });
   app.register(cookie); // parses req.cookies; we set Set-Cookie manually with explicit attributes
   app.decorate("deps", deps);
 

@@ -73,12 +73,13 @@ runs:
         auth=(); [ -n "$TOKEN" ] && auth=(-H "Authorization: Bearer $TOKEN")
         AUTH=("${auth[@]+"${auth[@]}"}")
 
-        # Attach CI metadata as form fields (only the ones that are set).
+        # Attach CI metadata as form fields (only the ones that are set). --form-string (not -F) so a
+        # value starting with '@' or '<' (e.g. an oddly-named branch) is sent literally, not as a file.
         meta=()
-        [ -n "${BRANCH:-}" ]      && meta+=(-F "branch=$BRANCH")
-        [ -n "${COMMIT:-}" ]      && meta+=(-F "commit=$COMMIT")
-        [ -n "${ENVIRONMENT:-}" ] && meta+=(-F "environment=$ENVIRONMENT")
-        [ -n "${CI_URL:-}" ]      && meta+=(-F "ciUrl=$CI_URL")
+        [ -n "${BRANCH:-}" ]      && meta+=(--form-string "branch=$BRANCH")
+        [ -n "${COMMIT:-}" ]      && meta+=(--form-string "commit=$COMMIT")
+        [ -n "${ENVIRONMENT:-}" ] && meta+=(--form-string "environment=$ENVIRONMENT")
+        [ -n "${CI_URL:-}" ]      && meta+=(--form-string "ciUrl=$CI_URL")
 
         # Collect result files into curl -F args.
         shopt -s nullglob

@@ -17,6 +17,7 @@ export function Project() {
 
   useEffect(() => {
     setSelectedRun(null);
+    setBranchFilter(""); // don't carry a previous project's branch filter (could hide all its runs)
   }, [id]);
 
   // SSE drives instant updates; a slow refetch is kept only as a backstop while a run is
@@ -67,7 +68,10 @@ export function Project() {
   // Distinct branches across loaded runs power a client-side filter (no extra fetch).
   const branches = Array.from(new Set(runs.map((r) => r.branch).filter((b): b is string => !!b))).sort();
   const visibleRuns = branchFilter ? runs.filter((r) => r.branch === branchFilter) : runs;
-  const current = selectedRun ?? visibleRuns.find((r) => r.status === "ready")?.id ?? visibleRuns[0]?.id ?? null;
+  // Honor an explicit selection only while it's in the visible set, so the <select> value always
+  // matches a rendered option (e.g. after a branch filter excludes the previously-selected run).
+  const selectedVisible = selectedRun && visibleRuns.some((r) => r.id === selectedRun) ? selectedRun : null;
+  const current = selectedVisible ?? visibleRuns.find((r) => r.status === "ready")?.id ?? visibleRuns[0]?.id ?? null;
   const cur = runs.find((r) => r.id === current);
   return (
     <main style={{ height: "100vh", display: "flex", flexDirection: "column" }}>

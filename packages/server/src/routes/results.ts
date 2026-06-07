@@ -35,7 +35,11 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
     if (count === 0) return reply.code(400).send({ error: "no result files uploaded" });
 
     const meta = runMetadataSchema.safeParse(fields);
-    if (!meta.success) return reply.code(400).send({ error: meta.error.message });
+    if (!meta.success) {
+      // Files were already streamed under this runId but no run row will reference them — clean up.
+      await deps.storage.remove(`${projectId}/runs/${runId}`).catch(() => {});
+      return reply.code(400).send({ error: meta.error.message });
+    }
 
     const run = await deps.runs.create(projectId, runId, "Allure Report", deps.now(), meta.data);
     deps.bus.publish({ type: "run", projectId, run });
