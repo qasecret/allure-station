@@ -22,7 +22,7 @@ export function ProjectSettings() {
   const { data: members, isError } = useQuery({
     queryKey: ["members", id], queryFn: () => api.listMembers(id), enabled: !!user, retry: false,
   });
-  const denied = !user || isError;
+  const denied = !user || isError || members === undefined;
   return (
     <>
       <Topbar title={<span className="flex items-center gap-2"><Link to={`/projects/${id}`} className="text-muted-foreground hover:text-foreground">{id}</Link><span className="text-muted-foreground">/</span>Settings</span>} />
@@ -34,7 +34,7 @@ export function ProjectSettings() {
             <>
               <VisibilityCard projectId={id} />
               <MembersCard projectId={id} members={members ?? []} />
-              <AuditCard projectId={id} />
+              <AuditCard projectId={id} enabled={!!user} />
             </>
           )}
         </div>
@@ -76,7 +76,7 @@ function MembersCard({ projectId, members }: { projectId: string; members: { use
   });
   const removeMember = useMutation({
     mutationFn: (userId: string) => api.removeMember(projectId, userId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["members", projectId] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["members", projectId] }); toast.success("Member removed"); },
     onError: (e) => toast.error((e as Error).message),
   });
   return (
@@ -101,7 +101,7 @@ function MembersCard({ projectId, members }: { projectId: string; members: { use
                 <TableRow key={m.userId}>
                   <TableCell>{m.email}</TableCell>
                   <TableCell><Badge variant="secondary">{m.role}</Badge></TableCell>
-                  <TableCell className="text-right"><Button variant="ghost" size="sm" disabled={removeMember.isPending} onClick={() => removeMember.mutate(m.userId)}>Remove</Button></TableCell>
+                  <TableCell className="text-right"><Button variant="ghost" size="sm" disabled={removeMember.isPending && removeMember.variables === m.userId} onClick={() => removeMember.mutate(m.userId)}>Remove</Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -112,9 +112,9 @@ function MembersCard({ projectId, members }: { projectId: string; members: { use
   );
 }
 
-function AuditCard({ projectId }: { projectId: string }) {
+function AuditCard({ projectId, enabled }: { projectId: string; enabled: boolean }) {
   const { data } = useQuery({
-    queryKey: ["project-audit", projectId], queryFn: () => api.listProjectAudit(projectId, { limit: 50 }), retry: false,
+    queryKey: ["project-audit", projectId], queryFn: () => api.listProjectAudit(projectId, { limit: 50 }), retry: false, enabled,
   });
   if (data === undefined) return null;
   return (
