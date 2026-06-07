@@ -1,4 +1,4 @@
-import { count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, gte } from "drizzle-orm";
 import type { AuditAction, AuditActorType, AuditEntry } from "@allure-station/shared";
 import type { Db } from "./client.js";
 import { auditLog } from "./schema.sqlite.js";
@@ -32,10 +32,20 @@ export class AuditRepository {
     });
   }
 
-  /** Recent-first. With projectId, only that project's events; otherwise the global log. */
-  async list(opts: { projectId?: string; limit?: number; offset?: number } = {}): Promise<AuditEntry[]> {
-    const where = opts.projectId !== undefined ? eq(auditLog.projectId, opts.projectId) : undefined;
-    let query = this.db.select().from(auditLog).where(where).orderBy(desc(auditLog.at)).$dynamic();
+  // Combine an optional project filter with an optional `since` lower bound. `since` scopes a
+  // per-project view to the CURRENT project's lifetime (>= its createdAt): IDs are client-chosen and
+  // audit rows survive deletion, so without this a reused project id would expose the prior tenant's log.
+  #where(projectId?: string, since?: string) {
+    const clauses = [];
+    if (projectId !== undefined) clauses.push(eq(auditLog.projectId, projectId));
+    if (since !== undefined) clauses.push(gte(auditLog.at, since));
+    return clauses.length === 0 ? undefined : clauses.length === 1 ? clauses[0] : and(...clauses);
+  }
+
+  /** Recent-first. With projectId, only that project's events; `since` bounds to a start time. */
+  async list(opts: { projectId?: string; since?: string; limit?: number; offset?: number } = {}): Promise<AuditEntry[]> {
+    // Tiebreaker on id so pagination is stable when several rows share a millisecond `at`.
+    let query = this.db.select().from(auditLog).where(this.#where(opts.projectId, opts.since)).orderBy(desc(auditLog.at), desc(auditLog.id)).$dynamic();
     // SQLite/libsql rejects OFFSET without LIMIT — offset only applies alongside a limit.
     if (opts.limit !== undefined) {
       query = query.limit(opts.limit);
@@ -56,9 +66,8 @@ export class AuditRepository {
     }));
   }
 
-  async count(opts: { projectId?: string } = {}): Promise<number> {
-    const where = opts.projectId !== undefined ? eq(auditLog.projectId, opts.projectId) : undefined;
-    const [row] = await this.db.select({ c: count() }).from(auditLog).where(where);
+  async count(opts: { projectId?: string; since?: string } = {}): Promise<number> {
+    const [row] = await this.db.select({ c: count() }).from(auditLog).where(this.#where(opts.projectId, opts.since));
     return Number(row?.c ?? 0);
   }
 }

@@ -82,6 +82,7 @@ export function Project() {
         <div style={{ padding: "4px 12px" }}><TrendBar points={trends} /></div>
         <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
         <MembersPanel projectId={id} />
+        <AuditPanel projectId={id} />
       </header>
       {current
         ? <iframe title="report" style={{ flex: 1, border: 0 }}
@@ -137,6 +138,34 @@ function MembersPanel({ projectId }: { projectId: string }) {
           </li>
         ))}
       </ul>
+    </details>
+  );
+}
+
+// Per-project audit trail — owner/admin only (detected like MembersPanel: the owner-gated fetch
+// errors for everyone else and the panel hides).
+function AuditPanel({ projectId }: { projectId: string }) {
+  const { user } = useAuth();
+  const { data, isError } = useQuery({
+    queryKey: ["project-audit", projectId],
+    queryFn: () => api.listProjectAudit(projectId, { limit: 50 }),
+    enabled: !!user,
+    retry: false,
+  });
+  if (!user || isError || data === undefined) return null;
+  return (
+    <details style={{ padding: "4px 12px", fontSize: 13 }}>
+      <summary style={{ cursor: "pointer" }}>Audit ({data.total})</summary>
+      <ul style={{ margin: "2px 0", paddingLeft: 16, maxHeight: 200, overflow: "auto" }}>
+        {data.items.map((e) => (
+          <li key={e.id}>
+            <span style={{ color: "var(--muted)" }}>{new Date(e.at).toLocaleString()}</span>{" "}
+            <strong>{e.action}</strong> by {e.actorLabel}
+            {e.metadata ? <span style={{ color: "var(--muted)" }}> {JSON.stringify(e.metadata)}</span> : null}
+          </li>
+        ))}
+      </ul>
+      {data.items.length === 0 && <p style={{ color: "var(--muted)" }}>No events yet.</p>}
     </details>
   );
 }

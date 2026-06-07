@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { createNotificationRequestSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
-import { authenticate, authorizeProjectWrite } from "../auth.js";
+import { authenticate, authorizeProjectWrite, requireProjectWrite } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 import { checkWebhookUrl } from "../safe-url.js";
 
@@ -24,7 +24,7 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: AppDeps):
   app.get("/projects/:projectId/notifications", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
-    if ((await authorizeProjectWrite(deps, await authenticate(deps, req), projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    if ((await requireProjectWrite(deps, req, projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
     return deps.notifications.listByProject(projectId);
   });
 

@@ -24,6 +24,7 @@ export interface ApiClient {
   createUser(email: string, password: string, role: GlobalRole): Promise<User>;
   deleteUser(id: string): Promise<void>;
   listAudit(opts?: { limit?: number; offset?: number }): Promise<{ items: AuditEntry[]; total: number }>;
+  listProjectAudit(projectId: string, opts?: { limit?: number; offset?: number }): Promise<{ items: AuditEntry[]; total: number }>;
 }
 
 export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
@@ -80,6 +81,7 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
       json<User>("/users", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password, role }) }),
     deleteUser: (id) => noContent(`/users/${id}`, { method: "DELETE" }),
     listAudit: (opts = {}) => listWithTotal<AuditEntry>(`/audit${qs(opts)}`),
+    listProjectAudit: (projectId, opts = {}) => listWithTotal<AuditEntry>(`/projects/${projectId}/audit${qs(opts)}`),
     subscribeRuns: (projectId, onEvent) => {
       // No-op where EventSource is unavailable (e.g. jsdom/SSR); the page still works via fetch.
       if (typeof EventSource === "undefined") return () => {};

@@ -533,6 +533,19 @@ for (const backend of backends) {
         expect((await audit.list({ limit: 1, offset: 1 })).map((e) => e.action)).toEqual(["project_created"]);
       });
 
+      it("since bounds the listing to a start time (per-project view can't reveal a reused id's prior tenant)", async () => {
+        // Old tenant of project 'p' (before it was deleted + recreated).
+        await audit.record({ actorType: "user", actorId: "old", actorLabel: "old@x", action: "project_created", targetType: "project", targetId: "p", projectId: "p" }, "2026-06-01T00:00:00.000Z");
+        // New tenant after recreation at a later createdAt.
+        await audit.record({ actorType: "user", actorId: "new", actorLabel: "new@x", action: "project_created", targetType: "project", targetId: "p", projectId: "p" }, "2026-06-10T00:00:00.000Z");
+
+        const scoped = await audit.list({ projectId: "p", since: "2026-06-10T00:00:00.000Z" });
+        expect(scoped.map((e) => e.actorLabel)).toEqual(["new@x"]); // old tenant's row excluded
+        expect(await audit.count({ projectId: "p", since: "2026-06-10T00:00:00.000Z" })).toBe(1);
+        // Without `since`, both are visible (global/admin view).
+        expect(await audit.count({ projectId: "p" })).toBe(2);
+      });
+
       it("is NOT cascade-deleted when the referenced project or user is removed", async () => {
         await projects.create("p", "2026-06-06T00:00:00.000Z");
         const u = await users.create("u@x.com", "h", "user", "2026-06-06T00:00:00.000Z");

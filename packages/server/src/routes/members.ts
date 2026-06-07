@@ -1,14 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { setMembershipRequestSchema, type MembershipWithUser } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
-import { authenticate, authorizeProjectOwner } from "../auth.js";
+import { authenticate, authorizeProjectOwner, requireProjectOwner } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 
 export function registerMemberRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.get("/projects/:projectId/members", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
-    if ((await authorizeProjectOwner(deps, await authenticate(deps, req), projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    if ((await requireProjectOwner(deps, req, projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
     return deps.memberships.listByProject(projectId);
   });
 

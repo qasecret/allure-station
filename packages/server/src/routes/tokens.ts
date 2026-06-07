@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { createTokenRequestSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
-import { authenticate, authorizeProjectWrite, generateToken, hashToken, tokenPrefix } from "../auth.js";
+import { authenticate, authorizeProjectWrite, requireProjectWrite, generateToken, hashToken, tokenPrefix } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 
 export function registerTokenRoutes(app: FastifyInstance, deps: AppDeps): void {
@@ -26,7 +26,7 @@ export function registerTokenRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.get("/projects/:projectId/tokens", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
-    if ((await authorizeProjectWrite(deps, await authenticate(deps, req), projectId)) === "unauthorized") {
+    if ((await requireProjectWrite(deps, req, projectId)) === "unauthorized") {
       return reply.code(401).send({ error: "unauthorized" });
     }
     return deps.tokens.listByProject(projectId);

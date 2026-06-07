@@ -36,7 +36,9 @@ export async function recordAudit(
 ): Promise<void> {
   try {
     await deps.audit.record(entry, deps.now());
-  } catch {
-    // best-effort
+  } catch (err) {
+    // Best-effort: never fail the action that already happened. But a dropped security event must not
+    // be silent — surface it so an operator can see the gap rather than mistaking it for "nothing happened".
+    console.warn(`audit: failed to record ${entry.action} (target ${entry.targetType ?? "-"}:${entry.targetId ?? "-"})`, err);
   }
 }
