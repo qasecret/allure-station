@@ -31,7 +31,10 @@ export function Login() {
 
   return (
     <main style={{ maxWidth: 360, margin: "10vh auto", padding: 16 }}>
-      <h1 style={{ fontSize: 20 }}>Sign in</h1>
+      <div style={{ textAlign: "center", marginBottom: 18 }}>
+        <img src="/favicon.svg" alt="Allure Station" width={56} height={56} style={{ display: "inline-block" }} />
+        <h1 style={{ fontSize: 20, margin: "10px 0 0" }}>Sign in to Allure Station</h1>
+      </div>
       {config?.oidc.enabled && (
         <>
           {/* Plain link, not fetch: the browser must follow the 302 to the IdP. */}
