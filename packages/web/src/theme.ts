@@ -7,12 +7,13 @@ export function getTheme(): Theme {
   return t === "light" || t === "dark" || t === "system" ? t : "system";
 }
 
-/** Apply the theme to <html>: "system" drops the attribute so prefers-color-scheme decides. */
+/** Apply the theme to <html>: toggles the `dark` class. "system" follows prefers-color-scheme. */
 export function applyTheme(t: Theme): void {
   if (typeof document === "undefined") return;
   const el = document.documentElement;
-  if (t === "system") el.removeAttribute("data-theme");
-  else el.setAttribute("data-theme", t);
+  const dark = t === "dark" || (t === "system" &&
+    typeof matchMedia !== "undefined" && matchMedia("(prefers-color-scheme: dark)").matches);
+  el.classList.toggle("dark", dark);
 }
 
 export function setTheme(t: Theme): void {

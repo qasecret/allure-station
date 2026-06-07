@@ -1,57 +1,61 @@
-:root {
-  color-scheme: light dark;
-  --bg: #ffffff;
-  --fg: #1a1a1a;
-  --muted: #666666;
-  --border: #dddddd;
-  --link: #1a5fb4;
-  --panel: #f7f7f7;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* Explicit dark theme (manual toggle). */
-[data-theme="dark"] {
-  --bg: #16181c;
-  --fg: #e6e6e6;
-  --muted: #9aa0a6;
-  --border: #2c2f36;
-  --link: #6ab0ff;
-  --panel: #1e2127;
-}
+@layer base {
+  :root {
+    color-scheme: light dark;
+    --radius: 0.625rem;
 
-/* System dark — applies only when the user hasn't forced light. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #16181c;
-    --fg: #e6e6e6;
-    --muted: #9aa0a6;
-    --border: #2c2f36;
-    --link: #6ab0ff;
-    --panel: #1e2127;
+    --background: 210 20% 99%;
+    --foreground: 222 22% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 22% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 22% 12%;
+
+    --primary: 255 92% 68%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 16% 96%;
+    --secondary-foreground: 222 22% 20%;
+    --muted: 220 16% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 220 16% 95%;
+    --accent-foreground: 222 22% 18%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 16% 90%;
+    --input: 220 16% 90%;
+    --ring: 255 92% 68%;
   }
+
+  .dark {
+    --background: 222 24% 8%;
+    --foreground: 210 16% 92%;
+    --card: 222 22% 11%;
+    --card-foreground: 210 16% 92%;
+    --popover: 222 22% 11%;
+    --popover-foreground: 210 16% 92%;
+
+    --primary: 255 92% 72%;
+    --primary-foreground: 222 24% 8%;
+
+    --secondary: 222 18% 16%;
+    --secondary-foreground: 210 16% 88%;
+    --muted: 222 18% 16%;
+    --muted-foreground: 218 12% 60%;
+    --accent: 222 18% 18%;
+    --accent-foreground: 210 16% 90%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 222 16% 20%;
+    --input: 222 16% 20%;
+    --ring: 255 92% 72%;
+  }
+
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; font-family: system-ui, -apple-system, sans-serif; }
 }
-
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: system-ui, -apple-system, sans-serif;
-}
-
-a { color: var(--link); }
-
-input, select, button {
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 8px;
-  font: inherit;
-}
-
-button:not(:disabled) { cursor: pointer; }
-button:disabled { opacity: 0.5; }
-
-/* Visible keyboard focus for accessibility. */
-:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }

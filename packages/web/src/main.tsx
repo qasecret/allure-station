@@ -18,6 +18,11 @@ export const api = createClient(import.meta.env.VITE_API_BASE ?? "/api");
 const qc = new QueryClient();
 
 applyTheme(getTheme()); // restore the saved theme before first paint
+if (typeof matchMedia !== "undefined") {
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (getTheme() === "system") applyTheme("system");
+  });
+}
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
