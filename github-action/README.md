@@ -13,9 +13,12 @@ Upload Allure results to an [Allure Station](../README.md) instance, trigger rep
     token: ${{ secrets.ALLURE_TOKEN }}   # only if the project is token-protected
     wait: "true"                   # default — fail the job if generation fails
     timeout: "300"                 # seconds
+    environment: "staging"         # optional — labels the run
 ```
 
 Outputs: `run-id`, `status` (`ready`|`failed`|`generating`), `report-url`.
+
+**Run metadata** — the action automatically attaches `branch`, `commit`, and the `ciUrl` (a link back to this workflow run) from the GitHub context, plus the optional `environment` input. These show up on the run in the UI/API and power the `?branch=` run filter. In other CI systems, send them yourself as form fields: `-F branch=… -F commit=… -F environment=… -F ciUrl=…` on the `send-results` call.
 
 ## Pull-request status checks & comments
 

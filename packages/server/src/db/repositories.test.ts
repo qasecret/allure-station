@@ -259,6 +259,22 @@ for (const backend of backends) {
         expect(await runs.previousReadyBefore("pr", "2026-06-06T00:00:01.000Z")).toBeNull(); // nothing before r1
       });
 
+      it("persists + returns run metadata (empty → null) and filters/counts by branch", async () => {
+        await projects.create("m", "2026-06-06T00:00:00.000Z");
+        await runs.create("m", "rm1", "R", "2026-06-06T00:00:01.000Z", { branch: "main", commit: "abc123", environment: "staging", ciUrl: "https://ci/1" });
+        await runs.create("m", "rm2", "R", "2026-06-06T00:00:02.000Z", { branch: "feature" });
+        await runs.create("m", "rm3", "R", "2026-06-06T00:00:03.000Z"); // no metadata
+        await runs.create("m", "rm4", "R", "2026-06-06T00:00:04.000Z", { branch: "" }); // empty → null
+
+        expect(await runs.get("rm1")).toMatchObject({ branch: "main", commit: "abc123", environment: "staging", ciUrl: "https://ci/1" });
+        expect(await runs.get("rm3")).toMatchObject({ branch: null, commit: null, environment: null, ciUrl: null });
+        expect((await runs.get("rm4"))?.branch).toBeNull();
+
+        expect((await runs.listByProject("m", { branch: "main" })).map((r) => r.id)).toEqual(["rm1"]);
+        expect(await runs.countByProject("m", { branch: "feature" })).toBe(1);
+        expect(await runs.countByProject("m")).toBe(4);
+      });
+
       it("listByProject filters by status and paginates; countByProject counts", async () => {
         await projects.create("f", "2026-06-06T00:00:00.000Z");
         await runs.create("f", "f1", "R", "2026-06-06T00:00:01.000Z");

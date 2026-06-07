@@ -64,6 +64,13 @@
       "when": 1780795914887,
       "tag": "0008_slippery_cannonball",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780804434769,
+      "tag": "0009_clean_the_hunter",
+      "breakpoints": true
     }
   ]
 }

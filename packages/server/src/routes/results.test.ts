@@ -56,6 +56,35 @@ describe("send-results + generate", () => {
     await app.close();
   }, 60_000);
 
+  it("captures CI metadata form fields on the run (and 400s an over-long field)", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "meta" } });
+    const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
+
+    const mp = await multipart([
+      { field: "branch", value: "main" },
+      { field: "commit", value: "abc1234" },
+      { field: "environment", value: "staging" },
+      { field: "ciUrl", value: "https://ci.example/run/42" },
+      { field: "files", filename: "1-result.json", data: f1 },
+    ]);
+    const send = await app.inject({ method: "POST", url: "/api/projects/meta/send-results", ...mp });
+    expect(send.statusCode).toBe(202);
+    const run = await app.inject({ method: "GET", url: `/api/projects/meta/runs/${send.json().runId}` });
+    expect(run.json()).toMatchObject({ branch: "main", commit: "abc1234", environment: "staging", ciUrl: "https://ci.example/run/42" });
+
+    // no metadata fields → nulls
+    const plain = await multipart([{ field: "files", filename: "1-result.json", data: f1 }]);
+    const send2 = await app.inject({ method: "POST", url: "/api/projects/meta/send-results", ...plain });
+    expect((await app.inject({ method: "GET", url: `/api/projects/meta/runs/${send2.json().runId}` })).json()).toMatchObject({ branch: null, environment: null });
+
+    // over-long branch (>256) → 400, no run created
+    const bad = await multipart([{ field: "branch", value: "x".repeat(300) }, { field: "files", filename: "1-result.json", data: f1 }]);
+    expect((await app.inject({ method: "POST", url: "/api/projects/meta/send-results", ...bad })).statusCode).toBe(400);
+    await app.close();
+  });
+
   it("sanitizes traversal filenames: ../escape.json is stored as escape.json and generation succeeds", async () => {
     const deps = await makeTestDeps();
     const app = buildApp(deps);

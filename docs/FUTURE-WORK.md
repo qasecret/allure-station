@@ -20,13 +20,12 @@ audit log.
 
 ## High-value gaps (the ones that unlock the most)
 
-### 1. Run metadata: branch, commit, CI build URL, environment  ⭐ best first slice
-**Problem:** a `run` today only has status/stats/timestamps — no branch, commit SHA, CI link, or
-environment. **Why it matters:** can't scope trends/comparison to a branch, can't do "PR vs main,"
-can't jump from a run back to its CI build, can't filter by environment (staging/prod).
-**Sketch:** add nullable columns (`branch`, `commit`, `ci_url`, `environment`) to `runs`; accept them
-on `send-results` (form fields / headers); surface in the UI run list + as trend/comparison filters;
-the GitHub Action already knows them. Contained slice; makes nearly everything below better.
+### 1. Run metadata: branch, commit, CI build URL, environment  ✅ DONE (Slice 6a, 2026-06-07)
+Runs now carry `branch` / `commit` / `environment` / `ci_url` (nullable). Accepted as multipart text
+fields on `send-results`, returned on the run, surfaced in the UI (enriched run labels + a metadata
+caption with a CI link) with a client-side branch filter, and exposed via `GET …/runs?branch=`. The
+GitHub Action auto-derives branch/commit/ci_url from the GitHub context (+ an `environment` input).
+**Remaining stretch:** branch-aware *trend deltas* and PR-vs-base comparison scoping (now unblocked).
 
 ### 2. Private / read-gated reports
 **Problem:** reads are currently **public** (deliberate 5b decision). **Why it matters:** test output

@@ -16,7 +16,7 @@ export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
 
   app.get("/projects/:projectId/runs", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
-    const { status } = req.query as { status?: string };
+    const { status, branch } = req.query as { status?: string; branch?: string };
     if (status !== undefined && !runStatusSchema.safeParse(status).success) {
       return reply.code(400).send({ error: `invalid status "${status}"` });
     }
@@ -24,9 +24,10 @@ export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
     try { page = parsePage(req.query as Record<string, unknown>); }
     catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
     const typedStatus = status as RunStatus | undefined;
+    const filter = { status: typedStatus, branch: branch || undefined };
     const [items, total] = await Promise.all([
-      deps.runs.listByProject(projectId, { status: typedStatus, ...page }),
-      deps.runs.countByProject(projectId, { status: typedStatus }),
+      deps.runs.listByProject(projectId, { ...filter, ...page }),
+      deps.runs.countByProject(projectId, filter),
     ]);
     reply.header("X-Total-Count", String(total));
     return items;

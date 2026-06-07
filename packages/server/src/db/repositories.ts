@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import type { Project, QualityGateConfig, Run, RunStats, RunStatus } from "@allure-station/shared";
+import type { Project, QualityGateConfig, Run, RunMetadata, RunStats, RunStatus } from "@allure-station/shared";
 import type { Db } from "./client.js";
 import { apiTokens, memberships, notifications, projects, runs, testResults } from "./schema.sqlite.js";
 
@@ -81,11 +81,18 @@ export class ProjectRepository {
 export class RunRepository {
   constructor(private readonly db: Db) {}
 
-  async create(projectId: string, id: string, reportName: string, now: string): Promise<Run> {
+  async create(projectId: string, id: string, reportName: string, now: string, metadata: RunMetadata = {}): Promise<Run> {
+    // Empty strings normalize to null so a blank CI field isn't stored as "".
+    const meta = {
+      branch: metadata.branch || null,
+      commit: metadata.commit || null,
+      environment: metadata.environment || null,
+      ciUrl: metadata.ciUrl || null,
+    };
     await this.db.insert(runs).values({
-      id, projectId, status: "pending", reportName, createdAt: now, startedAt: null, finishedAt: null, statsJson: null,
+      id, projectId, status: "pending", reportName, createdAt: now, startedAt: null, finishedAt: null, statsJson: null, ...meta,
     });
-    return { id, projectId, status: "pending", reportName, createdAt: now, finishedAt: null, stats: null };
+    return { id, projectId, status: "pending", reportName, createdAt: now, finishedAt: null, stats: null, ...meta };
   }
 
   async setStatus(id: string, status: RunStatus): Promise<void> {
@@ -139,10 +146,11 @@ export class RunRepository {
     return reset.length;
   }
 
-  async #selectRuns(opts: { projectId: string; readyOnly?: boolean; status?: RunStatus; order: "asc" | "desc"; limit?: number; offset?: number }): Promise<Run[]> {
+  async #selectRuns(opts: { projectId: string; readyOnly?: boolean; status?: RunStatus; branch?: string; order: "asc" | "desc"; limit?: number; offset?: number }): Promise<Run[]> {
     const conds = [eq(runs.projectId, opts.projectId)];
     if (opts.readyOnly) conds.push(eq(runs.status, "ready"));
     if (opts.status) conds.push(eq(runs.status, opts.status));
+    if (opts.branch) conds.push(eq(runs.branch, opts.branch));
     const ord = opts.order === "asc"
       ? [asc(runs.createdAt), asc(runs.id)]
       : [desc(runs.createdAt), desc(runs.id)];
@@ -164,7 +172,7 @@ export class RunRepository {
     return this.#selectRuns({ projectId, readyOnly: true, order: "asc" });
   }
 
-  async listByProject(projectId: string, opts: { status?: RunStatus; limit?: number; offset?: number } = {}): Promise<Run[]> {
+  async listByProject(projectId: string, opts: { status?: RunStatus; branch?: string; limit?: number; offset?: number } = {}): Promise<Run[]> {
     return this.#selectRuns({ projectId, order: "desc", ...opts });
   }
 
@@ -179,9 +187,10 @@ export class RunRepository {
     return row ? this.#toRun(row) : null;
   }
 
-  async countByProject(projectId: string, opts: { status?: RunStatus } = {}): Promise<number> {
+  async countByProject(projectId: string, opts: { status?: RunStatus; branch?: string } = {}): Promise<number> {
     const conds = [eq(runs.projectId, projectId)];
     if (opts.status) conds.push(eq(runs.status, opts.status));
+    if (opts.branch) conds.push(eq(runs.branch, opts.branch));
     const [row] = await this.db.select({ c: count() }).from(runs).where(and(...conds));
     return Number(row?.c ?? 0);
   }
@@ -199,5 +208,9 @@ export class RunRepository {
     createdAt: r.createdAt,
     finishedAt: r.finishedAt,
     stats: r.statsJson ? (JSON.parse(r.statsJson) as RunStats) : null,
+    branch: r.branch,
+    commit: r.commit,
+    environment: r.environment,
+    ciUrl: r.ciUrl,
   });
 }

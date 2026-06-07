@@ -71,6 +71,13 @@
       "when": 1780795914396,
       "tag": "0009_square_wallop",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1780804434250,
+      "tag": "0010_mysterious_annihilus",
+      "breakpoints": true
     }
   ]
 }

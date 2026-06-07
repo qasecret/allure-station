@@ -18,6 +18,10 @@ inputs:
     description: "Directory containing Allure result files"
     required: false
     default: "allure-results"
+  environment:
+    description: "Environment label attached to the run (e.g. staging, production)"
+    required: false
+    default: ""
   wait:
     description: "Wait for generation to reach a terminal status (ready/failed)"
     required: false
@@ -56,6 +60,11 @@ runs:
         RESULTS: ${{ inputs.results }}
         WAIT: ${{ inputs.wait }}
         TIMEOUT: ${{ inputs.timeout }}
+        # CI metadata, auto-derived from the GitHub context (head_ref on PRs, ref_name on pushes).
+        BRANCH: ${{ github.head_ref || github.ref_name }}
+        COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        CI_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        ENVIRONMENT: ${{ inputs.environment }}
       run: |
         set -euo pipefail
         base="${URL%/}"
@@ -64,6 +73,13 @@ runs:
         auth=(); [ -n "$TOKEN" ] && auth=(-H "Authorization: Bearer $TOKEN")
         AUTH=("${auth[@]+"${auth[@]}"}")
 
+        # Attach CI metadata as form fields (only the ones that are set).
+        meta=()
+        [ -n "${BRANCH:-}" ]      && meta+=(-F "branch=$BRANCH")
+        [ -n "${COMMIT:-}" ]      && meta+=(-F "commit=$COMMIT")
+        [ -n "${ENVIRONMENT:-}" ] && meta+=(-F "environment=$ENVIRONMENT")
+        [ -n "${CI_URL:-}" ]      && meta+=(-F "ciUrl=$CI_URL")
+
         # Collect result files into curl -F args.
         shopt -s nullglob
         curlfiles=()
@@ -71,7 +87,7 @@ runs:
         if [ ${#curlfiles[@]} -eq 0 ]; then echo "::error::no result files in $RESULTS"; exit 1; fi
 
         # Upload → stages a pending run; capture its id.
-        resp=$(curl -fsS "${AUTH[@]+"${AUTH[@]}"}" "${curlfiles[@]}" "$base/api/projects/$PROJECT/send-results")
+        resp=$(curl -fsS "${AUTH[@]+"${AUTH[@]}"}" "${meta[@]+"${meta[@]}"}" "${curlfiles[@]}" "$base/api/projects/$PROJECT/send-results")
         run_id=$(echo "$resp" | jq -r .runId)
         echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
         report_url="$base/api/projects/$PROJECT/runs/$run_id/report/index.html"

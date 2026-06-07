@@ -24,6 +24,15 @@ export const runStatsSchema = z.object({
   durationMs: z.number().int().nonnegative().optional(),
 });
 
+// CI context attached to a run at upload time. Each field optional on ingest; capped to bound the
+// values that flow into JSON/UI. Empty strings are normalized to null by the server.
+export const runMetadataSchema = z.object({
+  branch: z.string().max(256).optional(),
+  commit: z.string().max(256).optional(),
+  environment: z.string().max(256).optional(),
+  ciUrl: z.string().max(2048).optional(),
+});
+
 export const runSchema = z.object({
   id: z.string(),
   projectId: projectIdSchema,
@@ -32,6 +41,11 @@ export const runSchema = z.object({
   createdAt: z.string(),
   finishedAt: z.string().nullable(),
   stats: runStatsSchema.nullable(),
+  // CI metadata — nullable; optional so runs created before this field existed still parse.
+  branch: z.string().nullable().optional(),
+  commit: z.string().nullable().optional(),
+  environment: z.string().nullable().optional(),
+  ciUrl: z.string().nullable().optional(),
 });
 
 export const testStatusSchema = z.enum(["passed", "failed", "broken", "skipped", "unknown"]);
@@ -207,6 +221,7 @@ export const auditEntrySchema = z.object({
 export type ProjectId = z.infer<typeof projectIdSchema>;
 export type Run = z.infer<typeof runSchema>;
 export type RunStats = z.infer<typeof runStatsSchema>;
+export type RunMetadata = z.infer<typeof runMetadataSchema>;
 export type Project = z.infer<typeof projectSchema>;
 export type RunStatus = z.infer<typeof runStatusSchema>;
 export type RunEvent = z.infer<typeof runEventSchema>;

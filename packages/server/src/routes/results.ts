@@ -1,10 +1,15 @@
 import { basename } from "node:path";
 import type { FastifyInstance } from "fastify";
+import { runMetadataSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { requireProjectWrite } from "../auth.js";
 
+// Optional CI-metadata text fields accepted alongside the file parts.
+const META_FIELDS = new Set(["branch", "commit", "environment", "ciUrl"]);
+
 export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void {
-  // Upload result files; stages them in storage under a new pending run.
+  // Upload result files (+ optional branch/commit/environment/ciUrl text fields); stages them under a
+  // new pending run. The run row is created AFTER streaming, so a 0-file upload leaves no orphan run.
   app.post("/projects/:projectId/send-results", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
@@ -12,11 +17,10 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
       return reply.code(401).send({ error: "unauthorized" });
     }
 
-    const runId = deps.newId();
-    const run = await deps.runs.create(projectId, runId, "Allure Report", deps.now());
-
+    const runId = deps.newId(); // generated up front so files can stream before the row exists
     const parts = req.parts();
     let count = 0;
+    const fields: Record<string, string> = {};
     for await (const part of parts) {
       if (part.type === "file") {
         const safeName = basename(part.filename ?? "");
@@ -24,9 +28,16 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
         const buf = await part.toBuffer();
         await deps.storage.putBuffer(`${projectId}/runs/${runId}/results/${safeName}`, buf);
         count += 1;
+      } else if (META_FIELDS.has(part.fieldname)) {
+        fields[part.fieldname] = String(part.value);
       }
     }
     if (count === 0) return reply.code(400).send({ error: "no result files uploaded" });
+
+    const meta = runMetadataSchema.safeParse(fields);
+    if (!meta.success) return reply.code(400).send({ error: meta.error.message });
+
+    const run = await deps.runs.create(projectId, runId, "Allure Report", deps.now(), meta.data);
     deps.bus.publish({ type: "run", projectId, run });
     return reply.code(202).send({ runId: run.id, files: count });
   });

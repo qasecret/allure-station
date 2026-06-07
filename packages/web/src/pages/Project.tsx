@@ -13,6 +13,7 @@ export function Project() {
   const qc = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
+  const [branchFilter, setBranchFilter] = useState("");
 
   useEffect(() => {
     setSelectedRun(null);
@@ -63,7 +64,11 @@ export function Project() {
     },
   });
 
-  const current = selectedRun ?? runs.find((r) => r.status === "ready")?.id ?? null;
+  // Distinct branches across loaded runs power a client-side filter (no extra fetch).
+  const branches = Array.from(new Set(runs.map((r) => r.branch).filter((b): b is string => !!b))).sort();
+  const visibleRuns = branchFilter ? runs.filter((r) => r.branch === branchFilter) : runs;
+  const current = selectedRun ?? visibleRuns.find((r) => r.status === "ready")?.id ?? visibleRuns[0]?.id ?? null;
+  const cur = runs.find((r) => r.id === current);
   return (
     <main style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       <header style={{ borderBottom: "1px solid var(--border)" }}>
@@ -71,14 +76,25 @@ export function Project() {
           <strong>{id}</strong>
           <input aria-label="Allure result files" type="file" multiple ref={fileInput} />
           <button disabled={upload.isPending} onClick={() => upload.mutate()}>Upload &amp; generate</button>
+          {branches.length > 0 && (
+            <select aria-label="Filter by branch" value={branchFilter} onChange={(e) => { setBranchFilter(e.target.value); setSelectedRun(null); }}>
+              <option value="">all branches</option>
+              {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+          )}
           <select aria-label="Select run to view" value={current ?? ""} onChange={(e) => setSelectedRun(e.target.value)}>
-            {runs.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.createdAt} — {r.status}{r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}
-              </option>
+            {visibleRuns.map((r) => (
+              <option key={r.id} value={r.id}>{runLabel(r)}</option>
             ))}
           </select>
         </div>
+        {cur && (cur.branch || cur.environment || cur.ciUrl) && (
+          <div style={{ padding: "0 12px 6px", fontSize: 12, color: "var(--muted)", display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {cur.branch && <span>branch <code>{cur.branch}</code>{cur.commit ? <> @ <code>{cur.commit.slice(0, 7)}</code></> : null}</span>}
+            {cur.environment && <span>env <code>{cur.environment}</code></span>}
+            {cur.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer">CI build ↗</a>}
+          </div>
+        )}
         <div style={{ padding: "4px 12px" }}><TrendBar points={trends} /></div>
         <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
         <MembersPanel projectId={id} />
@@ -90,6 +106,16 @@ export function Project() {
         : <p style={{ padding: 12 }}>No ready report yet. Upload results to generate one.</p>}
     </main>
   );
+}
+
+// Run selector label: timestamp — status (passed/total) — branch@commit · env (metadata when present).
+function runLabel(r: Run): string {
+  const base = `${r.createdAt} — ${r.status}${r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}`;
+  const meta = [
+    r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : null,
+    r.environment || null,
+  ].filter(Boolean).join(" · ");
+  return meta ? `${base} — ${meta}` : base;
 }
 
 const PROJECT_ROLES: ProjectRole[] = ["viewer", "maintainer", "owner"];
