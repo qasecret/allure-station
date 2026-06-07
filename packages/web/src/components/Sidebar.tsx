@@ -6,7 +6,7 @@ import { UserMenu } from "@/components/UserMenu";
 
 const linkCls = ({ isActive }: { isActive: boolean }) =>
   cn("flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-    isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground");
+    isActive ? "bg-sidebar-accent text-sidebar-primary" : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground");
 
 export function SidebarContent() {
   const { user } = useAuth();
@@ -28,7 +28,7 @@ export function SidebarContent() {
 
 export function Sidebar() {
   return (
-    <aside className="hidden w-60 shrink-0 border-r bg-card md:block">
+    <aside className="hidden w-60 shrink-0 border-r border-sidebar-border bg-sidebar md:block">
       <SidebarContent />
     </aside>
   );
