@@ -28,6 +28,7 @@ services:
     #   REDIS_URL: redis://redis:6379
 
   minio:
+    profiles: ["minio"]
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:

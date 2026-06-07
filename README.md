@@ -14,19 +14,19 @@ Push test results from any CI, generate rich reports, track trends and flakiness
 
 </div>
 
-> A single TypeScript codebase built natively on **Allure 3** — Allure is **embedded** (no Java CLI, no bash glue), storage and database are **pluggable**, and it scales from one container to a multi-replica deployment **by configuration, not rewrite**.
+> Built for engineering teams that run tests in CI and need a durable, shared home for the results — with history, trends, and access control. A single TypeScript codebase on **Allure 3**: Allure is **embedded** (no Java CLI, no bash glue), storage and database are **pluggable**, and it scales from one container to a multi-replica deployment **by configuration, not rewrite**.
 
 ---
 
 ## Contents
 
-[Highlights](#highlights) · [Architecture](#architecture) · [Quick start](#quick-start) · [Configuration](#configuration) · [Security &amp; access](#security--access) · [CI/CD integration](#cicd-integration) · [Analytics](#analytics) · [Deployment](#deployment-topologies) · [API](#api-at-a-glance) · [Development](#development) · [Status](#project-status)
+[Highlights](#highlights) · [Screenshots](#screenshots) · [Architecture](#architecture) · [Quick start](#quick-start) · [Configuration](#configuration) · [Security &amp; access](#security--access) · [CI/CD integration](#cicd-integration) · [Analytics](#analytics) · [Deployment](#deployment-topologies) · [API](#api-at-a-glance) · [Development](#development) · [Status](#project-status)
 
 ---
 
 ## Highlights
 
-| | |
+| Capability | What you get |
 |---|---|
 | **Embedded Allure 3** | Reports generated in-process via `@allurereport/*` — no CLI shelling, no Java. |
 | **Multi-project hub** | Many projects, each with its own runs, history, trends, and access control. |
@@ -38,6 +38,23 @@ Push test results from any CI, generate rich reports, track trends and flakiness
 | **CI/CD native** | Reusable GitHub Action, quality gates, PR status checks &amp; comments, status badges. |
 | **Notifications** | Slack &amp; generic-webhook on completion / failure / gate breach / regression. |
 | **Enterprise auth** | Accounts + per-project RBAC, scoped API tokens, **OIDC/SSO**, and an audit log. |
+
+## Screenshots
+
+The React UI lets you browse projects and runs, view the embedded Allure report, track trends, and diff runs side-by-side — with light/dark themes.
+
+<!-- Drop PNGs into docs/img/ (see docs/img/README.md for the naming) and uncomment:
+<p align="center">
+  <img src="docs/img/projects.png" alt="Project list" width="49%" />
+  <img src="docs/img/report.png" alt="Embedded Allure report" width="49%" />
+</p>
+<p align="center">
+  <img src="docs/img/trends.png" alt="Trend dashboard" width="49%" />
+  <img src="docs/img/compare.png" alt="Run comparison" width="49%" />
+</p>
+-->
+
+> 📸 _Screenshots coming soon. Run the [quick start](#quick-start) to see it live at `http://localhost:5050`._
 
 ## Architecture
 
@@ -94,11 +111,13 @@ docs/           architecture spec, per-slice plans, FUTURE-WORK.md
 
 ## Quick start
 
+**Prerequisites:** Docker is the only requirement to run it. (To develop: Node ≥ 20 and pnpm 9 — see [Development](#development).)
+
 ```bash
 docker compose -f docker/docker-compose.yml up
 ```
 
-The service listens on **`:5050`** and serves both the API (`/api`) and the web UI (`/`). Data persists in the `allure-data` volume (local filesystem, zero-config).
+The first run **builds the image from source** (no prebuilt image is published yet), so it takes a few minutes; subsequent starts are instant. The service then listens on **`:5050`** and serves both the API (`/api`) and the web UI (`/`). Data persists in the `allure-data` volume (local filesystem, zero-config).
 
 **Push your first report** (zero-config mode — no auth required until you add a token or an account):
 
@@ -106,7 +125,8 @@ The service listens on **`:5050`** and serves both the API (`/api`) and the web 
 # 1) create a project
 curl -XPOST localhost:5050/api/projects -H 'content-type: application/json' -d '{"id":"my-app"}'
 
-# 2) upload Allure result files
+# 2) upload Allure result files (the *-result.json / *-container.json files your
+#    test run produces — any Allure adapter for Pytest, Jest, JUnit, etc. emits them)
 curl -XPOST localhost:5050/api/projects/my-app/send-results -F files=@allure-results/abc-result.json
 
 # 3) generate the report (async → 202 Accepted), then open the UI
@@ -264,13 +284,20 @@ docker compose -f docker/docker-compose.yml --profile postgres up
 
 # Postgres + BullMQ workers (also start the worker via: pnpm --filter @allure-station/server start:worker)
 docker compose -f docker/docker-compose.yml --profile postgres --profile bullmq up
+
+# MinIO for S3 parity (then set STORAGE_DRIVER=s3 + the S3_* vars)
+docker compose -f docker/docker-compose.yml --profile minio up
 ```
 
-A plain `docker compose up` (no profiles) stays single-process on SQLite. MinIO is available for S3 parity — set `STORAGE_DRIVER=s3` and the `S3_*` vars.
+A plain `docker compose up` (no profiles) stays single-process on SQLite + local storage, with no extra services.
 
 </details>
 
-> **`/generate` is asynchronous:** `POST /api/projects/:id/generate` returns **202** with the run at `generating`. Track completion by subscribing to SSE or polling `GET …/runs/:runId` until `ready` or `failed`.
+### Operations
+
+- **Health check** — `GET /api/version` returns `200` when the service is up; use it as the liveness/readiness probe (the Docker image already wires it into `HEALTHCHECK`).
+- **Async generation** — `POST /api/projects/:id/generate` returns **202** with the run at `generating`; track completion via SSE or by polling `GET …/runs/:runId` until `ready`/`failed`.
+- **Backup** — single-container: snapshot the `allure-data` volume (it holds the SQLite DB + reports). Scaled: back up Postgres (metadata) and the S3 bucket (artifacts) on their own schedules.
 
 ## API at a glance
 
@@ -331,6 +358,8 @@ All five roadmap phases are complete: **(1)** core ingest → generate → serve
 
 Planned next steps and gap analysis (run metadata, private reports, per-test history, known-issue muting, …) live in **[docs/FUTURE-WORK.md](docs/FUTURE-WORK.md)**.
 
-## License
+## Security &amp; License
 
-No license file is present yet — until one is added the work is unlicensed (all rights reserved by the author). Add a `LICENSE` before external distribution.
+Found a vulnerability? Please report it privately — see [SECURITY.md](SECURITY.md).
+
+Licensed under the **[Apache License 2.0](LICENSE)**.
