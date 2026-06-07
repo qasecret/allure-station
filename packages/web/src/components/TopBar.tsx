@@ -8,7 +8,10 @@ export function TopBar() {
   if (isLoading) return null;
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "6px 12px", borderBottom: "1px solid var(--border)", fontSize: 13 }}>
-      <Link to="/" style={{ fontWeight: 600 }}>Allure Station</Link>
+      <Link to="/" style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, textDecoration: "none", color: "inherit" }}>
+        <img src="/favicon.svg" alt="" width={22} height={22} style={{ display: "block" }} />
+        Allure Station
+      </Link>
       <span style={{ flex: 1 }} />
       {user ? (
         <>

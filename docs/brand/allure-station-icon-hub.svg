@@ -1,0 +1,39 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Allure Station">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1ED6B2"/>
+      <stop offset="0.55" stop-color="#12B58F"/>
+      <stop offset="1" stop-color="#0A916F"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.27" cy="0.2" r="0.95">
+      <stop offset="0" stop-color="#86F5DC" stop-opacity="0.6"/>
+      <stop offset="0.55" stop-color="#86F5DC" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hub" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E7FBF5"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#bg)"/>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#glow)"/>
+  <rect x="8.75" y="8.75" width="238.5" height="238.5" rx="57.25" fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="1.5"/>
+
+  <!-- spokes -->
+  <g stroke="#FFFFFF" stroke-width="9" stroke-linecap="round" stroke-opacity="0.92">
+    <line x1="128" y1="128" x2="128" y2="76"/>
+    <line x1="128" y1="128" x2="82"  y2="158"/>
+    <line x1="128" y1="128" x2="174" y2="158"/>
+  </g>
+
+  <!-- project nodes -->
+  <g fill="#FFFFFF">
+    <circle cx="128" cy="74"  r="13"/>
+    <circle cx="80"  cy="159" r="13"/>
+    <circle cx="176" cy="159" r="13"/>
+  </g>
+
+  <!-- central station hub -->
+  <circle cx="128" cy="128" r="22" fill="url(#hub)"/>
+  <circle cx="128" cy="128" r="8.5" fill="#0FB089"/>
+</svg>

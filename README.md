@@ -1,5 +1,10 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/allure-station-lockup-dark.svg">
+  <img alt="Allure Station" src="docs/brand/allure-station-lockup.svg" width="420">
+</picture>
+
 # Allure Station
 
 **A self-hosted, multi-project [Allure 3](https://allurereport.org/) report hub for your whole organization.**
