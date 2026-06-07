@@ -4,8 +4,8 @@ import type { AppDeps } from "../app.js";
 import { requireProjectWrite, generateToken, hashToken, tokenPrefix } from "../auth.js";
 
 export function registerTokenRoutes(app: FastifyInstance, deps: AppDeps): void {
-  // Create a token. The first token for a project can be created freely (bootstrap); once any
-  // token exists, creating more requires a valid token for that project.
+  // Create a token. Requires write access to the project: a maintainer+ session, an existing project
+  // token, or — only in zero-config mode (no accounts and no tokens yet) — an anonymous bootstrap call.
   app.post("/projects/:projectId/tokens", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });

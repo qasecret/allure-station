@@ -6,16 +6,26 @@ import { memberships, users } from "./schema.sqlite.js";
 export class MembershipRepository {
   constructor(private readonly db: Db, private readonly newId: () => string) {}
 
-  /** Set a user's role on a project (insert or update — one role per (project,user)). */
+  /**
+   * Set a user's role on a project — atomic INSERT … ON CONFLICT DO UPDATE on the unique
+   * (project,user) index, so concurrent grants for the same pair can't race into a unique violation.
+   */
   async upsert(projectId: string, userId: string, role: ProjectRole, now: string): Promise<Membership> {
-    const existing = await this.find(projectId, userId);
-    if (existing) {
-      await this.db.update(memberships).set({ role }).where(eq(memberships.id, existing.id));
-      return { ...existing, role };
-    }
-    const id = this.newId();
-    await this.db.insert(memberships).values({ id, projectId, userId, role, createdAt: now });
-    return { id, projectId, userId, role, createdAt: now };
+    const [row] = await this.db
+      .insert(memberships)
+      .values({ id: this.newId(), projectId, userId, role, createdAt: now })
+      .onConflictDoUpdate({ target: [memberships.projectId, memberships.userId], set: { role } })
+      .returning();
+    return { id: row.id, projectId: row.projectId, userId: row.userId, role: row.role as ProjectRole, createdAt: row.createdAt };
+  }
+
+  /** Count owners on a project — used to block removing/demoting the last owner. */
+  async countOwners(projectId: string): Promise<number> {
+    const rows = await this.db
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(and(eq(memberships.projectId, projectId), eq(memberships.role, "owner")));
+    return rows.length;
   }
 
   async find(projectId: string, userId: string): Promise<Membership | null> {

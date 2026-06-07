@@ -20,6 +20,11 @@ export function registerMemberRoutes(app: FastifyInstance, deps: AppDeps): void 
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
     const user = await deps.users.findByEmail(parsed.data.email);
     if (!user) return reply.code(404).send({ error: "user not found" });
+    // Don't let the last owner be demoted out of ownership — that orphans member management.
+    if (parsed.data.role !== "owner" && (await deps.memberships.find(projectId, user.id))?.role === "owner"
+        && (await deps.memberships.countOwners(projectId)) <= 1) {
+      return reply.code(409).send({ error: "cannot demote the last owner" });
+    }
     const membership = await deps.memberships.upsert(projectId, user.id, parsed.data.role, deps.now());
     const body: MembershipWithUser = { ...membership, email: user.email };
     return reply.code(200).send(body);
@@ -29,6 +34,10 @@ export function registerMemberRoutes(app: FastifyInstance, deps: AppDeps): void 
     const { projectId, userId } = req.params as { projectId: string; userId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
     if ((await requireProjectOwner(deps, req, projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    // Removing the last owner would orphan member management — block it.
+    if ((await deps.memberships.find(projectId, userId))?.role === "owner" && (await deps.memberships.countOwners(projectId)) <= 1) {
+      return reply.code(409).send({ error: "cannot remove the last owner" });
+    }
     return (await deps.memberships.remove(projectId, userId))
       ? reply.code(204).send()
       : reply.code(404).send({ error: "member not found" });

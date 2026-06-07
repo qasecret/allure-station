@@ -8,27 +8,38 @@ export interface UserRow extends User {
   passwordHash: string;
 }
 
+// Emails are stored and looked up lowercased so login/seed/membership-by-email are case-insensitive
+// and the unique index can't hold two casings of the same address.
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 export class UserRepository {
   constructor(private readonly db: Db, private readonly newId: () => string) {}
 
   async create(email: string, passwordHash: string, role: GlobalRole, now: string): Promise<User> {
     const id = this.newId();
-    await this.db.insert(users).values({ id, email, passwordHash, role, createdAt: now });
-    return { id, email, role, createdAt: now };
+    const norm = normalizeEmail(email);
+    await this.db.insert(users).values({ id, email: norm, passwordHash, role, createdAt: now });
+    return { id, email: norm, role, createdAt: now };
   }
 
-  /** Upsert by email (used by the startup admin seed — idempotent across restarts). */
+  /**
+   * Atomic upsert by email — used by the startup admin seed. INSERT … ON CONFLICT DO UPDATE so
+   * concurrent boots (API + N workers in bullmq mode) can't race into a unique-violation crash.
+   */
   async upsertByEmail(email: string, passwordHash: string, role: GlobalRole, now: string): Promise<User> {
-    const existing = await this.findByEmail(email);
-    if (existing) {
-      await this.db.update(users).set({ passwordHash, role }).where(eq(users.id, existing.id));
-      return { id: existing.id, email, role, createdAt: existing.createdAt };
-    }
-    return this.create(email, passwordHash, role, now);
+    const norm = normalizeEmail(email);
+    await this.db
+      .insert(users)
+      .values({ id: this.newId(), email: norm, passwordHash, role, createdAt: now })
+      .onConflictDoUpdate({ target: users.email, set: { passwordHash, role } });
+    // Re-read to return the canonical row (id/createdAt belong to whichever insert won).
+    return (await this.findByEmail(norm))!;
   }
 
   async findByEmail(email: string): Promise<UserRow | null> {
-    const [row] = await this.db.select().from(users).where(eq(users.email, email));
+    const [row] = await this.db.select().from(users).where(eq(users.email, normalizeEmail(email)));
     return row ? this.#toRow(row) : null;
   }
 

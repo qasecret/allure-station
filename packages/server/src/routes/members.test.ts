@@ -62,4 +62,23 @@ describe("member routes (owner/admin-gated)", () => {
     expect((await app.inject({ method: "PUT", url: "/api/projects/p/members", payload: { email: "ghost@x.com", role: "viewer" }, cookies: { as_session: adminCookie } })).statusCode).toBe(404);
     await app.close();
   });
+
+  it("blocks removing or demoting the last owner (409)", async () => {
+    const deps = await makeTestDeps();
+    await seed(deps);
+    const app = buildApp(deps);
+    const adminCookie = await login(app, "admin@x.com");
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" }, cookies: { as_session: adminCookie } });
+    await app.inject({ method: "PUT", url: "/api/projects/p/members", payload: { email: "owner@x.com", role: "owner" }, cookies: { as_session: adminCookie } });
+    const ownerId = (await deps.users.findByEmail("owner@x.com"))!.id;
+
+    // Sole owner can't be demoted or removed.
+    expect((await app.inject({ method: "PUT", url: "/api/projects/p/members", payload: { email: "owner@x.com", role: "viewer" }, cookies: { as_session: adminCookie } })).statusCode).toBe(409);
+    expect((await app.inject({ method: "DELETE", url: `/api/projects/p/members/${ownerId}`, cookies: { as_session: adminCookie } })).statusCode).toBe(409);
+
+    // With a second owner present, demoting the first is allowed.
+    await app.inject({ method: "PUT", url: "/api/projects/p/members", payload: { email: "other@x.com", role: "owner" }, cookies: { as_session: adminCookie } });
+    expect((await app.inject({ method: "PUT", url: "/api/projects/p/members", payload: { email: "owner@x.com", role: "viewer" }, cookies: { as_session: adminCookie } })).statusCode).toBe(200);
+    await app.close();
+  });
 });

@@ -60,6 +60,16 @@ describe("auth routes", () => {
     await app.close();
   });
 
+  it("email is case-insensitive: seeded as mixed case, login with any casing", async () => {
+    const deps = await makeTestDeps();
+    await seedUser(deps, "Admin@X.com", "password123", "admin"); // stored lowercased
+    const app = buildApp(deps);
+    const res = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "ADMIN@x.COM", password: "password123" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().email).toBe("admin@x.com");
+    await app.close();
+  });
+
   it("a maintainer session can write; a viewer session cannot; anonymous is blocked once accounts exist", async () => {
     const deps = await makeTestDeps();
     const admin = await seedUser(deps, "admin@x.com", "password123", "admin");
