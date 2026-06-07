@@ -118,13 +118,26 @@ docs/           architecture spec, per-slice plans, FUTURE-WORK.md
 
 **Prerequisites:** Docker is the only requirement to run it. (To develop: Node ≥ 20 and pnpm 9 — see [Development](#development).)
 
+**Run the published image** — single container, zero config, data persisted in a named volume:
+
+```bash
+docker run -p 5050:5050 -v allure-data:/data ghcr.io/qasecret/allure-station:latest
+```
+
+<details>
+<summary><b>Or build from source</b> (no image pull — clones the repo and builds locally)</summary>
+
 ```bash
 git clone https://github.com/qasecret/allure-station.git
 cd allure-station
 docker compose -f docker/docker-compose.yml up
 ```
 
-The first run **builds the image from source** (no prebuilt image is published yet), so it takes a few minutes; subsequent starts are instant. The service then listens on **`:5050`** and serves both the API (`/api`) and the web UI (`/`). Data persists in the `allure-data` volume (local filesystem, zero-config).
+The first build takes a few minutes; subsequent starts are instant. The compose file is also the entry point for the optional Postgres / BullMQ / MinIO [profiles](#deployment-topologies).
+
+</details>
+
+Either way the service listens on **`:5050`** and serves both the API (`/api`) and the web UI (`/`). Data persists in the `allure-data` volume (local filesystem, zero-config).
 
 **Push your first report** (zero-config mode — no auth required until you add a token or an account):
 
