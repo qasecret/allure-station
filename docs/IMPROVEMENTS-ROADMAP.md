@@ -17,6 +17,10 @@
 - 📋 = already in `FUTURE-WORK.md`; ✨ = net-new here.
 - A ⚓ marks a **foundation** others depend on — build these first within their tier.
 
+> **Verified against code (2026-06-07).** A spike of the ingest path + data model confirmed the
+> core assumptions and corrected three items — see "Spike findings" below the scorecard. Effort
+> ratings reflect those findings.
+
 ---
 
 ## The one-screen scorecard
@@ -25,12 +29,13 @@
 |---|-------------|:-----:|:------:|:----:|------------|
 | F1 | ⚓ Per-test history + cross-run search 📋(#3) | ★★★★★ | M–L | 1 | run metadata ✅ |
 | F2 | Known-issues / mute / categorization 📋(#4) | ★★★★★ | M | 1 | — |
-| F3 | Auto failure clustering by error signature ✨ | ★★★★☆ | M | 1 | — |
-| F4 | First-failed / last-passed bisect hint ✨ | ★★★★☆ | S–M | 1 | F1 |
+| F0 | ⚓ Capture error message/trace on ingest ✨ | ★★★★☆ | S–M | 1 | — |
+| F3 | Auto failure clustering by error signature ✨ | ★★★★☆ | M | 1 | F0 |
+| F4 | First-failed / last-passed bisect hint ✨ | ★★★★☆ | S | 1 | F1 |
 | F5 | Flaky-test quarantine lifecycle ✨ | ★★★★☆ | M | 1 | F1 |
 | O1 | ⚓ Retention & quotas (auto-prune, caps) 📋 | ★★★★★ | M | 0 | reconciler exists |
 | O2 | Observability: /metrics, health/readiness, logs 📋 | ★★★★☆ | S–M | 0 | — |
-| O3 | Ingest idempotency + crash-safe generation ✨ | ★★★★☆ | M | 0 | — |
+| O3 | Ingest idempotency (crash-safe already exists) ✨ | ★★★★☆ | S–M | 0 | — |
 | O4 | Login rate-limiting 📋 | ★★★☆☆ | S | 0 | — |
 | C1 | Language-agnostic CLI + GitLab/Jenkins/Azure recipes 📋(#5) | ★★★★★ | M | 2 | — |
 | C2 | Rich PR comment (new-fail/new-pass/flaky diff) ✨ | ★★★★☆ | S–M | 2 | compare exists |
@@ -46,6 +51,29 @@
 | A3 | Ownership / CODEOWNERS routing ✨ | ★★★☆☆ | M | 4 | — |
 | A4 | Time-to-green / MTTR metric ✨ | ★★★☆☆ | S | 5 | F1 |
 | X1 | LLM failure summarizer (opt-in, BYO-key) ✨ | ★★★★☆ | M | 5 | F1, F3 |
+
+---
+
+## Spike findings (2026-06-07) — assumptions checked against code
+
+Read: `db/schema.{sqlite,pg}.ts`, `db/test-results-repo.ts`, `shared/contracts.ts`,
+`routes/compare.ts`, `compare.ts`, `reconcile.ts`, `runtime.ts`.
+
+- **F1 is sound.** `test_results` already persists `historyId`, `fullName`, `duration`, `status`,
+  `flaky`; `replaceForRun` deletes only the *current* run's rows, so cross-run history accumulates
+  for free. Only gap: indexes cover `run_id` only — F1 must add a `history_id` (and/or `full_name`)
+  index in **both** dialect schemas + regenerate migrations.
+- **F0 surfaced as a new prerequisite.** Error message/trace is **not stored** anywhere
+  (`test_results` has no `message`/`trace`; `TestSummary` has no error field). Any
+  signature-based clustering (F3), error-search (part of F1), or LLM summary (X1) needs F0 first:
+  capture error text during generation → new column (both dialects) + contract field.
+- **F4 is cheaper than first rated (S, not S–M).** Status-only bisect needs just status history
+  (exists) + run metadata (exists ✅) — no F0 dependency. Ship it early.
+- **C2 confirmed cheap.** `compareRuns` already yields the base↔target test diff; C2 is formatting
+  + a comment hook.
+- **A1 confirmed cheap.** Durations are stored; it's analytics + a table.
+- **O3 is half-done.** `reconcileStale`/`startReconciler` already fail runs stuck in `generating`.
+  Remaining O3 scope is just ingest idempotency (dedup repeated `send-results`).
 
 ---
 
@@ -67,17 +95,20 @@ and can be picked up between slices.
 ### Tier 1 — Triage intelligence *(the adoption engine — highest ROI)*
 This is where automation engineers live. Ship this tier and the product becomes *sticky*.
 
-1. **F1 Per-test history + cross-run search** ⚓ — index `test_results` by `historyId`/`fullName`;
+0. **F0 Capture error message/trace on ingest** ⚓ — new `message`/`trace` column (both dialects)
+   + `TestSummary` field, populated in generation. Small, but unblocks F3, error-search, and X1.
+   *Status-only features (F1 timeline, F4) don't need it — sequence F0 alongside, not before, them.*
+1. **F1 Per-test history + cross-run search** ⚓ — add a `history_id`/`full_name` index;
    endpoints for name/status/error search and a single test's pass/fail timeline + flake rate;
    a test-detail UI. **Everything else in this tier (and A4, X1) leans on it.**
 2. **F2 Known-issues / mute / categorization** — per-project rules (match by test id / error
    signature) with mute + ticket link; gate evaluation skips muted; annotations in run/compare.
    *Can start in parallel with F1 — independent data.*
-3. **F3 Auto failure clustering** — normalize stack/assertion text (strip line numbers, hex,
-   UUIDs, timestamps) into stable signatures; group a run's failures into "N failures → K causes."
-   Feeds F2 (bulk-categorize a cluster) and X1.
+3. **F3 Auto failure clustering** *(needs F0)* — normalize stack/assertion text (strip line
+   numbers, hex, UUIDs, timestamps) into stable signatures; group a run's failures into
+   "N failures → K causes." Feeds F2 (bulk-categorize a cluster) and X1.
 4. **F4 First-failed bisect hint** — "started failing at commit `abc` (run #481)" with CI link.
-   Cheap once F1 exists; answers the #1 triage question.
+   Status-only, so independent of F0; cheap once F1 exists; answers the #1 triage question.
 5. **F5 Flaky quarantine lifecycle** — detect (pass-after-retry / alternating across runs),
    propose quarantine, track quarantine age, auto-unmute after N greens, a "flaky debt" view.
 
