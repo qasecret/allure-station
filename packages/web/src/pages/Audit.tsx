@@ -2,6 +2,10 @@ import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
+import { Topbar } from "@/components/Topbar";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const PAGE = 50;
 
@@ -16,7 +20,7 @@ export function Audit() {
   });
 
   if (isLoading) return null;
-  if (user?.role !== "admin") return <main style={{ padding: 16 }}><p>Admins only.</p></main>;
+  if (user?.role !== "admin") return (<><Topbar title="Audit" /><main className="grid flex-1 place-items-center p-6"><p className="text-sm text-muted-foreground">Admins only.</p></main></>);
 
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -24,29 +28,37 @@ export function Audit() {
     e.targetType ? `${e.targetType}${e.targetId ? `:${e.targetId}` : ""}` : "";
 
   return (
-    <main style={{ maxWidth: 900, margin: "0 auto", padding: 16 }}>
-      <h1 style={{ fontSize: 20 }}>Audit log</h1>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Project</th><th>Details</th></tr></thead>
-        <tbody>
-          {items.map((e) => (
-            <tr key={e.id} style={{ borderTop: "1px solid var(--border)" }}>
-              <td style={{ whiteSpace: "nowrap" }}>{new Date(e.at).toLocaleString()}</td>
-              <td>{e.actorLabel}</td>
-              <td>{e.action}</td>
-              <td style={{ color: "var(--muted)" }}>{target(e)}</td>
-              <td>{e.projectId ?? ""}</td>
-              <td style={{ color: "var(--muted)" }}>{e.metadata ? JSON.stringify(e.metadata) : ""}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {items.length === 0 && <p style={{ color: "var(--muted)" }}>No audit events yet.</p>}
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12, fontSize: 13 }}>
-        <button disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>Prev</button>
-        <span>{total === 0 ? 0 : page * PAGE + 1}–{Math.min((page + 1) * PAGE, total)} of {total}</span>
-        <button disabled={(page + 1) * PAGE >= total} onClick={() => setPage((p) => p + 1)}>Next</button>
-      </div>
-    </main>
+    <>
+      <Topbar title="Audit log" />
+      <main className="flex-1 overflow-auto p-6">
+        <div className="mx-auto max-w-5xl space-y-4">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Actor</TableHead><TableHead>Action</TableHead><TableHead>Target</TableHead><TableHead>Project</TableHead><TableHead>Details</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {items.map((e) => (
+                    <TableRow key={e.id}>
+                      <TableCell className="whitespace-nowrap text-muted-foreground">{new Date(e.at).toLocaleString()}</TableCell>
+                      <TableCell>{e.actorLabel}</TableCell>
+                      <TableCell><span className="font-medium">{e.action}</span></TableCell>
+                      <TableCell className="text-muted-foreground">{target(e)}</TableCell>
+                      <TableCell>{e.projectId ?? ""}</TableCell>
+                      <TableCell className="max-w-[280px] truncate text-muted-foreground">{e.metadata ? JSON.stringify(e.metadata) : ""}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+          {items.length === 0 && <p className="text-sm text-muted-foreground">No audit events yet.</p>}
+          <div className="flex items-center gap-3 text-sm">
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>Prev</Button>
+            <span className="text-muted-foreground">{total === 0 ? 0 : page * PAGE + 1}–{Math.min((page + 1) * PAGE, total)} of {total}</span>
+            <Button variant="outline" size="sm" disabled={(page + 1) * PAGE >= total} onClick={() => setPage((p) => p + 1)}>Next</Button>
+          </div>
+        </div>
+      </main>
+    </>
   );
 }
