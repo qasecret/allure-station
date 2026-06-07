@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 export function ProjectCard({ p }: { p: Project }) {
   const hasRuns = !!p.latestRunId;
   // Enrich from the runs endpoint (no stats on the project list item). Cached + reused on the project page.
-  const { data: runs = [] } = useQuery({
+  const { data: runs = [], isLoading: runsLoading } = useQuery({
     queryKey: ["runs", p.id],
     queryFn: () => api.listRuns(p.id),
     enabled: hasRuns,
@@ -22,7 +22,7 @@ export function ProjectCard({ p }: { p: Project }) {
   const latest = sorted[0];
   const latestReady = sorted.find((r) => r.status === "ready" && r.stats);
   const pct = latestReady?.stats ? passRate(latestReady.stats) : null;
-  const series = [...sorted].reverse().filter((r) => r.stats).map((r) => passRate(r.stats!)); // oldest->newest
+  const series = [...sorted].reverse().filter((r) => r.status === "ready" && r.stats).map((r) => passRate(r.stats!)); // oldest->newest
 
   return (
     <Link to={`/projects/${p.id}`} className="group block">
@@ -41,7 +41,7 @@ export function ProjectCard({ p }: { p: Project }) {
                 ? "No runs yet"
                 : latest
                   ? <>{latestReady?.stats ? `${latestReady.stats.passed}/${latestReady.stats.total} passed` : `${runs.length} run${runs.length === 1 ? "" : "s"}`}{latest.createdAt ? ` · ${relativeTime(latest.createdAt)}` : ""}</>
-                  : "Loading…"}
+                  : runsLoading ? "Loading…" : "No runs yet"}
             </p>
           </div>
           {series.length >= 2 && <Sparkline values={series} className="self-center text-primary/70" />}

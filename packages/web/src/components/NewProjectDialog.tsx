@@ -24,14 +24,14 @@ export function NewProjectDialog() {
     onError: (e) => toast.error((e as Error).message),
   });
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setId(""); }}>
       <DialogTrigger asChild><Button><Plus className="size-4" /> New project</Button></DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create project</DialogTitle>
           <DialogDescription>Give the project a unique id. CI pushes results to it.</DialogDescription>
         </DialogHeader>
-        <form id="new-project" onSubmit={(e) => { e.preventDefault(); create.mutate(); }} className="space-y-2">
+        <form id="new-project" onSubmit={(e) => { e.preventDefault(); if (!id || create.isPending) return; create.mutate(); }} className="space-y-2">
           <Label htmlFor="np-id">Project id</Label>
           <Input id="np-id" autoFocus value={id} onChange={(e) => setId(e.target.value)} placeholder="my-service" />
         </form>
