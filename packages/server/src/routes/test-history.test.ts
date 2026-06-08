@@ -88,4 +88,24 @@ describe("GET /tests/history", () => {
     expect(res.json().identity).toMatchObject({ historyId: "h1", fullName: "s#t", name: "t" });
     await app.close();
   });
+
+  it("exposes hasTrace on entries and serves the trace lazily via the trace endpoint", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await deps.projects.create("p", deps.now());
+    const failed = { historyId: "h1", name: "t", fullName: "s#t", status: "failed" as const, duration: 5, flaky: false, message: "boom", trace: "stack-here" };
+    await readyRun(deps, "p", "r1", [failed], "2026-06-01T00:00:00.000Z");
+
+    const hist = await app.inject({ method: "GET", url: "/api/projects/p/tests/history?historyId=h1" });
+    expect(hist.json().entries[0]).toMatchObject({ hasTrace: true });
+    expect(hist.json().entries[0]).not.toHaveProperty("trace"); // blob not in the timeline payload
+
+    const trace = await app.inject({ method: "GET", url: "/api/projects/p/tests/history/trace?runId=r1&historyId=h1" });
+    expect(trace.statusCode).toBe(200);
+    expect(trace.json().trace).toBe("stack-here");
+
+    const bad = await app.inject({ method: "GET", url: "/api/projects/p/tests/history/trace?historyId=h1" }); // no runId
+    expect(bad.statusCode).toBe(400);
+    await app.close();
+  });
 });

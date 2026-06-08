@@ -109,6 +109,13 @@ describe("api client", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/tests/history?historyId=h1&limit=50", expect.objectContaining({ method: "GET", credentials: "include" }));
   });
 
+  it("getTestTrace GETs /tests/history/trace with runId + identity", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ trace: "x" }) });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.getTestTrace("p", { runId: "r1", historyId: "h1" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/tests/history/trace?runId=r1&historyId=h1", expect.objectContaining({ method: "GET", credentials: "include" }));
+  });
+
   it("subscribeRuns is a no-op when EventSource is unavailable", () => {
     vi.stubGlobal("EventSource", undefined);
     const client = createClient("/api");

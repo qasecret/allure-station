@@ -601,6 +601,21 @@ for (const backend of backends) {
         expect(res.latestFullName).toBe("s#t");
         expect(res.latestName).toBe("t");
       });
+
+      it("flags hasTrace per entry and serves the blob lazily via traceForRun (project-scoped)", async () => {
+        await runs.create("p", "rtrace", "R", "2026-06-05T00:00:00.000Z", { branch: "main" });
+        await runs.claimPending("rtrace", "2026-06-05T00:00:00.000Z");
+        await tests.replaceForRun("rtrace", [
+          { historyId: "h1", name: "t", fullName: "s#t", status: "failed", duration: 5, flaky: false, message: "boom", trace: "line1\nline2" },
+        ]);
+        await runs.markReady("rtrace", { total: 1, passed: 0, failed: 1, broken: 0, skipped: 0 }, "2026-06-05T00:00:00.000Z");
+        const res = await tests.historyByKey("p", { historyId: "h1" }, 50);
+        expect(res.entries.find((e) => e.runId === "rtrace")!.hasTrace).toBe(true);
+        expect(res.entries.find((e) => e.runId === "r1")!.hasTrace).toBe(false); // passed run, no trace
+        expect(await tests.traceForRun("p", "rtrace", { historyId: "h1" })).toBe("line1\nline2");
+        expect(await tests.traceForRun("p", "rtrace", { fullName: "s#t" })).toBe("line1\nline2");
+        expect(await tests.traceForRun("other", "rtrace", { historyId: "h1" })).toBeNull(); // wrong project
+      });
     });
 
     describe("AuditRepository", () => {

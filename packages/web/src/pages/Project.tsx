@@ -289,12 +289,7 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
                     {e.ciUrl ? <a href={e.ciUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">CI</a> : null}
                   </div>
                   {e.message ? <pre className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">{e.message}</pre> : null}
-                  {e.trace ? (
-                    <details className="mt-1">
-                      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">Stack trace</summary>
-                      <pre className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">{e.trace}</pre>
-                    </details>
-                  ) : null}
+                  {e.hasTrace && test ? <TraceDetails projectId={projectId} test={test} runId={e.runId} /> : null}
                 </li>
               ))}
               {data.entries.length === 0 ? <li className="text-sm text-muted-foreground">No history for this test yet.</li> : null}
@@ -303,5 +298,26 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+// Lazily fetches a single entry's stack trace only when expanded, so the ≤16 KB blob isn't
+// transported with the timeline for every run.
+function TraceDetails({ projectId, test, runId }: { projectId: string; test: TestDiff; runId: string }) {
+  const [open, setOpen] = useState(false);
+  const { data } = useQuery({
+    queryKey: ["test-trace", projectId, runId, test.historyId, test.fullName],
+    queryFn: () => api.getTestTrace(projectId, { runId, historyId: test.historyId ?? undefined, fullName: test.fullName ?? undefined }),
+    enabled: open,
+  });
+  return (
+    <details className="mt-1" onToggle={(ev) => setOpen((ev.currentTarget as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">Stack trace</summary>
+      {open ? (
+        data === undefined
+          ? <p className="mt-1 text-xs text-muted-foreground">Loading…</p>
+          : <pre className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">{data.trace ?? "(no trace)"}</pre>
+      ) : null}
+    </details>
   );
 }

@@ -29,4 +29,17 @@ export function registerTestHistoryRoutes(app: FastifyInstance, deps: AppDeps): 
       entries,
     };
   });
+
+  // GET /projects/:projectId/tests/history/trace?runId=…&historyId=…|fullName=…
+  // Lazily serves one (run, test) cell's stack trace, so the heavy blob is only fetched on expand.
+  app.get("/projects/:projectId/tests/history/trace", async (req, reply) => {
+    const { projectId } = req.params as { projectId: string };
+    const { runId, historyId, fullName } = req.query as { runId?: string; historyId?: string; fullName?: string };
+    if (!(await readGate(deps, req, projectId))) return reply.code(404).send({ error: "project not found" });
+    if (!runId || (!historyId && !fullName)) return reply.code(400).send({ error: "runId and historyId or fullName are required" });
+
+    const key = historyId ? { historyId } : { fullName: fullName! };
+    const trace = await deps.testResults.traceForRun(projectId, runId, key);
+    return { trace };
+  });
 }

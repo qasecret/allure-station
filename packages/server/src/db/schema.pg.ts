@@ -112,6 +112,8 @@ export const testResults = pgTable("test_results", {
   trace: text("trace"),
 }, (t) => ({
   byRun: index("idx_test_results_run").on(t.runId),
-  byHistory: index("idx_test_results_history").on(t.historyId),
-  byFullName: index("idx_test_results_fullname").on(t.fullName),
+  // Composite (match-key, run_id): covers the historyByKey match predicate AND the join key to runs
+  // in one index scan, so the cross-run timeline query doesn't seek runs per matched row.
+  byHistory: index("idx_test_results_history").on(t.historyId, t.runId),
+  byFullName: index("idx_test_results_fullname").on(t.fullName, t.runId),
 }));

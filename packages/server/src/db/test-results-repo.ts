@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { TestHistoryEntry, TestStatus, TestSummary } from "@allure-station/shared";
 import type { Db } from "./client.js";
 import { runs, testResults } from "./schema.sqlite.js";
@@ -70,7 +70,10 @@ export class TestResultRepository {
         runId: runs.id, createdAt: runs.createdAt, branch: runs.branch, commit: runs.commit, ciUrl: runs.ciUrl,
         historyId: testResults.historyId, fullName: testResults.fullName, name: testResults.name,
         status: testResults.status, duration: testResults.duration,
-        flaky: testResults.flaky, message: testResults.message, trace: testResults.trace,
+        flaky: testResults.flaky, message: testResults.message,
+        // Compute presence in SQL so the ≤16 KB trace blob is never pulled into the timeline payload;
+        // the actual trace is fetched lazily via traceForRun when the user expands an entry.
+        hasTrace: sql<number>`case when ${testResults.trace} is not null then 1 else 0 end`,
       })
       .from(testResults)
       .innerJoin(runs, eq(testResults.runId, runs.id))
@@ -96,7 +99,7 @@ export class TestResultRepository {
         duration: r.duration === null ? null : Number(r.duration),
         flaky: r.flaky === "true",
         message: r.message ?? null,
-        trace: r.trace ?? null,
+        hasTrace: Number(r.hasTrace) === 1,
       });
     }
     const flakyCount = entries.filter((e) => e.flaky).length;
@@ -108,5 +111,24 @@ export class TestResultRepository {
       latestFullName: top?.fullName ?? null,
       latestHistoryId: top?.historyId ?? null,
     };
+  }
+
+  /** The stack trace for a single (run, test) cell — fetched lazily when a timeline entry is
+   *  expanded, so the heavy blob is only transferred on demand. Project-scoped via the runs join. */
+  async traceForRun(
+    projectId: string,
+    runId: string,
+    key: { historyId: string } | { fullName: string },
+  ): Promise<string | null> {
+    const match = "historyId" in key
+      ? eq(testResults.historyId, key.historyId)
+      : eq(testResults.fullName, key.fullName);
+    const [row] = await this.db
+      .select({ trace: testResults.trace })
+      .from(testResults)
+      .innerJoin(runs, eq(testResults.runId, runs.id))
+      .where(and(eq(runs.projectId, projectId), eq(runs.id, runId), match))
+      .limit(1);
+    return row?.trace ?? null;
   }
 }
