@@ -5,6 +5,7 @@ import type { ProjectRole } from "@allure-station/shared";
 import { toast } from "sonner";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
+import { settingsState } from "@/lib/settings-access";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,24 +18,50 @@ const PROJECT_ROLES: ProjectRole[] = ["viewer", "maintainer", "owner"];
 
 export function ProjectSettings() {
   const { id = "" } = useParams();
-  const { user } = useAuth();
-  // Owner-gated members fetch doubles as the capability probe (mirrors the old inline panels).
+  const { user, isLoading: authLoading } = useAuth();
+  const { data: config, isLoading: configLoading } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
+  // Owner-gated members fetch doubles as the capability probe.
   const { data: members, isError } = useQuery({
     queryKey: ["members", id], queryFn: () => api.listMembers(id), enabled: !!user, retry: false,
   });
-  const denied = !user || isError || members === undefined;
+  const canManageMembers = !!user && !isError && members !== undefined;
+  const state = settingsState({ securityEnabled: !!config?.securityEnabled, signedIn: !!user, canManageMembers });
+
   return (
     <>
       <Topbar title={<span className="flex items-center gap-2"><Link to={`/projects/${id}`} className="text-muted-foreground hover:text-foreground">{id}</Link><span className="text-muted-foreground">/</span>Settings</span>} />
       <main className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-3xl space-y-6">
-          {denied ? (
-            <p className="text-sm text-muted-foreground">You don't have access to this project's settings.</p>
+          {(configLoading || authLoading) ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : state === "signin" ? (
+            <p className="text-sm text-muted-foreground">
+              <Link to="/login" className="text-primary hover:underline">Sign in</Link> to manage this project's settings.
+            </p>
           ) : (
             <>
+              {state === "open" && (
+                <Card><CardContent className="p-4 text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">Open mode.</span> Anyone can manage this project.
+                  Set <code>ADMIN_EMAIL</code> and <code>ADMIN_PASSWORD</code> to require sign-in.
+                </CardContent></Card>
+              )}
               <VisibilityCard projectId={id} />
-              <MembersCard projectId={id} members={members ?? []} />
-              <AuditCard projectId={id} enabled={!!user} />
+              <QualityGateCard projectId={id} />
+              <TokensCard projectId={id} />
+              <NotificationsCard projectId={id} />
+              {state === "manage" ? (
+                <>
+                  <MembersCard projectId={id} members={members ?? []} />
+                  <AuditCard projectId={id} enabled />
+                </>
+              ) : (
+                <Card><CardContent className="p-4 text-sm text-muted-foreground">
+                  {state === "open"
+                    ? "Enable accounts (set ADMIN_EMAIL / ADMIN_PASSWORD) to manage members and view the audit log."
+                    : "You need the owner or admin role to manage members and view the audit log."}
+                </CardContent></Card>
+              )}
             </>
           )}
         </div>
@@ -136,3 +163,7 @@ function AuditCard({ projectId, enabled }: { projectId: string; enabled: boolean
     </Card>
   );
 }
+
+function QualityGateCard(_: { projectId: string }) { return null; }
+function TokensCard(_: { projectId: string }) { return null; }
+function NotificationsCard(_: { projectId: string }) { return null; }
