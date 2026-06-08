@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import type { ProjectRole } from "@allure-station/shared";
+import type { ProjectRole, CreatedToken, NotificationKind, NotificationTrigger } from "@allure-station/shared";
+import { relativeTime } from "@/lib/format";
 import { toast } from "sonner";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
+import { settingsState } from "@/lib/settings-access";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,29 +14,56 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { qgConfigToForm, qgFormToConfig, type QgForm } from "@/lib/quality-gate-form";
 
 const PROJECT_ROLES: ProjectRole[] = ["viewer", "maintainer", "owner"];
 
 export function ProjectSettings() {
   const { id = "" } = useParams();
-  const { user } = useAuth();
-  // Owner-gated members fetch doubles as the capability probe (mirrors the old inline panels).
+  const { user, isLoading: authLoading } = useAuth();
+  const { data: config, isLoading: configLoading } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
+  // Owner-gated members fetch doubles as the capability probe.
   const { data: members, isError } = useQuery({
     queryKey: ["members", id], queryFn: () => api.listMembers(id), enabled: !!user, retry: false,
   });
-  const denied = !user || isError || members === undefined;
+  const canManageMembers = !!user && !isError && members !== undefined;
+  const state = settingsState({ securityEnabled: !!config?.securityEnabled, signedIn: !!user, canManageMembers });
+
   return (
     <>
       <Topbar title={<span className="flex items-center gap-2"><Link to={`/projects/${id}`} className="text-muted-foreground hover:text-foreground">{id}</Link><span className="text-muted-foreground">/</span>Settings</span>} />
       <main className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-3xl space-y-6">
-          {denied ? (
-            <p className="text-sm text-muted-foreground">You don't have access to this project's settings.</p>
+          {(configLoading || authLoading) ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : state === "signin" ? (
+            <p className="text-sm text-muted-foreground">
+              <Link to="/login" className="text-primary hover:underline">Sign in</Link> to manage this project's settings.
+            </p>
           ) : (
             <>
+              {state === "open" && (
+                <Card><CardContent className="p-4 text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">Open mode.</span> Anyone can manage this project.
+                  Set <code>ADMIN_EMAIL</code> and <code>ADMIN_PASSWORD</code> to require sign-in.
+                </CardContent></Card>
+              )}
               <VisibilityCard projectId={id} />
-              <MembersCard projectId={id} members={members ?? []} />
-              <AuditCard projectId={id} enabled={!!user} />
+              <QualityGateCard projectId={id} />
+              <TokensCard projectId={id} />
+              <NotificationsCard projectId={id} />
+              {state === "manage" ? (
+                <>
+                  <MembersCard projectId={id} members={members ?? []} />
+                  <AuditCard projectId={id} enabled />
+                </>
+              ) : (
+                <Card><CardContent className="p-4 text-sm text-muted-foreground">
+                  {state === "open"
+                    ? "Enable accounts (set ADMIN_EMAIL / ADMIN_PASSWORD) to manage members and view the audit log."
+                    : "You need the owner or admin role to manage members and view the audit log."}
+                </CardContent></Card>
+              )}
             </>
           )}
         </div>
@@ -131,6 +160,165 @@ function AuditCard({ projectId, enabled }: { projectId: string; enabled: boolean
               </li>
             ))}
           </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function QualityGateCard({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["quality-gate", projectId], queryFn: () => api.getQualityGate(projectId) });
+  const [form, setForm] = useState<QgForm>({ maxFailures: "", minTests: "", minPassRate: "", maxDurationSec: "" });
+  useEffect(() => { if (data) setForm(qgConfigToForm(data)); }, [data]);
+  const save = useMutation({
+    mutationFn: () => api.setQualityGate(projectId, qgFormToConfig(form)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["quality-gate", projectId] }); toast.success("Quality gate saved"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const field = (key: keyof QgForm, label: string, hint: string) => (
+    <label className="flex flex-col gap-1 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <Input type="number" min={0} step={1} value={form[key]} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} placeholder={hint} className="max-w-[160px]" />
+    </label>
+  );
+  if (data === undefined) return null;
+  return (
+    <Card>
+      <CardHeader><CardTitle>Quality gate</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); if (!save.isPending) save.mutate(); }} className="space-y-4">
+          <div className="flex flex-wrap gap-4">
+            {field("maxFailures", "Max failures", "e.g. 0")}
+            {field("minTests", "Min tests", "e.g. 1")}
+            {field("minPassRate", "Min pass rate (%)", "e.g. 95")}
+            {field("maxDurationSec", "Max duration (s)", "e.g. 600")}
+          </div>
+          <Button type="submit" size="sm" disabled={save.isPending}>Save gate</Button>
+        </form>
+        <p className="text-xs text-muted-foreground">Leave a field blank to disable that rule. The badge and run summary reflect the verdict.</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TokensCard({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState("");
+  const [created, setCreated] = useState<CreatedToken | null>(null);
+  // Drop a revealed token if we navigate to another project (the route reuses this component).
+  useEffect(() => { setCreated(null); }, [projectId]);
+  const { data: tokens } = useQuery({ queryKey: ["tokens", projectId], queryFn: () => api.listTokens(projectId) });
+  const create = useMutation({
+    mutationFn: () => api.createToken(projectId, name),
+    onSuccess: (t) => { setCreated(t); setName(""); qc.invalidateQueries({ queryKey: ["tokens", projectId] }); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const remove = useMutation({
+    mutationFn: (tokenId: string) => api.deleteToken(projectId, tokenId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tokens", projectId] }); toast.success("Token revoked"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  if (tokens === undefined) return null;
+  return (
+    <Card>
+      <CardHeader><CardTitle>CI tokens ({tokens.length})</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); if (!name || create.isPending) return; create.mutate(); }} className="flex flex-wrap items-center gap-2">
+          <Input aria-label="Token name" placeholder="token name (e.g. ci-pipeline)" value={name} onChange={(e) => setName(e.target.value)} maxLength={64} required className="max-w-xs" />
+          <Button type="submit" disabled={create.isPending}>Create token</Button>
+        </form>
+        {created && (
+          <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-sm">
+            <p className="font-medium">Copy this token now — it won't be shown again.</p>
+            <div className="mt-1 flex items-center gap-2">
+              <code className="break-all rounded bg-muted px-2 py-1">{created.token}</code>
+              <Button size="sm" variant="outline" onClick={() => { void navigator.clipboard?.writeText(created.token).then(() => toast.success("Copied")); }}>Copy</Button>
+              <Button size="sm" variant="ghost" onClick={() => setCreated(null)}>Dismiss</Button>
+            </div>
+          </div>
+        )}
+        {tokens.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No tokens yet — this project's writes are open until you add one.</p>
+        ) : (
+          <Table>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Prefix</TableHead><TableHead>Last used</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>
+              {tokens.map((t) => (
+                <TableRow key={t.id}>
+                  <TableCell>{t.name}</TableCell>
+                  <TableCell><code className="text-xs text-muted-foreground">{t.prefix}…</code></TableCell>
+                  <TableCell className="text-muted-foreground">{t.lastUsedAt ? relativeTime(t.lastUsedAt) : "never"}</TableCell>
+                  <TableCell className="text-right"><Button variant="ghost" size="sm" disabled={remove.isPending && remove.variables === t.id} onClick={() => remove.mutate(t.id)}>Revoke</Button></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+const NOTIF_EVENTS: NotificationTrigger[] = ["completed", "failed", "gate_failed", "regression"];
+
+function NotificationsCard({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const [kind, setKind] = useState<NotificationKind>("webhook");
+  const [url, setUrl] = useState("");
+  const [events, setEvents] = useState<NotificationTrigger[]>(["failed", "gate_failed", "regression"]);
+  // Clear a half-typed URL if we navigate to another project (the route reuses this component).
+  useEffect(() => { setUrl(""); }, [projectId]);
+  const { data: notifs } = useQuery({ queryKey: ["notifications", projectId], queryFn: () => api.listNotifications(projectId) });
+  const create = useMutation({
+    mutationFn: () => api.createNotification(projectId, { kind, url, events }),
+    onSuccess: () => { setUrl(""); qc.invalidateQueries({ queryKey: ["notifications", projectId] }); toast.success("Notification added"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const remove = useMutation({
+    mutationFn: (notificationId: string) => api.deleteNotification(projectId, notificationId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["notifications", projectId] }); toast.success("Notification removed"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const toggle = (ev: NotificationTrigger) => setEvents((cur) => cur.includes(ev) ? cur.filter((x) => x !== ev) : [...cur, ev]);
+  if (notifs === undefined) return null;
+  return (
+    <Card>
+      <CardHeader><CardTitle>Notifications ({notifs.length})</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); if (!url || events.length === 0 || create.isPending) return; create.mutate(); }} className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={kind} onValueChange={(v) => setKind(v as NotificationKind)}>
+              <SelectTrigger aria-label="Notification kind" className="w-[130px]"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="webhook">webhook</SelectItem><SelectItem value="slack">slack</SelectItem></SelectContent>
+            </Select>
+            <Input aria-label="Notification URL" type="url" placeholder="https://hooks.example.com/…" value={url} onChange={(e) => setUrl(e.target.value)} required className="max-w-sm" />
+            <Button type="submit" disabled={create.isPending}>Add</Button>
+          </div>
+          <div className="flex flex-wrap gap-3 text-sm">
+            {NOTIF_EVENTS.map((ev) => (
+              <label key={ev} className="flex items-center gap-1">
+                <input type="checkbox" checked={events.includes(ev)} onChange={() => toggle(ev)} aria-label={ev} />
+                <span className="text-muted-foreground">{ev}</span>
+              </label>
+            ))}
+          </div>
+        </form>
+        {notifs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No notifications configured.</p>
+        ) : (
+          <Table>
+            <TableHeader><TableRow><TableHead>Kind</TableHead><TableHead>URL</TableHead><TableHead>Events</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>
+              {notifs.map((n) => (
+                <TableRow key={n.id}>
+                  <TableCell><Badge variant="secondary">{n.kind}</Badge></TableCell>
+                  <TableCell className="max-w-[220px] truncate text-muted-foreground">{n.url}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{n.events.join(", ")}</TableCell>
+                  <TableCell className="text-right"><Button variant="ghost" size="sm" disabled={remove.isPending && remove.variables === n.id} onClick={() => remove.mutate(n.id)}>Remove</Button></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </CardContent>
     </Card>

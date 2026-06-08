@@ -1,6 +1,7 @@
 import type {
   Project, Run, TrendPoint, RunEvent, CompareResult, TestHistory, TestTrace,
   SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry, ProjectVisibility,
+  ApiToken, CreatedToken, QualityGateConfig, Notification, NotificationKind, NotificationTrigger,
 } from "@allure-station/shared";
 
 export interface AppConfigInfo {
@@ -36,6 +37,14 @@ export interface ApiClient {
   deleteUser(id: string): Promise<void>;
   listAudit(opts?: { limit?: number; offset?: number }): Promise<{ items: AuditEntry[]; total: number }>;
   listProjectAudit(projectId: string, opts?: { limit?: number; offset?: number }): Promise<{ items: AuditEntry[]; total: number }>;
+  getQualityGate(projectId: string): Promise<QualityGateConfig>;
+  setQualityGate(projectId: string, cfg: QualityGateConfig): Promise<QualityGateConfig>;
+  listTokens(projectId: string): Promise<ApiToken[]>;
+  createToken(projectId: string, name: string): Promise<CreatedToken>;
+  deleteToken(projectId: string, tokenId: string): Promise<void>;
+  listNotifications(projectId: string): Promise<Notification[]>;
+  createNotification(projectId: string, body: { kind: NotificationKind; url: string; events: NotificationTrigger[] }): Promise<Notification>;
+  deleteNotification(projectId: string, notificationId: string): Promise<void>;
 }
 
 export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
@@ -101,6 +110,17 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     deleteUser: (id) => noContent(`/users/${id}`, { method: "DELETE" }),
     listAudit: (opts = {}) => listWithTotal<AuditEntry>(`/audit${qs(opts)}`),
     listProjectAudit: (projectId, opts = {}) => listWithTotal<AuditEntry>(`/projects/${projectId}/audit${qs(opts)}`),
+    getQualityGate: (projectId) => json<QualityGateConfig>(`/projects/${projectId}/quality-gate`, { method: "GET" }),
+    setQualityGate: (projectId, cfg) =>
+      json<QualityGateConfig>(`/projects/${projectId}/quality-gate`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(cfg) }),
+    listTokens: (projectId) => json<ApiToken[]>(`/projects/${projectId}/tokens`, { method: "GET" }),
+    createToken: (projectId, name) =>
+      json<CreatedToken>(`/projects/${projectId}/tokens`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) }),
+    deleteToken: (projectId, tokenId) => noContent(`/projects/${projectId}/tokens/${tokenId}`, { method: "DELETE" }),
+    listNotifications: (projectId) => json<Notification[]>(`/projects/${projectId}/notifications`, { method: "GET" }),
+    createNotification: (projectId, body) =>
+      json<Notification>(`/projects/${projectId}/notifications`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    deleteNotification: (projectId, notificationId) => noContent(`/projects/${projectId}/notifications/${notificationId}`, { method: "DELETE" }),
     subscribeRuns: (projectId, onEvent) => {
       // No-op where EventSource is unavailable (e.g. jsdom/SSR); the page still works via fetch.
       if (typeof EventSource === "undefined") return () => {};

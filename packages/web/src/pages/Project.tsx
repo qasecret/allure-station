@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { relativeTime } from "@/lib/format";
+import { relativeTime, runLabel } from "@/lib/format";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
 const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
@@ -207,7 +207,7 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
   if (readyRuns.length < 2) return null;
   const pick = (set: (v: string) => void) => (v: string) => { setTouched(true); set(v); };
   const runItems = readyRuns.map((r) => (
-    <SelectItem key={r.id} value={r.id}>{r.createdAt}{r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}</SelectItem>
+    <SelectItem key={r.id} value={r.id}><span title={r.createdAt}>{runLabel(r)}</span></SelectItem>
   ));
   return (
     <Card className="min-w-[300px] flex-1">
@@ -248,8 +248,9 @@ function Bucket({ label, color, tests, onOpen }: { label: string; color: string;
             <span>{t.name}{t.baseStatus && t.targetStatus ? <span className="text-muted-foreground"> ({t.baseStatus}→{t.targetStatus})</span> : null}</span>
             {(t.historyId ?? t.fullName) ? (
               <button type="button" onClick={() => onOpen(t)} aria-label={`History for ${t.name}`}
-                className="rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                className="ml-1 inline-flex items-center gap-1 rounded px-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                 <History className="size-3.5" />
+                <span>History</span>
               </button>
             ) : null}
           </li>
