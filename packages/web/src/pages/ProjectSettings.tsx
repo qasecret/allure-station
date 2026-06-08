@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import type { ProjectRole } from "@allure-station/shared";
+import type { ProjectRole, CreatedToken } from "@allure-station/shared";
+import { relativeTime } from "@/lib/format";
 import { toast } from "sonner";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
@@ -201,5 +202,61 @@ function QualityGateCard({ projectId }: { projectId: string }) {
   );
 }
 
-function TokensCard(_: { projectId: string }) { return null; }
+function TokensCard({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState("");
+  const [created, setCreated] = useState<CreatedToken | null>(null);
+  // Drop a revealed token if we navigate to another project (the route reuses this component).
+  useEffect(() => { setCreated(null); }, [projectId]);
+  const { data: tokens } = useQuery({ queryKey: ["tokens", projectId], queryFn: () => api.listTokens(projectId) });
+  const create = useMutation({
+    mutationFn: () => api.createToken(projectId, name),
+    onSuccess: (t) => { setCreated(t); setName(""); qc.invalidateQueries({ queryKey: ["tokens", projectId] }); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const remove = useMutation({
+    mutationFn: (tokenId: string) => api.deleteToken(projectId, tokenId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tokens", projectId] }); toast.success("Token revoked"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  if (tokens === undefined) return null;
+  return (
+    <Card>
+      <CardHeader><CardTitle>CI tokens ({tokens.length})</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); if (!name || create.isPending) return; create.mutate(); }} className="flex flex-wrap items-center gap-2">
+          <Input aria-label="Token name" placeholder="token name (e.g. ci-pipeline)" value={name} onChange={(e) => setName(e.target.value)} maxLength={64} required className="max-w-xs" />
+          <Button type="submit" disabled={create.isPending}>Create token</Button>
+        </form>
+        {created && (
+          <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-sm">
+            <p className="font-medium">Copy this token now — it won't be shown again.</p>
+            <div className="mt-1 flex items-center gap-2">
+              <code className="break-all rounded bg-muted px-2 py-1">{created.token}</code>
+              <Button size="sm" variant="outline" onClick={() => { void navigator.clipboard?.writeText(created.token).then(() => toast.success("Copied")); }}>Copy</Button>
+              <Button size="sm" variant="ghost" onClick={() => setCreated(null)}>Dismiss</Button>
+            </div>
+          </div>
+        )}
+        {tokens.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No tokens yet — this project's writes are open until you add one.</p>
+        ) : (
+          <Table>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Prefix</TableHead><TableHead>Last used</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>
+              {tokens.map((t) => (
+                <TableRow key={t.id}>
+                  <TableCell>{t.name}</TableCell>
+                  <TableCell><code className="text-xs text-muted-foreground">{t.prefix}…</code></TableCell>
+                  <TableCell className="text-muted-foreground">{t.lastUsedAt ? relativeTime(t.lastUsedAt) : "never"}</TableCell>
+                  <TableCell className="text-right"><Button variant="ghost" size="sm" disabled={remove.isPending && remove.variables === t.id} onClick={() => remove.mutate(t.id)}>Revoke</Button></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 function NotificationsCard(_: { projectId: string }) { return null; }
