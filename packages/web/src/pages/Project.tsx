@@ -248,8 +248,9 @@ function Bucket({ label, color, tests, onOpen }: { label: string; color: string;
             <span>{t.name}{t.baseStatus && t.targetStatus ? <span className="text-muted-foreground"> ({t.baseStatus}→{t.targetStatus})</span> : null}</span>
             {(t.historyId ?? t.fullName) ? (
               <button type="button" onClick={() => onOpen(t)} aria-label={`History for ${t.name}`}
-                className="rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                className="ml-1 inline-flex items-center gap-1 rounded px-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                 <History className="size-3.5" />
+                <span>History</span>
               </button>
             ) : null}
           </li>
