@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import type { ProjectRole, CreatedToken } from "@allure-station/shared";
+import type { ProjectRole, CreatedToken, NotificationKind, NotificationTrigger } from "@allure-station/shared";
 import { relativeTime } from "@/lib/format";
 import { toast } from "sonner";
 import { api } from "../main.js";
@@ -259,4 +259,68 @@ function TokensCard({ projectId }: { projectId: string }) {
     </Card>
   );
 }
-function NotificationsCard(_: { projectId: string }) { return null; }
+const NOTIF_EVENTS: NotificationTrigger[] = ["completed", "failed", "gate_failed", "regression"];
+
+function NotificationsCard({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const [kind, setKind] = useState<NotificationKind>("webhook");
+  const [url, setUrl] = useState("");
+  const [events, setEvents] = useState<NotificationTrigger[]>(["failed", "gate_failed", "regression"]);
+  // Clear a half-typed URL if we navigate to another project (the route reuses this component).
+  useEffect(() => { setUrl(""); }, [projectId]);
+  const { data: notifs } = useQuery({ queryKey: ["notifications", projectId], queryFn: () => api.listNotifications(projectId) });
+  const create = useMutation({
+    mutationFn: () => api.createNotification(projectId, { kind, url, events }),
+    onSuccess: () => { setUrl(""); qc.invalidateQueries({ queryKey: ["notifications", projectId] }); toast.success("Notification added"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const remove = useMutation({
+    mutationFn: (notificationId: string) => api.deleteNotification(projectId, notificationId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["notifications", projectId] }); toast.success("Notification removed"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const toggle = (ev: NotificationTrigger) => setEvents((cur) => cur.includes(ev) ? cur.filter((x) => x !== ev) : [...cur, ev]);
+  if (notifs === undefined) return null;
+  return (
+    <Card>
+      <CardHeader><CardTitle>Notifications ({notifs.length})</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); if (!url || events.length === 0 || create.isPending) return; create.mutate(); }} className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={kind} onValueChange={(v) => setKind(v as NotificationKind)}>
+              <SelectTrigger aria-label="Notification kind" className="w-[130px]"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="webhook">webhook</SelectItem><SelectItem value="slack">slack</SelectItem></SelectContent>
+            </Select>
+            <Input aria-label="Notification URL" type="url" placeholder="https://hooks.example.com/…" value={url} onChange={(e) => setUrl(e.target.value)} required className="max-w-sm" />
+            <Button type="submit" disabled={create.isPending}>Add</Button>
+          </div>
+          <div className="flex flex-wrap gap-3 text-sm">
+            {NOTIF_EVENTS.map((ev) => (
+              <label key={ev} className="flex items-center gap-1">
+                <input type="checkbox" checked={events.includes(ev)} onChange={() => toggle(ev)} aria-label={ev} />
+                <span className="text-muted-foreground">{ev}</span>
+              </label>
+            ))}
+          </div>
+        </form>
+        {notifs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No notifications configured.</p>
+        ) : (
+          <Table>
+            <TableHeader><TableRow><TableHead>Kind</TableHead><TableHead>URL</TableHead><TableHead>Events</TableHead><TableHead /></TableRow></TableHeader>
+            <TableBody>
+              {notifs.map((n) => (
+                <TableRow key={n.id}>
+                  <TableCell><Badge variant="secondary">{n.kind}</Badge></TableCell>
+                  <TableCell className="max-w-[220px] truncate text-muted-foreground">{n.url}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{n.events.join(", ")}</TableCell>
+                  <TableCell className="text-right"><Button variant="ghost" size="sm" disabled={remove.isPending && remove.variables === n.id} onClick={() => remove.mutate(n.id)}>Remove</Button></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
