@@ -58,6 +58,10 @@ export const testSummarySchema = z.object({
   status: testStatusSchema,
   duration: z.number().nullable(),
   flaky: z.boolean(),
+  // Failure detail captured on ingest (F0). nullable().optional() so summaries created before this
+  // field existed (and helpers that omit it) still parse — mirrors runSchema's CI-metadata fields.
+  message: z.string().nullable().optional(),
+  trace: z.string().nullable().optional(),
 });
 
 // One test's cross-run difference.
@@ -80,6 +84,37 @@ export const compareResultSchema = z.object({
   removed: z.array(testDiffSchema),      // absent in target
   flaky: z.array(testDiffSchema),        // flagged flaky in target
 });
+
+// One run's outcome for a single test, plus that run's CI metadata — a row in the test's timeline.
+// `message` (short, ≤2 KB) is inline; the heavy `trace` (≤16 KB) is fetched lazily per entry via
+// the trace endpoint, so the timeline only carries a `hasTrace` flag to drive the expand affordance.
+export const testHistoryEntrySchema = z.object({
+  runId: z.string(),
+  createdAt: z.string(),
+  branch: z.string().nullable(),
+  commit: z.string().nullable(),
+  ciUrl: z.string().nullable(),
+  status: testStatusSchema,
+  duration: z.number().nullable(),
+  flaky: z.boolean(),
+  message: z.string().nullable(),
+  hasTrace: z.boolean(),
+});
+
+// A single test's cross-run timeline + flake rate over the returned window (newest run first).
+export const testHistorySchema = z.object({
+  identity: z.object({
+    historyId: z.string().nullable(),
+    fullName: z.string().nullable(),
+    name: z.string(),
+  }),
+  window: z.number(),     // number of runs in `entries`
+  flakeRate: z.number(),  // flakyCount / window, 0 when empty
+  entries: z.array(testHistoryEntrySchema),
+});
+
+// Lazily-fetched stack trace for a single (run, test) cell of the timeline.
+export const testTraceSchema = z.object({ trace: z.string().nullable() });
 
 // .strict() so a typo'd rule (e.g. {maxFailurez:0}) is a 400, not silently stripped to {} — which
 // would clear the gate and let everything pass.
@@ -237,6 +272,9 @@ export type TestStatus = z.infer<typeof testStatusSchema>;
 export type TestSummary = z.infer<typeof testSummarySchema>;
 export type TestDiff = z.infer<typeof testDiffSchema>;
 export type CompareResult = z.infer<typeof compareResultSchema>;
+export type TestHistoryEntry = z.infer<typeof testHistoryEntrySchema>;
+export type TestHistory = z.infer<typeof testHistorySchema>;
+export type TestTrace = z.infer<typeof testTraceSchema>;
 export type ApiToken = z.infer<typeof apiTokenSchema>;
 export type CreatedToken = z.infer<typeof createdTokenSchema>;
 export type QualityGateConfig = z.infer<typeof qualityGateConfigSchema>;

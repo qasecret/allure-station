@@ -31,6 +31,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerUserRoutes } from "./routes/users.js";
 import { registerMemberRoutes } from "./routes/members.js";
 import { registerAuditRoutes } from "./routes/audit.js";
+import { registerTestHistoryRoutes } from "./routes/test-history.js";
 
 export interface AppDeps {
   projects: ProjectRepository;
@@ -83,6 +84,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       registerUserRoutes(api, deps);
       registerMemberRoutes(api, deps);
       registerAuditRoutes(api, deps);
+      registerTestHistoryRoutes(api, deps);
     },
     { prefix: "/api" },
   );

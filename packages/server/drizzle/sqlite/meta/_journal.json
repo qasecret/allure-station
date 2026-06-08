@@ -85,6 +85,27 @@
       "when": 1780806315366,
       "tag": "0011_glossy_amphibian",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1780848266910,
+      "tag": "0012_married_centennial",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1780869718911,
+      "tag": "0013_many_nick_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1780886832123,
+      "tag": "0014_mighty_spyke",
+      "breakpoints": true
     }
   ]
 }

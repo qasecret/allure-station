@@ -350,8 +350,8 @@ for (const backend of backends) {
 
     describe("TestResultRepository", () => {
       const sample: TestSummary[] = [
-        { historyId: "h-pass", name: "passing test", fullName: "suite#passing", status: "passed", duration: 1000, flaky: false },
-        { historyId: "h-fail", name: "failing test", fullName: "suite#failing", status: "failed", duration: 2000, flaky: true },
+        { historyId: "h-pass", name: "passing test", fullName: "suite#passing", status: "passed", duration: 1000, flaky: false, message: null, trace: null },
+        { historyId: "h-fail", name: "failing test", fullName: "suite#failing", status: "failed", duration: 2000, flaky: true, message: "boom", trace: "at x:1" },
         { historyId: null, name: "no-history test", fullName: null, status: "skipped", duration: null, flaky: false },
       ];
 
@@ -360,6 +360,8 @@ for (const backend of backends) {
         await runs.create("p", "r1", "R", "2026-06-06T00:00:00.000Z");
       });
 
+      // listByRun is the lean comparison reader (no message/trace); message/trace persistence is
+      // covered by the historyByKey timeline test below.
       it("replaceForRun inserts and listByRun round-trips status/duration/flaky/null", async () => {
         await tests.replaceForRun("r1", sample);
         const got = await tests.listByRun("r1");
@@ -538,6 +540,81 @@ for (const backend of backends) {
         expect(await members.remove("other", u.id)).toBe(false);
         await projects.remove("p");
         expect(await members.find("p", u.id)).toBeNull();
+      });
+    });
+
+    describe("historyByKey (cross-run timeline)", () => {
+      const mk = async (proj: string, runId: string, createdAt: string, status: TestSummary["status"], ready = true) => {
+        await runs.create(proj, runId, "R", createdAt, { branch: "main", commit: "c1", ciUrl: "http://ci/" + runId });
+        await runs.claimPending(runId, createdAt);
+        await tests.replaceForRun(runId, [{
+          historyId: "h1", name: "t", fullName: "s#t", status,
+          duration: 5, flaky: status === "failed", message: status === "failed" ? "boom" : null, trace: null,
+        }]);
+        if (ready) await runs.markReady(runId, { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0 }, createdAt);
+      };
+
+      beforeEach(async () => {
+        await projects.create("p", "2026-06-06T00:00:00.000Z");
+        await projects.create("other", "2026-06-06T00:00:00.000Z");
+        await mk("p", "r1", "2026-06-01T00:00:00.000Z", "passed");
+        await mk("p", "r2", "2026-06-02T00:00:00.000Z", "failed");
+        await mk("p", "r3", "2026-06-03T00:00:00.000Z", "passed");
+        await mk("other", "o1", "2026-06-02T12:00:00.000Z", "failed");           // different project
+        await mk("p", "pending", "2026-06-04T00:00:00.000Z", "failed", false);   // not ready
+      });
+
+      it("returns the test's ready runs newest-first, scoped to the project, with flake rate", async () => {
+        const res = await tests.historyByKey("p", { historyId: "h1" }, 50);
+        expect(res.entries.map((e) => e.runId)).toEqual(["r3", "r2", "r1"]);
+        expect(res.latestName).toBe("t");
+        expect(res.entries[1]).toMatchObject({ runId: "r2", status: "failed", flaky: true, message: "boom", branch: "main", ciUrl: "http://ci/r2" });
+        expect(res.flakeRate).toBeCloseTo(1 / 3);
+      });
+
+      it("clamps the limit to [1,200]", async () => {
+        expect((await tests.historyByKey("p", { historyId: "h1" }, 1)).entries).toHaveLength(1);
+        expect((await tests.historyByKey("p", { historyId: "h1" }, 9999)).entries.length).toBeLessThanOrEqual(200);
+      });
+
+      it("matches by fullName when historyId is not given", async () => {
+        const res = await tests.historyByKey("p", { fullName: "s#t" }, 50);
+        expect(res.entries.map((e) => e.runId)).toEqual(["r3", "r2", "r1"]);
+      });
+
+      it("collapses retried rows (same run, same historyId) to one entry per run", async () => {
+        await runs.create("p", "rdup", "R", "2026-06-05T00:00:00.000Z", { branch: "main" });
+        await runs.claimPending("rdup", "2026-06-05T00:00:00.000Z");
+        await tests.replaceForRun("rdup", [
+          { historyId: "h1", name: "t", fullName: "s#t", status: "failed", duration: 5, flaky: true, message: "a", trace: null },
+          { historyId: "h1", name: "t", fullName: "s#t", status: "passed", duration: 6, flaky: true, message: null, trace: null },
+        ]);
+        await runs.markReady("rdup", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0 }, "2026-06-05T00:00:00.000Z");
+        const res = await tests.historyByKey("p", { historyId: "h1" }, 50);
+        expect(res.entries.filter((e) => e.runId === "rdup")).toHaveLength(1); // not two
+        expect(res.entries).toHaveLength(4); // distinct ready runs r1,r2,r3,rdup — not 5 rows
+      });
+
+      it("returns the test's real identity (historyId + fullName) from the newest row", async () => {
+        const res = await tests.historyByKey("p", { historyId: "h1" }, 50);
+        expect(res.latestHistoryId).toBe("h1");
+        expect(res.latestFullName).toBe("s#t");
+        expect(res.latestName).toBe("t");
+      });
+
+      it("flags hasTrace per entry and serves the blob lazily via traceForRun (project-scoped)", async () => {
+        await runs.create("p", "rtrace", "R", "2026-06-05T00:00:00.000Z", { branch: "main" });
+        await runs.claimPending("rtrace", "2026-06-05T00:00:00.000Z");
+        await tests.replaceForRun("rtrace", [
+          { historyId: "h1", name: "t", fullName: "s#t", status: "failed", duration: 5, flaky: false, message: "boom", trace: "line1\nline2" },
+        ]);
+        await runs.markReady("rtrace", { total: 1, passed: 0, failed: 1, broken: 0, skipped: 0 }, "2026-06-05T00:00:00.000Z");
+        const res = await tests.historyByKey("p", { historyId: "h1" }, 50);
+        expect(res.entries.find((e) => e.runId === "rtrace")!.hasTrace).toBe(true);
+        expect(res.entries.find((e) => e.runId === "r1")!.hasTrace).toBe(false); // passed run, no trace
+        expect(await tests.traceForRun("p", "rtrace", { historyId: "h1" })).toBe("line1\nline2");
+        expect(await tests.traceForRun("p", "rtrace", { fullName: "s#t" })).toBe("line1\nline2");
+        expect(await tests.traceForRun("other", "rtrace", { historyId: "h1" })).toBeNull(); // wrong project
       });
     });
 

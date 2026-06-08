@@ -1,5 +1,5 @@
 import type {
-  Project, Run, TrendPoint, RunEvent, CompareResult,
+  Project, Run, TrendPoint, RunEvent, CompareResult, TestHistory, TestTrace,
   SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry, ProjectVisibility,
 } from "@allure-station/shared";
 
@@ -20,6 +20,8 @@ export interface ApiClient {
   generate(projectId: string): Promise<Run>;
   listTrends(projectId: string): Promise<TrendPoint[]>;
   compareRuns(projectId: string, base: string, target: string): Promise<CompareResult>;
+  getTestHistory(projectId: string, params: { historyId?: string; fullName?: string; name?: string; limit?: number }): Promise<TestHistory>;
+  getTestTrace(projectId: string, params: { runId: string; historyId?: string; fullName?: string }): Promise<TestTrace>;
   /** Subscribe to live run events for a project over SSE. Returns an unsubscribe function. */
   subscribeRuns(projectId: string, onEvent: (event: RunEvent) => void): () => void;
   // --- Auth & RBAC (5b) ---
@@ -81,6 +83,10 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     listTrends: (projectId) => json<TrendPoint[]>(`/projects/${projectId}/trends`, { method: "GET" }),
     compareRuns: (projectId, base, target) =>
       json<CompareResult>(`/projects/${projectId}/compare?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`, { method: "GET" }),
+    getTestHistory: (projectId, params) =>
+      json<TestHistory>(`/projects/${projectId}/tests/history${qs(params)}`, { method: "GET" }),
+    getTestTrace: (projectId, params) =>
+      json<TestTrace>(`/projects/${projectId}/tests/history/trace${qs(params)}`, { method: "GET" }),
     me: () => json<SessionUser | null>("/auth/me", { method: "GET" }),
     login: (email, password) =>
       json<SessionUser>("/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) }),
