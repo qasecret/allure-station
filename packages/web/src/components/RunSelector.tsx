@@ -1,14 +1,6 @@
 import type { Run } from "@allure-station/shared";
+import { runLabel } from "@/lib/format";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-function runLabel(r: Run): string {
-  const base = `${r.createdAt} — ${r.status}${r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}`;
-  const meta = [
-    r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : null,
-    r.environment || null,
-  ].filter(Boolean).join(" · ");
-  return meta ? `${base} — ${meta}` : base;
-}
 
 const DOT: Record<string, string> = { ready: "bg-status-pass", failed: "bg-status-fail", generating: "bg-status-broken animate-pulse", pending: "bg-status-skip" };
 
@@ -19,7 +11,7 @@ export function RunSelector({ runs, value, onChange }: { runs: Run[]; value: str
       <SelectContent>
         {runs.map((r) => (
           <SelectItem key={r.id} value={r.id}>
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2" title={r.createdAt}>
               <span className={`size-2 rounded-full ${DOT[r.status] ?? "bg-status-skip"}`} />
               <span className="truncate">{runLabel(r)}</span>
             </span>
