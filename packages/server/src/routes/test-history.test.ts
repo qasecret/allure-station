@@ -89,6 +89,32 @@ describe("GET /tests/history", () => {
     await app.close();
   });
 
+  it("computes the most-recent regression for a currently-failing test", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await deps.projects.create("p", deps.now());
+    await readyRun(deps, "p", "r1", [sum("passed")], "2026-06-01T00:00:00.000Z");
+    await readyRun(deps, "p", "r2", [sum("failed")], "2026-06-02T00:00:00.000Z");
+    await readyRun(deps, "p", "r3", [sum("failed")], "2026-06-03T00:00:00.000Z");
+    const res = await app.inject({ method: "GET", url: "/api/projects/p/tests/history?historyId=h1" });
+    const reg = res.json().regression;
+    expect(reg).toMatchObject({ windowLimited: false, failingRunCount: 2 });
+    expect(reg.firstFailed.runId).toBe("r2");
+    expect(reg.lastPassed.runId).toBe("r1");
+    await app.close();
+  });
+
+  it("regression is null when the test is currently passing", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await deps.projects.create("p", deps.now());
+    await readyRun(deps, "p", "r1", [sum("failed")], "2026-06-01T00:00:00.000Z");
+    await readyRun(deps, "p", "r2", [sum("passed")], "2026-06-02T00:00:00.000Z");
+    const res = await app.inject({ method: "GET", url: "/api/projects/p/tests/history?historyId=h1" });
+    expect(res.json().regression).toBeNull();
+    await app.close();
+  });
+
   it("exposes hasTrace on entries and serves the trace lazily via the trace endpoint", async () => {
     const deps = await makeTestDeps();
     const app = buildApp(deps);

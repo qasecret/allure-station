@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import type { Run, RunStatus, TestDiff, TestHistoryEntry, TrendPoint } from "@allure-station/shared";
+import type { Run, RunStatus, TestDiff, TestHistoryEntry, Regression, RunRef, TrendPoint } from "@allure-station/shared";
 import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History } from "lucide-react";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { relativeTime } from "@/lib/format";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
 const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
@@ -278,13 +279,14 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
         {!data ? <p className="mt-4 text-sm text-muted-foreground">Loading history…</p> : (
           <div className="mt-4 space-y-3">
             <Badge variant="secondary">Flaky {Math.round(data.flakeRate * 100)}% over {data.window} run{data.window === 1 ? "" : "s"}</Badge>
+            {data.regression ? <RegressionHint regression={data.regression} entries={data.entries} /> : null}
             <ul className="space-y-2">
               {data.entries.map((e: TestHistoryEntry) => (
                 <li key={e.runId} className="rounded-lg border p-2 text-sm">
                   <div className="flex items-center gap-2">
                     <span className={`font-semibold ${STATUS_COLOR[e.status]}`}>{e.status}</span>
                     {e.flaky ? <span className="text-status-broken">flaky</span> : null}
-                    <span className="text-muted-foreground">{e.createdAt}</span>
+                    <span className="text-muted-foreground" title={e.createdAt}>{relativeTime(e.createdAt)}</span>
                     {e.commit ? <span className="text-muted-foreground">· {e.commit.slice(0, 7)}</span> : null}
                     {e.ciUrl ? <a href={e.ciUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">CI</a> : null}
                   </div>
@@ -298,6 +300,30 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function RegressionHint({ regression, entries }: { regression: Regression; entries: TestHistoryEntry[] }) {
+  const link = (ref: RunRef) => {
+    const ciUrl = entries.find((e) => e.runId === ref.runId)?.ciUrl ?? null;
+    const label = relativeTime(ref.createdAt);
+    return ciUrl
+      ? <a href={ciUrl} target="_blank" rel="noreferrer" title={ref.createdAt} className="text-primary hover:underline">{label}</a>
+      : <span title={ref.createdAt}>{label}</span>;
+  };
+  if (regression.windowLimited) {
+    return (
+      <p className="text-sm text-status-fail">
+        Failing for at least the last {regression.failingRunCount} run{regression.failingRunCount === 1 ? "" : "s"} — no passing run in view.
+      </p>
+    );
+  }
+  return (
+    <p className="text-sm text-status-fail">
+      Failing since {link(regression.firstFailed)}
+      {regression.firstFailed.commit ? <span className="text-muted-foreground"> · {regression.firstFailed.commit.slice(0, 7)}</span> : null}
+      {regression.lastPassed ? <> — last passed {link(regression.lastPassed)}</> : null}
+    </p>
   );
 }
 

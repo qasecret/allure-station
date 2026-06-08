@@ -101,6 +101,22 @@ export const testHistoryEntrySchema = z.object({
   hasTrace: z.boolean(),
 });
 
+// A minimal reference to a run, self-contained for the regression hint (date + short commit) so a
+// consumer needs no entry lookup to render it.
+export const runRefSchema = z.object({
+  runId: z.string(),
+  createdAt: z.string(),
+  commit: z.string().nullable(),
+});
+
+// The most-recent passing→failing transition for a currently-failing test (the "bisect hint").
+export const regressionSchema = z.object({
+  windowLimited: z.boolean(),          // true when no passing run was found within the window
+  firstFailed: runRefSchema,           // oldest run of the current failing streak
+  lastPassed: runRefSchema.nullable(), // the passing run just before the streak; null when windowLimited
+  failingRunCount: z.number().int().nonnegative(), // streak length, bounded by the fetched window
+});
+
 // A single test's cross-run timeline + flake rate over the returned window (newest run first).
 export const testHistorySchema = z.object({
   identity: z.object({
@@ -110,6 +126,7 @@ export const testHistorySchema = z.object({
   }),
   window: z.number(),     // number of runs in `entries`
   flakeRate: z.number(),  // flakyCount / window, 0 when empty
+  regression: regressionSchema.nullable(), // most-recent regression; null unless currently failing
   entries: z.array(testHistoryEntrySchema),
 });
 
@@ -275,6 +292,8 @@ export type CompareResult = z.infer<typeof compareResultSchema>;
 export type TestHistoryEntry = z.infer<typeof testHistoryEntrySchema>;
 export type TestHistory = z.infer<typeof testHistorySchema>;
 export type TestTrace = z.infer<typeof testTraceSchema>;
+export type RunRef = z.infer<typeof runRefSchema>;
+export type Regression = z.infer<typeof regressionSchema>;
 export type ApiToken = z.infer<typeof apiTokenSchema>;
 export type CreatedToken = z.infer<typeof createdTokenSchema>;
 export type QualityGateConfig = z.infer<typeof qualityGateConfigSchema>;

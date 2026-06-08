@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { AppDeps } from "../app.js";
+import { computeRegression } from "@allure-station/shared";
 import { readGate } from "./read-gate.js";
 
 export function registerTestHistoryRoutes(app: FastifyInstance, deps: AppDeps): void {
@@ -26,6 +27,7 @@ export function registerTestHistoryRoutes(app: FastifyInstance, deps: AppDeps): 
       },
       window: entries.length,
       flakeRate,
+      regression: computeRegression(entries),
       entries,
     };
   });
