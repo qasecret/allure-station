@@ -124,4 +124,65 @@ describe("api client", () => {
     expect(() => unsub()).not.toThrow();
     vi.unstubAllGlobals();
   });
+
+  it("getQualityGate GETs /quality-gate", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ maxFailures: 0 }) });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.getQualityGate("p");
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/quality-gate", expect.objectContaining({ method: "GET" }));
+  });
+
+  it("setQualityGate PUTs the config as JSON", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ minPassRate: 0.95 }) });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.setQualityGate("p", { minPassRate: 0.95 });
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/quality-gate",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ minPassRate: 0.95 }) }));
+  });
+
+  it("listTokens GETs /tokens", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.listTokens("p");
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/tokens", expect.objectContaining({ method: "GET" }));
+  });
+
+  it("createToken POSTs the name and surfaces the plaintext token", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "t1", token: "ast_secret" }) });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    const created = await client.createToken("p", "ci");
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/tokens",
+      expect.objectContaining({ method: "POST", credentials: "include", body: JSON.stringify({ name: "ci" }) }));
+    expect(created.token).toBe("ast_secret");
+  });
+
+  it("deleteToken DELETEs via the no-body path", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => "" });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.deleteToken("p", "t1");
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/tokens/t1", expect.objectContaining({ method: "DELETE", credentials: "include" }));
+  });
+
+  it("listNotifications GETs /notifications", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.listNotifications("p");
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/notifications", expect.objectContaining({ method: "GET" }));
+  });
+
+  it("createNotification POSTs kind/url/events", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "n1" }) });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    const body = { kind: "webhook" as const, url: "https://x.test/h", events: ["failed" as const] };
+    await client.createNotification("p", body);
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/notifications",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(body) }));
+  });
+
+  it("deleteNotification DELETEs via the no-body path", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => "" });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.deleteNotification("p", "n1");
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/notifications/n1", expect.objectContaining({ method: "DELETE" }));
+  });
 });
