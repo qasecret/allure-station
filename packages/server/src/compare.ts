@@ -1,11 +1,11 @@
-import type { CompareResult, TestDiff, TestSummary } from "@allure-station/shared";
+import { isFailingStatus, type CompareResult, type TestDiff, type TestSummary } from "@allure-station/shared";
 
 // Cross-run match key. historyId is Allure's stable per-test hash and is effectively always present;
 // fullName/name are fallbacks. Two distinct tests with no identity at all (null historyId AND null
 // fullName) and the same name are indistinguishable across runs and would share a key — unavoidable
 // without identity, and not produced by Allure in practice.
 const keyOf = (t: TestSummary): string => t.historyId ?? t.fullName ?? t.name;
-const isFailing = (s: TestSummary["status"]): boolean => s === "failed" || s === "broken";
+const isFailing = isFailingStatus;
 
 const toDiff = (base: TestSummary | undefined, target: TestSummary | undefined): TestDiff => {
   const t = (target ?? base)!;

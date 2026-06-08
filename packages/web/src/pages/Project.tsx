@@ -286,7 +286,7 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
                   <div className="flex items-center gap-2">
                     <span className={`font-semibold ${STATUS_COLOR[e.status]}`}>{e.status}</span>
                     {e.flaky ? <span className="text-status-broken">flaky</span> : null}
-                    <span className="text-muted-foreground">{relativeTime(e.createdAt)}</span>
+                    <span className="text-muted-foreground" title={e.createdAt}>{relativeTime(e.createdAt)}</span>
                     {e.commit ? <span className="text-muted-foreground">· {e.commit.slice(0, 7)}</span> : null}
                     {e.ciUrl ? <a href={e.ciUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">CI</a> : null}
                   </div>
@@ -308,8 +308,8 @@ function RegressionHint({ regression, entries }: { regression: Regression; entri
     const ciUrl = entries.find((e) => e.runId === ref.runId)?.ciUrl ?? null;
     const label = relativeTime(ref.createdAt);
     return ciUrl
-      ? <a href={ciUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">{label}</a>
-      : <span>{label}</span>;
+      ? <a href={ciUrl} target="_blank" rel="noreferrer" title={ref.createdAt} className="text-primary hover:underline">{label}</a>
+      : <span title={ref.createdAt}>{label}</span>;
   };
   if (regression.windowLimited) {
     return (
