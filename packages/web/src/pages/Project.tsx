@@ -63,6 +63,8 @@ export function Project() {
       });
       if (event.run.status === "ready" || event.run.status === "failed") {
         qc.invalidateQueries({ queryKey: ["trends", id] });
+        // A newly-ready run adds a point to every open test timeline — refresh them too.
+        qc.invalidateQueries({ queryKey: ["test-history", id] });
       }
     });
     return unsub;

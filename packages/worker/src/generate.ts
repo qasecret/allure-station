@@ -57,9 +57,10 @@ const TRACE_CAP = 16 * 1024;    // bytes
  */
 export function truncate(text: string | undefined | null, capBytes: number): string | null {
   if (!text) return null;
-  const buf = Buffer.from(text, "utf8");
-  if (buf.length <= capBytes) return text;
-  return buf.subarray(0, capBytes).toString("utf8") + "\n…[truncated]";
+  // Buffer.byteLength counts UTF-8 bytes without allocating a copy; only materialize the buffer on
+  // the rare path where the text actually exceeds the cap (most test messages/traces are short).
+  if (Buffer.byteLength(text, "utf8") <= capBytes) return text;
+  return Buffer.from(text, "utf8").subarray(0, capBytes).toString("utf8") + "\n…[truncated]";
 }
 
 /**

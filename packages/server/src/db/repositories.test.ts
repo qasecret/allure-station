@@ -360,14 +360,16 @@ for (const backend of backends) {
         await runs.create("p", "r1", "R", "2026-06-06T00:00:00.000Z");
       });
 
-      it("replaceForRun inserts and listByRun round-trips status/duration/flaky/message/trace/null", async () => {
+      // listByRun is the lean comparison reader (no message/trace); message/trace persistence is
+      // covered by the historyByKey timeline test below.
+      it("replaceForRun inserts and listByRun round-trips status/duration/flaky/null", async () => {
         await tests.replaceForRun("r1", sample);
         const got = await tests.listByRun("r1");
         expect(got).toHaveLength(3);
         const byName = Object.fromEntries(got.map((t) => [t.name, t]));
-        expect(byName["passing test"]).toMatchObject({ status: "passed", duration: 1000, flaky: false, historyId: "h-pass", message: null, trace: null });
-        expect(byName["failing test"]).toMatchObject({ status: "failed", duration: 2000, flaky: true, message: "boom", trace: "at x:1" });
-        expect(byName["no-history test"]).toMatchObject({ status: "skipped", duration: null, flaky: false, historyId: null, fullName: null, message: null, trace: null });
+        expect(byName["passing test"]).toMatchObject({ status: "passed", duration: 1000, flaky: false, historyId: "h-pass" });
+        expect(byName["failing test"]).toMatchObject({ status: "failed", duration: 2000, flaky: true });
+        expect(byName["no-history test"]).toMatchObject({ status: "skipped", duration: null, flaky: false, historyId: null, fullName: null });
       });
 
       it("replaceForRun replaces (no duplicates) on re-generation", async () => {
@@ -578,6 +580,26 @@ for (const backend of backends) {
       it("matches by fullName when historyId is not given", async () => {
         const res = await tests.historyByKey("p", { fullName: "s#t" }, 50);
         expect(res.entries.map((e) => e.runId)).toEqual(["r3", "r2", "r1"]);
+      });
+
+      it("collapses retried rows (same run, same historyId) to one entry per run", async () => {
+        await runs.create("p", "rdup", "R", "2026-06-05T00:00:00.000Z", { branch: "main" });
+        await runs.claimPending("rdup", "2026-06-05T00:00:00.000Z");
+        await tests.replaceForRun("rdup", [
+          { historyId: "h1", name: "t", fullName: "s#t", status: "failed", duration: 5, flaky: true, message: "a", trace: null },
+          { historyId: "h1", name: "t", fullName: "s#t", status: "passed", duration: 6, flaky: true, message: null, trace: null },
+        ]);
+        await runs.markReady("rdup", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0 }, "2026-06-05T00:00:00.000Z");
+        const res = await tests.historyByKey("p", { historyId: "h1" }, 50);
+        expect(res.entries.filter((e) => e.runId === "rdup")).toHaveLength(1); // not two
+        expect(res.entries).toHaveLength(4); // distinct ready runs r1,r2,r3,rdup — not 5 rows
+      });
+
+      it("returns the test's real identity (historyId + fullName) from the newest row", async () => {
+        const res = await tests.historyByKey("p", { historyId: "h1" }, 50);
+        expect(res.latestHistoryId).toBe("h1");
+        expect(res.latestFullName).toBe("s#t");
+        expect(res.latestName).toBe("t");
       });
     });
 

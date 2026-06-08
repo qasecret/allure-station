@@ -33,7 +33,15 @@ export class TestResultRepository {
   }
 
   async listByRun(runId: string): Promise<TestSummary[]> {
-    const rows = await this.db.select().from(testResults).where(eq(testResults.runId, runId));
+    // Lean projection: message/trace are intentionally excluded — the only caller (run comparison)
+    // never reads them, so we avoid pulling the (potentially 16 KB) trace blobs per test. Per-test
+    // error detail is served by historyByKey for the timeline view.
+    const rows = await this.db
+      .select({
+        historyId: testResults.historyId, name: testResults.name, fullName: testResults.fullName,
+        status: testResults.status, duration: testResults.duration, flaky: testResults.flaky,
+      })
+      .from(testResults).where(eq(testResults.runId, runId));
     return rows.map((r) => ({
       historyId: r.historyId,
       name: r.name,
@@ -41,18 +49,18 @@ export class TestResultRepository {
       status: r.status as TestStatus,
       duration: r.duration === null ? null : Number(r.duration),
       flaky: r.flaky === "true",
-      message: r.message ?? null,
-      trace: r.trace ?? null,
     }));
   }
 
-  /** A single test's outcomes across the project's READY runs, newest first, capped at HISTORY_MAX.
-   *  Matched by historyId (preferred) or fullName. flakeRate = flaky runs / runs in the window. */
+  /** A single test's outcome per READY run in the project, newest run first, capped at HISTORY_MAX.
+   *  Matched by historyId (preferred) or fullName. flakeRate = flaky runs / runs in the window.
+   *  Identity fields are read from the newest matching row, so the caller gets the test's real
+   *  historyId/fullName/name regardless of which key it queried by. */
   async historyByKey(
     projectId: string,
     key: { historyId: string } | { fullName: string },
     limit: number,
-  ): Promise<{ entries: TestHistoryEntry[]; flakeRate: number; latestName: string | null }> {
+  ): Promise<{ entries: TestHistoryEntry[]; flakeRate: number; latestName: string | null; latestFullName: string | null; latestHistoryId: string | null }> {
     const cap = Math.min(Math.max(Math.trunc(limit) || 1, 1), HISTORY_MAX);
     const match = "historyId" in key
       ? eq(testResults.historyId, key.historyId)
@@ -60,7 +68,8 @@ export class TestResultRepository {
     const rows = await this.db
       .select({
         runId: runs.id, createdAt: runs.createdAt, branch: runs.branch, commit: runs.commit, ciUrl: runs.ciUrl,
-        name: testResults.name, status: testResults.status, duration: testResults.duration,
+        historyId: testResults.historyId, fullName: testResults.fullName, name: testResults.name,
+        status: testResults.status, duration: testResults.duration,
         flaky: testResults.flaky, message: testResults.message, trace: testResults.trace,
       })
       .from(testResults)
@@ -69,19 +78,35 @@ export class TestResultRepository {
       .orderBy(desc(runs.createdAt), desc(runs.id))
       .limit(cap);
 
-    const entries: TestHistoryEntry[] = rows.map((r) => ({
-      runId: r.runId,
-      createdAt: r.createdAt,
-      branch: r.branch,
-      commit: r.commit,
-      ciUrl: r.ciUrl,
-      status: r.status as TestStatus,
-      duration: r.duration === null ? null : Number(r.duration),
-      flaky: r.flaky === "true",
-      message: r.message ?? null,
-      trace: r.trace ?? null,
-    }));
+    // Collapse to one entry per run: a test retried within a single run yields multiple rows sharing
+    // a runId. Counting rows instead of runs would skew window/flakeRate and collide the drawer's
+    // per-run React keys. Keep the first (newest-ordered) row for each run.
+    const seen = new Set<string>();
+    const entries: TestHistoryEntry[] = [];
+    for (const r of rows) {
+      if (seen.has(r.runId)) continue;
+      seen.add(r.runId);
+      entries.push({
+        runId: r.runId,
+        createdAt: r.createdAt,
+        branch: r.branch,
+        commit: r.commit,
+        ciUrl: r.ciUrl,
+        status: r.status as TestStatus,
+        duration: r.duration === null ? null : Number(r.duration),
+        flaky: r.flaky === "true",
+        message: r.message ?? null,
+        trace: r.trace ?? null,
+      });
+    }
     const flakyCount = entries.filter((e) => e.flaky).length;
-    return { entries, flakeRate: entries.length ? flakyCount / entries.length : 0, latestName: rows[0]?.name ?? null };
+    const top = rows[0];
+    return {
+      entries,
+      flakeRate: entries.length ? flakyCount / entries.length : 0,
+      latestName: top?.name ?? null,
+      latestFullName: top?.fullName ?? null,
+      latestHistoryId: top?.historyId ?? null,
+    };
   }
 }

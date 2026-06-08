@@ -63,4 +63,29 @@ describe("GET /tests/history", () => {
     expect(res.json().entries[0].message).toBeNull();
     await app.close();
   });
+
+  it("limit=0 / negative falls back to the default window, not 1 row", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await deps.projects.create("p", deps.now());
+    await readyRun(deps, "p", "r1", [sum("passed")], "2026-06-01T00:00:00.000Z");
+    await readyRun(deps, "p", "r2", [sum("failed")], "2026-06-02T00:00:00.000Z");
+    for (const limit of ["0", "-5"]) {
+      const res = await app.inject({ method: "GET", url: `/api/projects/p/tests/history?historyId=h1&limit=${limit}` });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().entries).toHaveLength(2); // default 50, not clamped to 1
+    }
+    await app.close();
+  });
+
+  it("identity.fullName/historyId come from the DB even when queried by historyId only", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await deps.projects.create("p", deps.now());
+    await readyRun(deps, "p", "r1", [sum("passed")], "2026-06-01T00:00:00.000Z");
+    const res = await app.inject({ method: "GET", url: "/api/projects/p/tests/history?historyId=h1" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().identity).toMatchObject({ historyId: "h1", fullName: "s#t", name: "t" });
+    await app.close();
+  });
 });
