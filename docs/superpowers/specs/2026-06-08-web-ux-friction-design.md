@@ -24,8 +24,15 @@ In scope (all in `packages/web`, plus additive web-API-client methods):
 1. **Settings cards** — add Quality Gate, Tokens, and Notifications cards to `ProjectSettings`.
 2. **Honest access gating** — replace the misleading message with accurate, state-specific copy.
 3. **Surface the regression hint** — make the per-test history affordance on Compare rows discoverable.
-4. **Layout / double-scroll** — single outer scroll; report iframe fills remaining height.
-5. **Friendly timestamps** — run + compare selectors use `relativeTime()` with exact time on hover.
+4. **Friendly timestamps** — run + compare selectors use `relativeTime()` with exact time on hover.
+
+**Dropped after measurement — layout / double-scroll.** The original critique flagged a fighting
+double-scroll. Measured in the running app at 1440×900 and a short 1280×620: the page never develops a
+second scrollbar (`document.documentElement.scrollHeight === clientHeight`), there are no overflowing
+scroll containers in our chrome, and the report `iframe` flexes to fill the remaining height and scrolls
+internally only (expected for an embedded report). The shell is already `h-screen overflow-hidden` with
+the iframe `flex-1 min-h-0`. There is no bug to fix; building a "fix" would be churn. Allure's *own*
+theme/language toggles remain (inherent to embedding Allure, out of scope).
 
 Explicitly **out of scope**:
 
@@ -75,13 +82,15 @@ createNotificationRequest = { kind, url, events: ("completed"|"failed"|"gate_fai
 
 ### 1 + 2. Settings page rewrite (`ProjectSettings.tsx`)
 
-Fetch `api.getConfig()` alongside the existing members probe. Compute the page state:
+Fetch `api.getConfig()` alongside the existing members probe. Compute the page state via the pure
+helper **`settingsState({ securityEnabled, signedIn, canManageMembers })`** (new
+`lib/settings-access.ts`, unit-tested) where:
 
-- **`openMode`** = `!config.securityEnabled`
+- **`securityEnabled`** = `config.securityEnabled`
 - **`signedIn`** = `!!user`
 - **`canManageMembers`** = members fetch succeeded (the existing owner/admin probe)
 
-Render by state:
+returning `"open" | "signin" | "manage" | "limited"`. Render by state:
 
 | Condition | Render |
 |---|---|
@@ -148,15 +157,7 @@ to a **labelled** affordance: an icon **+ the text "History"** (small, `variant=
 keeping the existing `aria-label={`History for ${test.name}`}`. The drawer and `RegressionHint`
 component are unchanged. Applies to all buckets for consistency; most valuable on **Newly failing**.
 
-### 4. Layout / double-scroll (`Project.tsx`)
-
-The project content column should be a single flex-column scroll container: the status header +
-analytics strip (Trend/Compare) scroll normally, and the report `iframe` occupies the remaining height
-(`flex-1 min-h-0`) so it scrolls **internally only** (its own Allure content), with no competing outer
-scrollbar on our wrapper. Verify there is one vertical scrollbar for our chrome and one inside the
-report, not two fighting on the same region. No change to the iframe `src` or Allure output.
-
-### 5. Friendly timestamps (shared run-label builder)
+### 4. Friendly timestamps (shared run-label builder)
 
 Today the run `<select>` uses a `runLabel(r)` helper in `components/RunSelector.tsx` that **leads with
 raw `r.createdAt`**; `ComparePanel`'s base/target `<select>`s (in `Project.tsx`) build their own inline
@@ -174,16 +175,33 @@ short SHA, env, and the no-metadata fallback).
 
 ## Testing
 
-- **`client.test.ts`** — add cases for the 8 new methods using the existing `vi.fn()` fetch-mock
-  pattern (assert method, path, body; assert plaintext token surfaced from `createToken`).
-- **`ProjectSettings` component tests** (Testing Library + mocked `api`):
-  - open mode → banner + 4 functional cards visible, Members/Audit show the "enable accounts" note;
-  - security-on + not signed in → "Sign in" message;
-  - security-on + signed-in owner → all cards;
-  - QualityGateCard percent↔fraction conversion on load and save;
-  - TokensCard shows plaintext token once after create.
-- **`runLabel` unit test** — the exported pure helper: relative-time lead, `branch@<7-char>`, env, and
-  the no-metadata fallback (`just now — ready (7/8)`).
+**Test approach — follow the repo's existing grain.** `packages/web` has **no** component-render test
+infrastructure (no `@testing-library`, no jsdom; vitest runs in the default node env). Every existing
+web test is a **pure-function** test: `lib/format.test.ts`, `api/client.test.ts` (fetch mocks),
+`components/PassRateDonut.geometry.test.ts`. We do **not** add a DOM-render framework for this slice.
+Instead we extract the decision logic into pure, exported helpers and unit-test those; the card
+components stay thin wrappers around tested helpers + tested client methods.
+
+Pure helpers to extract and test:
+
+- **`settingsState({ securityEnabled, signedIn, canManageMembers })`** (new `lib/settings-access.ts`) →
+  one of `"open" | "signin" | "manage" | "limited"`, driving what `ProjectSettings` renders. Test all
+  four combinations.
+- **`qgFormToConfig` / `qgConfigToForm`** (in `lib/quality-gate-form.ts`) — percent↔fraction for
+  `minPassRate`, seconds↔ms for `maxDurationMs`, empty string ↔ omitted field. Round-trip test +
+  empties.
+- **`runLabel(r)`** (moved into `lib/format.ts`) — relative-time lead, `branch@<7-char>`, env, and the
+  no-metadata fallback (`just now — ready (7/8)`).
+
+Client coverage:
+
+- **`api/client.test.ts`** — add cases for the 8 new methods using the existing `vi.fn()` fetch-mock
+  pattern (assert method, path, body; assert the plaintext `token` is surfaced from `createToken`; 204
+  DELETEs via the `noContent` path).
+
+Manual verification (no automated DOM test): after implementation, load `/projects/:id/settings` in
+open mode and (with the admin container) signed-in, confirming the four states render and the three
+cards create/list/delete against the live API.
 
 ## Risks / notes
 
