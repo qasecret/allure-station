@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import type { Run, RunStatus, TestDiff, TrendPoint } from "@allure-station/shared";
-import { Settings, FileBarChart, TrendingUp, GitCompareArrows } from "lucide-react";
+import type { Run, RunStatus, TestDiff, TestHistoryEntry, TrendPoint } from "@allure-station/shared";
+import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History } from "lucide-react";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
 import { Topbar } from "@/components/Topbar";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
 const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
@@ -198,6 +199,8 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
     queryFn: () => api.compareRuns(projectId, base, target),
     enabled: !!base && !!target && base !== target,
   });
+  const [selected, setSelected] = useState<TestDiff | null>(null);
+  useEffect(() => { setSelected(null); }, [base, target]); // don't leave the drawer open across a comparison change
   if (readyRuns.length < 2) return null;
   const pick = (set: (v: string) => void) => (v: string) => { setTouched(true); set(v); };
   const runItems = readyRuns.map((r) => (
@@ -217,32 +220,86 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
           : !diff ? <p className="text-sm text-muted-foreground">Loading comparison…</p>
           : (
             <div className="flex flex-wrap gap-4">
-              <Bucket label="Newly failing" color="text-status-fail" tests={diff.newlyFailing} />
-              <Bucket label="Fixed" color="text-status-pass" tests={diff.fixed} />
-              <Bucket label="Flaky" color="text-status-broken" tests={diff.flaky} />
-              <Bucket label="Still failing" color="text-status-fail" tests={diff.stillFailing} />
-              <Bucket label="Added" color="text-primary" tests={diff.added} />
-              <Bucket label="Removed" color="text-muted-foreground" tests={diff.removed} />
+              <Bucket label="Newly failing" color="text-status-fail" tests={diff.newlyFailing} onOpen={setSelected} />
+              <Bucket label="Fixed" color="text-status-pass" tests={diff.fixed} onOpen={setSelected} />
+              <Bucket label="Flaky" color="text-status-broken" tests={diff.flaky} onOpen={setSelected} />
+              <Bucket label="Still failing" color="text-status-fail" tests={diff.stillFailing} onOpen={setSelected} />
+              <Bucket label="Added" color="text-primary" tests={diff.added} onOpen={setSelected} />
+              <Bucket label="Removed" color="text-muted-foreground" tests={diff.removed} onOpen={setSelected} />
             </div>
           )}
+        <TestHistorySheet projectId={projectId} test={selected} onClose={() => setSelected(null)} />
       </CardContent>
     </Card>
   );
 }
 
-function Bucket({ label, color, tests }: { label: string; color: string; tests: TestDiff[] }) {
+function Bucket({ label, color, tests, onOpen }: { label: string; color: string; tests: TestDiff[]; onOpen: (t: TestDiff) => void }) {
   if (tests.length === 0) return null;
   return (
     <div className="min-w-[180px]">
       <div className={`text-sm font-semibold ${color}`}>{label} ({tests.length})</div>
       <ul className="mt-1 space-y-0.5 text-sm">
         {tests.map((t) => (
-          <li key={(t.historyId ?? t.fullName ?? t.name) + label}>
-            {t.name}
-            {t.baseStatus && t.targetStatus ? <span className="text-muted-foreground"> ({t.baseStatus}→{t.targetStatus})</span> : null}
+          <li key={(t.historyId ?? t.fullName ?? t.name) + label} className="flex items-center gap-1">
+            <span>{t.name}{t.baseStatus && t.targetStatus ? <span className="text-muted-foreground"> ({t.baseStatus}→{t.targetStatus})</span> : null}</span>
+            {(t.historyId ?? t.fullName) ? (
+              <button type="button" onClick={() => onOpen(t)} aria-label={`History for ${t.name}`}
+                className="rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                <History className="size-3.5" />
+              </button>
+            ) : null}
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  passed: "text-status-pass", failed: "text-status-fail", broken: "text-status-broken",
+  skipped: "text-muted-foreground", unknown: "text-muted-foreground",
+};
+
+function TestHistorySheet({ projectId, test, onClose }: { projectId: string; test: TestDiff | null; onClose: () => void }) {
+  const { data } = useQuery({
+    queryKey: ["test-history", projectId, test?.historyId, test?.fullName],
+    queryFn: () => api.getTestHistory(projectId, { historyId: test!.historyId ?? undefined, fullName: test!.fullName ?? undefined, name: test!.name, limit: 50 }),
+    enabled: !!test && !!(test.historyId ?? test.fullName),
+  });
+  return (
+    <Sheet open={!!test} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle className="truncate">{test?.name ?? "Test history"}</SheetTitle>
+        </SheetHeader>
+        {!data ? <p className="mt-4 text-sm text-muted-foreground">Loading history…</p> : (
+          <div className="mt-4 space-y-3">
+            <Badge variant="secondary">Flaky {Math.round(data.flakeRate * 100)}% over {data.window} run{data.window === 1 ? "" : "s"}</Badge>
+            <ul className="space-y-2">
+              {data.entries.map((e: TestHistoryEntry) => (
+                <li key={e.runId} className="rounded-lg border p-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className={`font-semibold ${STATUS_COLOR[e.status]}`}>{e.status}</span>
+                    {e.flaky ? <span className="text-status-broken">flaky</span> : null}
+                    <span className="text-muted-foreground">{e.createdAt}</span>
+                    {e.commit ? <span className="text-muted-foreground">· {e.commit.slice(0, 7)}</span> : null}
+                    {e.ciUrl ? <a href={e.ciUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">CI</a> : null}
+                  </div>
+                  {e.message ? <pre className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">{e.message}</pre> : null}
+                  {e.trace ? (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">Stack trace</summary>
+                      <pre className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">{e.trace}</pre>
+                    </details>
+                  ) : null}
+                </li>
+              ))}
+              {data.entries.length === 0 ? <li className="text-sm text-muted-foreground">No history for this test yet.</li> : null}
+            </ul>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

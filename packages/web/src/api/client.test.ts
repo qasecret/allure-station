@@ -102,6 +102,13 @@ describe("api client", () => {
     expect(res.total).toBe(7);
   });
 
+  it("getTestHistory GETs /tests/history with identity + limit query params", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ identity: { historyId: "h1", fullName: null, name: "t" }, window: 0, flakeRate: 0, entries: [] }) });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.getTestHistory("p", { historyId: "h1", limit: 50 });
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/tests/history?historyId=h1&limit=50", expect.objectContaining({ method: "GET", credentials: "include" }));
+  });
+
   it("subscribeRuns is a no-op when EventSource is unavailable", () => {
     vi.stubGlobal("EventSource", undefined);
     const client = createClient("/api");
