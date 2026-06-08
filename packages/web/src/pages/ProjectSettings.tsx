@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import type { ProjectRole } from "@allure-station/shared";
@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { qgConfigToForm, qgFormToConfig, type QgForm } from "@/lib/quality-gate-form";
 
 const PROJECT_ROLES: ProjectRole[] = ["viewer", "maintainer", "owner"];
 
@@ -164,6 +165,41 @@ function AuditCard({ projectId, enabled }: { projectId: string; enabled: boolean
   );
 }
 
-function QualityGateCard(_: { projectId: string }) { return null; }
+function QualityGateCard({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["quality-gate", projectId], queryFn: () => api.getQualityGate(projectId) });
+  const [form, setForm] = useState<QgForm>({ maxFailures: "", minTests: "", minPassRate: "", maxDurationSec: "" });
+  useEffect(() => { if (data) setForm(qgConfigToForm(data)); }, [data]);
+  const save = useMutation({
+    mutationFn: () => api.setQualityGate(projectId, qgFormToConfig(form)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["quality-gate", projectId] }); toast.success("Quality gate saved"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const field = (key: keyof QgForm, label: string, hint: string) => (
+    <label className="flex flex-col gap-1 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <Input type="number" min={0} step={1} value={form[key]} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} placeholder={hint} className="max-w-[160px]" />
+    </label>
+  );
+  if (data === undefined) return null;
+  return (
+    <Card>
+      <CardHeader><CardTitle>Quality gate</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); if (!save.isPending) save.mutate(); }} className="space-y-4">
+          <div className="flex flex-wrap gap-4">
+            {field("maxFailures", "Max failures", "e.g. 0")}
+            {field("minTests", "Min tests", "e.g. 1")}
+            {field("minPassRate", "Min pass rate (%)", "e.g. 95")}
+            {field("maxDurationSec", "Max duration (s)", "e.g. 600")}
+          </div>
+          <Button type="submit" size="sm" disabled={save.isPending}>Save gate</Button>
+        </form>
+        <p className="text-xs text-muted-foreground">Leave a field blank to disable that rule. The badge and run summary reflect the verdict.</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function TokensCard(_: { projectId: string }) { return null; }
 function NotificationsCard(_: { projectId: string }) { return null; }
