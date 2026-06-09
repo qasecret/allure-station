@@ -120,6 +120,15 @@ export function Project() {
         </>}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+        {/* The newest run failed but isn't what we're showing (a prior ready report is) — surface it,
+            since otherwise the failure + retry would be hidden behind the run selector. */}
+        {visibleRuns[0]?.status === "failed" && current !== visibleRuns[0].id && (
+          <button type="button" onClick={() => setSelectedRun(visibleRuns[0].id)}
+            className="flex items-center gap-2 rounded-lg border border-status-fail/40 bg-status-fail/5 px-3 py-2 text-left text-sm text-status-fail hover:bg-status-fail/10">
+            <AlertTriangle className="size-4 shrink-0" />
+            <span>The latest run failed to generate. <span className="underline">View &amp; retry</span></span>
+          </button>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           {cur && <StatusBadge status={cur.status} />}
           {cur?.stats && (

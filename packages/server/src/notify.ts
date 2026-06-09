@@ -6,6 +6,19 @@ import type { Notification, NotificationTrigger, Run } from "@allure-station/sha
 
 const ZERO = { total: 0, passed: 0, failed: 0, broken: 0, skipped: 0 };
 
+/** How long to wait on a webhook/Slack POST before aborting — shared by live dispatch and test sends. */
+const WEBHOOK_TIMEOUT_MS = 10_000;
+
+/** The one place a notification is actually delivered: POST JSON with the shared timeout. */
+function deliver(url: string, body: unknown, fetchImpl: typeof fetch): Promise<Response> {
+  return fetchImpl(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
+  });
+}
+
 export interface NotifyContext {
   project: string;
   run: Run;
@@ -54,12 +67,7 @@ async function postOne(sub: Notification, ctx: NotifyContext, fetchImpl: typeof 
   if (!safe.ok) { console.error(`[notify] skipping ${sub.id}: ${safe.reason}`); return; }
   const body = sub.kind === "slack" ? { text: slackText(ctx) } : webhookPayload(ctx);
   try {
-    await fetchImpl(sub.url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    });
+    await deliver(sub.url, body, fetchImpl);
   } catch (err) {
     console.error(`[notify] POST to ${sub.kind} (${sub.id}) failed:`, err);
   }
@@ -117,12 +125,7 @@ export async function sendTestNotification(sub: Notification, projectId: string,
     ? { text: `🔔 *${projectId}* — test notification from Allure Station. Your Slack webhook is wired up correctly.` }
     : { project: projectId, test: true, message: "Test notification from Allure Station" };
   try {
-    const res = await fetchImpl(sub.url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    });
+    const res = await deliver(sub.url, body, fetchImpl);
     return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: `HTTP ${res.status}` };
   } catch (err) {
     return { ok: false, error: (err as Error).message };

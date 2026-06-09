@@ -470,6 +470,13 @@ for (const backend of backends) {
         expect(await notifs.countByProject("p")).toBe(1);
       });
 
+      it("get is project-scoped and round-trips events; null when absent or wrong project", async () => {
+        const n = await notifs.create("p", "slack", "https://h/x", ["failed"], "2026-06-06T00:00:01.000Z");
+        expect(await notifs.get("p", n.id)).toMatchObject({ id: n.id, kind: "slack", events: ["failed"] });
+        expect(await notifs.get("other", n.id)).toBeNull();
+        expect(await notifs.get("p", "nope")).toBeNull();
+      });
+
       it("remove is project-scoped", async () => {
         const n = await notifs.create("p", "webhook", "https://h/x", ["completed"], "2026-06-06T00:00:01.000Z");
         expect(await notifs.remove("other", n.id)).toBe(false);
