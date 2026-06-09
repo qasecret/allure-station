@@ -1,7 +1,7 @@
 import type {
   Project, Run, TrendPoint, RunEvent, CompareResult, TestHistory, TestTrace,
   SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry, ProjectVisibility,
-  ApiToken, CreatedToken, QualityGateConfig, Notification, NotificationKind, NotificationTrigger,
+  ApiToken, CreatedToken, QualityGateConfig, RunSummary, Notification, NotificationKind, NotificationTrigger,
 } from "@allure-station/shared";
 
 export interface AppConfigInfo {
@@ -15,8 +15,10 @@ export interface ApiClient {
   listProjects(opts?: { q?: string; limit?: number; offset?: number }): Promise<{ items: Project[]; total: number }>;
   createProject(id: string): Promise<Project>;
   getProject(id: string): Promise<Project>;
+  deleteProject(id: string): Promise<void>;
   setVisibility(id: string, visibility: ProjectVisibility): Promise<Project>;
   listRuns(projectId: string, opts?: { status?: string; limit?: number; offset?: number }): Promise<Run[]>;
+  getRunSummary(projectId: string, runId: string): Promise<RunSummary>;
   sendResults(projectId: string, files: File[]): Promise<{ runId: string }>;
   generate(projectId: string): Promise<Run>;
   listTrends(projectId: string): Promise<TrendPoint[]>;
@@ -80,9 +82,11 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     createProject: (id) =>
       json<Project>("/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }),
     getProject: (id) => json<Project>(`/projects/${id}`, { method: "GET" }),
+    deleteProject: (id) => noContent(`/projects/${id}`, { method: "DELETE" }),
     setVisibility: (id, visibility) =>
       json<Project>(`/projects/${id}/visibility`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ visibility }) }),
     listRuns: (projectId, opts = {}) => json<Run[]>(`/projects/${projectId}/runs${qs(opts)}`, { method: "GET" }),
+    getRunSummary: (projectId, runId) => json<RunSummary>(`/projects/${projectId}/runs/${runId}/summary`, { method: "GET" }),
     sendResults: (projectId, files) => {
       const fd = new FormData();
       for (const file of files) fd.append("files", file, file.name);

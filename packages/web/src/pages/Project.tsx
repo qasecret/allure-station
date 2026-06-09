@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import type { Run, RunStatus, TestDiff, TestHistoryEntry, Regression, RunRef, TrendPoint } from "@allure-station/shared";
-import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History } from "lucide-react";
+import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History, ShieldCheck, ShieldAlert } from "lucide-react";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
 import { Topbar } from "@/components/Topbar";
@@ -15,7 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { relativeTime, runLabel } from "@/lib/format";
+import { relativeTime, runLabel, formatDurationSec } from "@/lib/format";
+import { failedReasons } from "@/lib/quality-gate-verdict";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
 const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
@@ -124,9 +125,10 @@ export function Project() {
               {cur.stats.failed ? <> · <span className="text-status-fail">{cur.stats.failed} failed</span></> : null}
               {cur.stats.broken ? <> · <span className="text-status-broken">{cur.stats.broken} broken</span></> : null}
               {cur.stats.flaky ? <> · <span className="text-status-broken">{cur.stats.flaky} flaky</span></> : null}
-              {cur.stats.durationMs ? <> · {(cur.stats.durationMs / 1000).toFixed(1)}s</> : null}
+              {cur.stats.durationMs ? <> · {formatDurationSec(cur.stats.durationMs)}</> : null}
             </span>
           )}
+          {cur?.status === "ready" && current && <GateBadge projectId={id} runId={current} />}
           {cur?.branch && <Badge variant="secondary">branch {cur.branch}{cur.commit ? `@${cur.commit.slice(0, 7)}` : ""}</Badge>}
           {cur?.environment && <Badge variant="secondary">env {cur.environment}</Badge>}
           {cur?.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">CI build ↗</a>}
@@ -149,6 +151,32 @@ export function Project() {
   );
 }
 
+// Surfaces the configured quality-gate verdict for the selected run in the header. Silent when no
+// gate is configured; on failure it names the rules that tripped (the badge SVG only shows pass/fail).
+function GateBadge({ projectId, runId }: { projectId: string; runId: string }) {
+  const { data } = useQuery({
+    queryKey: ["run-summary", projectId, runId],
+    queryFn: () => api.getRunSummary(projectId, runId),
+    retry: false, // summary is read-gated → 404s for private projects; don't retry-storm (matches ["project"])
+  });
+  const gate = data?.qualityGate;
+  if (!gate?.configured) return null;
+  if (gate.passed) {
+    return (
+      <Badge variant="outline" className="gap-1 border-status-pass/40 text-status-pass">
+        <ShieldCheck className="size-3.5" /> Quality gate passed
+      </Badge>
+    );
+  }
+  const reasons = failedReasons(gate);
+  return (
+    <Badge variant="outline" className="gap-1 border-status-fail/40 text-status-fail">
+      <ShieldAlert className="size-3.5" /> Quality gate failed
+      {reasons.length ? <span className="font-normal text-muted-foreground">({reasons.join(", ")})</span> : null}
+    </Badge>
+  );
+}
+
 function TrendBar({ points }: { points: TrendPoint[] }) {
   if (points.length < 2) return <span className="text-xs text-muted-foreground">Trends appear after 2+ runs.</span>;
   const w = points.length * 14;
@@ -167,7 +195,7 @@ function TrendBar({ points }: { points: TrendPoint[] }) {
           return (
             <g key={p.runId}>
               <rect x={i * 14} y={42 - h} width={10} height={h} fill={p.stats.failed || p.stats.broken ? "#EF4444" : "#1DB980"}>
-                <title>{`${new Date(p.createdAt).toLocaleString()}\n${p.stats.passed}/${p.stats.total} passed, ${p.stats.failed} failed, ${p.stats.broken} broken${flaky ? `, ${flaky} flaky` : ""}${durMs ? `\n${(durMs / 1000).toFixed(1)}s total` : ""}`}</title>
+                <title>{`${new Date(p.createdAt).toLocaleString()}\n${p.stats.passed}/${p.stats.total} passed, ${p.stats.failed} failed, ${p.stats.broken} broken${flaky ? `, ${flaky} flaky` : ""}${durMs ? `\n${formatDurationSec(durMs)} total` : ""}`}</title>
               </rect>
               {flaky > 0 && <rect x={i * 14} y={Math.max(0, 42 - h - 3)} width={10} height={3} fill="#F59E0B" pointerEvents="none" />}
             </g>

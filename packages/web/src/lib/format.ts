@@ -19,6 +19,26 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
   return `${day}d ago`;
 }
 
+/**
+ * Round to one decimal. `dir` controls the tie-break direction: "near" (default) rounds to nearest,
+ * while "up"/"down" force the result toward that side — used when displaying a value that must read
+ * as strictly greater/less than another so a sub-precision miss never renders as equal.
+ */
+function round1(n: number, dir: "near" | "up" | "down"): number {
+  const x = n * 10;
+  return (dir === "up" ? Math.ceil(x) : dir === "down" ? Math.floor(x) : Math.round(x)) / 10;
+}
+
+/** Ratio (0–1) → percent string, 1 decimal, trailing ".0" trimmed: 0.95 → "95%", 0.875 → "87.5%". */
+export function formatPercent(ratio: number, dir: "near" | "up" | "down" = "near"): string {
+  return `${+round1(ratio * 100, dir).toFixed(1)}%`;
+}
+
+/** Milliseconds → seconds string, 1 decimal kept: 80000 → "80.0s", 65449 → "65.4s". */
+export function formatDurationSec(ms: number, dir: "near" | "up" | "down" = "near"): string {
+  return `${round1(ms / 1000, dir).toFixed(1)}s`;
+}
+
 /** Human-friendly run label for selectors: relative time, status, pass ratio, branch@sha · env. */
 export function runLabel(r: Run, now: number = Date.now()): string {
   const base = `${relativeTime(r.createdAt, now)} — ${r.status}${r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}`;
