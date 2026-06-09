@@ -59,8 +59,10 @@ export function Project() {
       qc.setQueryData<Run[]>(["runs", id], (prev = []) => {
         // Ignore a stale/out-of-order transition (e.g. a delayed 'generating' arriving after
         // 'ready' over independent Redis paths in bullmq mode) — never regress a run's status.
+        // EXCEPT a retry, which legitimately moves a terminal 'failed' run back to 'generating'.
         const existing = prev.find((r) => r.id === event.run.id);
-        if (existing && STATUS_RANK[event.run.status] < STATUS_RANK[existing.status]) return prev;
+        const isRetry = existing?.status === "failed" && event.run.status === "generating";
+        if (existing && !isRetry && STATUS_RANK[event.run.status] < STATUS_RANK[existing.status]) return prev;
         const next = prev.filter((r) => r.id !== event.run.id);
         return [event.run, ...next].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
       });

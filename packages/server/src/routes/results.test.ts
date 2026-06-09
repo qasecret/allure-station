@@ -210,6 +210,28 @@ describe("send-results + generate", () => {
     await app.close();
   }, 60_000);
 
+  it("enqueue failure marks the run failed with the reason and publishes that exact state", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "eq" } });
+    const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
+    const send = await app.inject({ method: "POST", url: "/api/projects/eq/send-results", ...(await multipart([{ field: "files", filename: "1-result.json", data: f1 }])) });
+    const runId = send.json().runId as string;
+
+    const failedEvents: (string | null | undefined)[] = [];
+    deps.bus.subscribe((e) => { if (e.run.status === "failed") failedEvents.push(e.run.error); });
+    deps.queue.enqueue = async () => { throw new Error("redis down"); }; // simulate a broken queue
+
+    const gen = await app.inject({ method: "POST", url: `/api/projects/eq/generate?runId=${runId}` });
+    expect(gen.statusCode).toBe(503);
+    // persisted reason (was null before the fix)
+    expect((await app.inject({ method: "GET", url: `/api/projects/eq/runs/${runId}` })).json())
+      .toMatchObject({ status: "failed", error: "failed to enqueue generation" });
+    // the live SSE event carried the same reason, not null/stale
+    expect(failedEvents).toEqual(["failed to enqueue generation"]);
+    await app.close();
+  });
+
   it("retry 409s when a failed run has no staged results", async () => {
     const deps = await makeTestDeps();
     const app = buildApp(deps);

@@ -1,11 +1,30 @@
 import { basename } from "node:path";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { runMetadataSchema } from "@allure-station/shared";
+import type { Run } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { requireProjectWrite } from "../auth.js";
 
 // Optional CI-metadata text fields accepted alongside the file parts.
 const META_FIELDS = new Set(["branch", "commit", "environment", "ciUrl"]);
+
+/** Shared tail of /generate and /retry: enqueue an already-claimed ('generating') run and publish the
+ *  live transition. On enqueue failure, mark it failed WITH the reason and publish that exact state so
+ *  SSE clients and the DB agree. `run` is the pre-claim row; the lifecycle fields are set explicitly. */
+async function enqueueGeneration(deps: AppDeps, req: FastifyRequest, reply: FastifyReply, projectId: string, run: Run, failReason: string): Promise<FastifyReply> {
+  try {
+    await deps.queue.enqueue({ projectId, runId: run.id });
+  } catch (err) {
+    const failedAt = deps.now();
+    await deps.runs.markFailed(run.id, failedAt, failReason);
+    deps.bus.publish({ type: "run", projectId, run: { ...run, status: "failed", error: failReason, finishedAt: failedAt } });
+    req.log?.error?.(err);
+    return reply.code(503).send({ error: "failed to enqueue generation" });
+  }
+  const generating: Run = { ...run, status: "generating", error: null, finishedAt: null };
+  deps.bus.publish({ type: "run", projectId, run: generating });
+  return reply.code(202).send(generating); // 202 Accepted
+}
 
 export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void {
   // Upload result files (+ optional branch/commit/environment/ciUrl text fields); stages them under a
@@ -68,20 +87,7 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
     }
     const startedAt = deps.now();
     if (!(await deps.runs.claimPending(pending.id, startedAt))) return reply.code(409).send({ error: "run is already being generated" });
-    try {
-      await deps.queue.enqueue({ projectId, runId: pending.id });
-    } catch (err) {
-      const failedAt = deps.now();
-      await deps.runs.markFailed(pending.id, failedAt);
-      // Publish the terminal state too — clients already saw this run as pending/generating.
-      deps.bus.publish({ type: "run", projectId, run: { ...pending, status: "failed", finishedAt: failedAt } });
-      req.log?.error?.(err);
-      return reply.code(503).send({ error: "failed to enqueue generation" });
-    }
-    // We just claimed `pending` into 'generating' — reflect that without another round-trip.
-    const generating = { ...pending, status: "generating" as const };
-    deps.bus.publish({ type: "run", projectId, run: generating });
-    return reply.code(202).send(generating); // 202 Accepted
+    return enqueueGeneration(deps, req, reply, projectId, pending, "failed to enqueue generation");
   });
 
   // Re-run generation for a FAILED run, reusing its already-staged results (send-results' files
@@ -100,17 +106,6 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
     }
     const startedAt = deps.now();
     if (!(await deps.runs.retryFailed(runId, startedAt))) return reply.code(409).send({ error: "run is no longer failed" });
-    try {
-      await deps.queue.enqueue({ projectId, runId });
-    } catch (err) {
-      const failedAt = deps.now();
-      await deps.runs.markFailed(runId, failedAt, "failed to enqueue retry");
-      deps.bus.publish({ type: "run", projectId, run: { ...run, status: "failed", finishedAt: failedAt } });
-      req.log?.error?.(err);
-      return reply.code(503).send({ error: "failed to enqueue generation" });
-    }
-    const generating = { ...run, status: "generating" as const, error: null, finishedAt: null };
-    deps.bus.publish({ type: "run", projectId, run: generating });
-    return reply.code(202).send(generating); // 202 Accepted
+    return enqueueGeneration(deps, req, reply, projectId, run, "failed to enqueue retry");
   });
 }
