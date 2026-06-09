@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { selectTriggers, slackText, webhookPayload, dispatchNotifications } from "./notify.js";
+import { selectTriggers, slackText, webhookPayload, dispatchNotifications, sendTestNotification } from "./notify.js";
 import type { AppDeps } from "./app.js";
 import type { Notification, Run } from "@allure-station/shared";
 
@@ -83,5 +83,31 @@ describe("dispatchNotifications", () => {
     const subs = [sub({ kind: "slack", events: ["completed"] })];
     await dispatchNotifications(fakeDeps(subs, run()), "p", "r1", fakeFetch);
     expect(JSON.parse(body!).text).toContain("https://allure.example.com/api/projects/p/runs/r1/report/index.html");
+  });
+});
+
+describe("sendTestNotification", () => {
+  it("POSTs and reports ok on a 2xx response", async () => {
+    const fakeFetch = vi.fn(async () => new Response("ok", { status: 200 })) as unknown as typeof fetch;
+    expect(await sendTestNotification(sub({ url: "https://hook/x" }), "p", fakeFetch)).toEqual({ ok: true, status: 200 });
+    expect(fakeFetch).toHaveBeenCalledOnce();
+  });
+
+  it("reports failure with the status on a non-2xx response", async () => {
+    const fakeFetch = vi.fn(async () => new Response("nope", { status: 500 })) as unknown as typeof fetch;
+    expect(await sendTestNotification(sub({ url: "https://hook/x" }), "p", fakeFetch)).toEqual({ ok: false, status: 500, error: "HTTP 500" });
+  });
+
+  it("rejects an SSRF-unsafe target without calling fetch", async () => {
+    const fakeFetch = vi.fn() as unknown as typeof fetch;
+    const res = await sendTestNotification(sub({ url: "http://localhost/x" }), "p", fakeFetch);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/rejected/);
+    expect(fakeFetch).not.toHaveBeenCalled();
+  });
+
+  it("reports failure (never throws) when fetch throws", async () => {
+    const fakeFetch = vi.fn(async () => { throw new Error("down"); }) as unknown as typeof fetch;
+    expect(await sendTestNotification(sub({ url: "https://hook/x" }), "p", fakeFetch)).toEqual({ ok: false, error: "down" });
   });
 });

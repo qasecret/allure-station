@@ -349,6 +349,11 @@ function NotificationsCard({ projectId }: { projectId: string }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["notifications", projectId] }); toast.success("Notification removed"); },
     onError: (e) => toast.error((e as Error).message),
   });
+  const test = useMutation({
+    mutationFn: (notificationId: string) => api.testNotification(projectId, notificationId),
+    onSuccess: (r) => r.ok ? toast.success("Test notification sent") : toast.error(`Test failed: ${r.error ?? `HTTP ${r.status}`}`),
+    onError: (e) => toast.error((e as Error).message),
+  });
   const toggle = (ev: NotificationTrigger) => setEvents((cur) => cur.includes(ev) ? cur.filter((x) => x !== ev) : [...cur, ev]);
   if (notifs === undefined) return null;
   return (
@@ -384,7 +389,10 @@ function NotificationsCard({ projectId }: { projectId: string }) {
                   <TableCell><Badge variant="secondary">{n.kind}</Badge></TableCell>
                   <TableCell className="max-w-[220px] truncate text-muted-foreground">{n.url}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{n.events.join(", ")}</TableCell>
-                  <TableCell className="text-right"><Button variant="ghost" size="sm" disabled={remove.isPending && remove.variables === n.id} onClick={() => remove.mutate(n.id)}>Remove</Button></TableCell>
+                  <TableCell className="space-x-1 text-right">
+                    <Button variant="ghost" size="sm" disabled={test.isPending && test.variables === n.id} onClick={() => test.mutate(n.id)}>{test.isPending && test.variables === n.id ? "Sending…" : "Test"}</Button>
+                    <Button variant="ghost" size="sm" disabled={remove.isPending && remove.variables === n.id} onClick={() => remove.mutate(n.id)}>Remove</Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

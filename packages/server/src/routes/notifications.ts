@@ -4,6 +4,7 @@ import type { AppDeps } from "../app.js";
 import { authenticate, authorizeProjectWrite, requireProjectWrite } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 import { checkWebhookUrl } from "../safe-url.js";
+import { sendTestNotification } from "../notify.js";
 
 export function registerNotificationRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.post("/projects/:projectId/notifications", async (req, reply) => {
@@ -26,6 +27,18 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: AppDeps):
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
     if ((await requireProjectWrite(deps, req, projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
     return deps.notifications.listByProject(projectId);
+  });
+
+  // Send a one-off test message to a single subscription so users can verify it works. Returns 200
+  // with the delivery result ({ ok, status?, error? }) — a down webhook is a 200 with ok:false, not a 5xx.
+  app.post("/projects/:projectId/notifications/:notificationId/test", async (req, reply) => {
+    const { projectId, notificationId } = req.params as { projectId: string; notificationId: string };
+    if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
+    const principal = await authenticate(deps, req);
+    if ((await authorizeProjectWrite(deps, principal, projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    const sub = (await deps.notifications.listByProject(projectId)).find((n) => n.id === notificationId);
+    if (!sub) return reply.code(404).send({ error: "notification not found" });
+    return reply.code(200).send(await sendTestNotification(sub, projectId));
   });
 
   app.delete("/projects/:projectId/notifications/:notificationId", async (req, reply) => {

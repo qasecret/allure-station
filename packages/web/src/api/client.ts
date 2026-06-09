@@ -46,6 +46,7 @@ export interface ApiClient {
   deleteToken(projectId: string, tokenId: string): Promise<void>;
   listNotifications(projectId: string): Promise<Notification[]>;
   createNotification(projectId: string, body: { kind: NotificationKind; url: string; events: NotificationTrigger[] }): Promise<Notification>;
+  testNotification(projectId: string, notificationId: string): Promise<{ ok: boolean; status?: number; error?: string }>;
   deleteNotification(projectId: string, notificationId: string): Promise<void>;
 }
 
@@ -124,6 +125,8 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     listNotifications: (projectId) => json<Notification[]>(`/projects/${projectId}/notifications`, { method: "GET" }),
     createNotification: (projectId, body) =>
       json<Notification>(`/projects/${projectId}/notifications`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    testNotification: (projectId, notificationId) =>
+      json<{ ok: boolean; status?: number; error?: string }>(`/projects/${projectId}/notifications/${notificationId}/test`, { method: "POST" }),
     deleteNotification: (projectId, notificationId) => noContent(`/projects/${projectId}/notifications/${notificationId}`, { method: "DELETE" }),
     subscribeRuns: (projectId, onEvent) => {
       // No-op where EventSource is unavailable (e.g. jsdom/SSR); the page still works via fetch.
