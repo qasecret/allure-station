@@ -1,4 +1,4 @@
-import { isFailingStatus, type CompareResult, type TestDiff, type TestSummary } from "@allure-station/shared";
+import { bySeverity, isFailingStatus, type CompareResult, type TestDiff, type TestSummary } from "@allure-station/shared";
 
 // Cross-run match key. historyId is Allure's stable per-test hash and is effectively always present;
 // fullName/name are fallbacks. Two distinct tests with no identity at all (null historyId AND null
@@ -16,6 +16,10 @@ const toDiff = (base: TestSummary | undefined, target: TestSummary | undefined):
     baseStatus: base?.status ?? null,
     targetStatus: target?.status ?? null,
     flaky: t.flaky,
+    severity: t.severity ?? null,
+    suite: t.suite ?? null,
+    owner: t.owner ?? null,
+    tags: t.tags ?? [],
   };
 };
 
@@ -53,6 +57,11 @@ export function compareRuns(
   }
   for (const [key, bt] of baseMap) {
     if (!targetMap.has(key)) res.removed.push(toDiff(bt, undefined));
+  }
+  // Surface the worst regressions first: order each bucket by severity (blocker→trivial, unknown last).
+  // Array.sort is stable, so within a rank the original insertion order is preserved.
+  for (const bucket of [res.newlyFailing, res.fixed, res.stillFailing, res.added, res.removed, res.flaky]) {
+    bucket.sort(bySeverity);
   }
   return res;
 }

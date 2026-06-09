@@ -69,3 +69,29 @@ describe("compareRuns", () => {
     expect(r.newlyFailing[0]).toMatchObject({ name: "a", baseStatus: "passed", targetStatus: "broken" });
   });
 });
+
+describe("dimensions on diffs", () => {
+  it("copies severity/suite/owner/tags onto a diff (from base when absent in target)", () => {
+    const base = { runId: "b", createdAt: "2026-06-06T00:00:00.000Z", tests: [
+      t({ name: "gone", status: "failed", severity: "critical", suite: "checkout", owner: "alice", tags: ["smoke"] }),
+    ]};
+    const target = { runId: "t", createdAt: "2026-06-06T01:00:00.000Z", tests: [] };
+    const res = compareRuns(base, target);
+    expect(res.removed[0]).toMatchObject({ severity: "critical", suite: "checkout", owner: "alice", tags: ["smoke"] });
+  });
+
+  it("orders newlyFailing by severity (blocker first, unknown last)", () => {
+    const base = { runId: "b", createdAt: "2026-06-06T00:00:00.000Z", tests: [
+      t({ name: "n1", status: "passed" }), t({ name: "n2", status: "passed" }),
+      t({ name: "n3", status: "passed" }), t({ name: "n4", status: "passed" }),
+    ]};
+    const target = { runId: "t", createdAt: "2026-06-06T01:00:00.000Z", tests: [
+      t({ name: "n1", status: "failed", severity: "minor" }),
+      t({ name: "n2", status: "failed", severity: "blocker" }),
+      t({ name: "n3", status: "failed" }),                       // no severity → last
+      t({ name: "n4", status: "failed", severity: "critical" }),
+    ]};
+    const res = compareRuns(base, target);
+    expect(res.newlyFailing.map((d) => d.name)).toEqual(["n2", "n4", "n1", "n3"]);
+  });
+});
