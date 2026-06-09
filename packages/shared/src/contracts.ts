@@ -297,6 +297,7 @@ export type Regression = z.infer<typeof regressionSchema>;
 export type ApiToken = z.infer<typeof apiTokenSchema>;
 export type CreatedToken = z.infer<typeof createdTokenSchema>;
 export type QualityGateConfig = z.infer<typeof qualityGateConfigSchema>;
+export type QualityGateCheck = z.infer<typeof qualityGateCheckSchema>;
 export type QualityGateVerdict = z.infer<typeof qualityGateVerdictSchema>;
 export type RunSummary = z.infer<typeof runSummarySchema>;
 export type NotificationTrigger = z.infer<typeof notificationTriggerSchema>;

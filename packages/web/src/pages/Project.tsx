@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import type { Run, RunStatus, TestDiff, TestHistoryEntry, Regression, RunRef, TrendPoint } from "@allure-station/shared";
-import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History } from "lucide-react";
+import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History, ShieldCheck, ShieldAlert } from "lucide-react";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
 import { Topbar } from "@/components/Topbar";
@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { relativeTime, runLabel } from "@/lib/format";
+import { failedReasons } from "@/lib/quality-gate-verdict";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
 const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
@@ -127,6 +128,7 @@ export function Project() {
               {cur.stats.durationMs ? <> · {(cur.stats.durationMs / 1000).toFixed(1)}s</> : null}
             </span>
           )}
+          {cur?.status === "ready" && current && <GateBadge projectId={id} runId={current} />}
           {cur?.branch && <Badge variant="secondary">branch {cur.branch}{cur.commit ? `@${cur.commit.slice(0, 7)}` : ""}</Badge>}
           {cur?.environment && <Badge variant="secondary">env {cur.environment}</Badge>}
           {cur?.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">CI build ↗</a>}
@@ -146,6 +148,32 @@ export function Project() {
           : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use “Upload & generate” to create the first report.'} />}
       </div>
     </>
+  );
+}
+
+// Surfaces the configured quality-gate verdict for the selected run in the header. Silent when no
+// gate is configured; on failure it names the rules that tripped (the badge SVG only shows pass/fail).
+function GateBadge({ projectId, runId }: { projectId: string; runId: string }) {
+  const { data } = useQuery({
+    queryKey: ["run-summary", projectId, runId],
+    queryFn: () => api.getRunSummary(projectId, runId),
+  });
+  const gate = data?.qualityGate;
+  if (!gate?.configured) return null;
+  if (gate.passed) {
+    return (
+      <Badge variant="outline" className="gap-1 border-status-pass/40 text-status-pass">
+        <ShieldCheck className="size-3.5" /> Quality gate passed
+      </Badge>
+    );
+  }
+  const reasons = failedReasons(gate);
+  return (
+    <Badge variant="outline" className="gap-1 border-status-fail/40 text-status-fail"
+      title={reasons.length ? `Failed: ${reasons.join(" · ")}` : undefined}>
+      <ShieldAlert className="size-3.5" /> Quality gate failed
+      {reasons.length ? <span className="font-normal text-muted-foreground">({reasons.join(", ")})</span> : null}
+    </Badge>
   );
 }
 
