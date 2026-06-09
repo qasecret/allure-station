@@ -65,6 +65,17 @@ export const testSummarySchema = z.object({
   // field existed (and helpers that omit it) still parse — mirrors runSchema's CI-metadata fields.
   message: z.string().nullable().optional(),
   trace: z.string().nullable().optional(),
+  // Slice-able dimensions lifted from Allure's labels at ingest, so the analytics layer (trends,
+  // compare, filtering) can group/filter by them without re-reading the report. All optional for the
+  // same back-compat reason as message/trace: summaries persisted before this slice still parse.
+  severity: z.string().nullable().optional(), // label "severity" (blocker…trivial; adapters may set arbitrary values)
+  owner: z.string().nullable().optional(),    // label "owner"
+  suite: z.string().nullable().optional(),    // label "suite" (falls back to "parentSuite")
+  tags: z.array(z.string()).optional(),       // all "tag" labels; [] when none
+  // Allure's known-issue flags for this test (driven by a known-issues list when one is configured).
+  // Stored now so the planned known-issues/muting feature can suppress gate/notification noise.
+  muted: z.boolean().optional(),
+  known: z.boolean().optional(),
 });
 
 // One test's cross-run difference.

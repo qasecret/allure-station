@@ -28,6 +28,15 @@ export class TestResultRepository {
         flaky: t.flaky ? "true" : "false",
         message: t.message ?? null,
         trace: t.trace ?? null,
+        // Slice-able dimensions persisted for the upcoming trends/filter + known-issues features.
+        // Deliberately NOT echoed by listByRun (the lean comparison reader) — the readers land with
+        // the features that consume them, so the hot compare path stays lean.
+        severity: t.severity ?? null,
+        owner: t.owner ?? null,
+        suite: t.suite ?? null,
+        tags: t.tags && t.tags.length ? JSON.stringify(t.tags) : null,
+        muted: t.muted ? "true" : "false",
+        known: t.known ? "true" : "false",
       })),
     );
   }

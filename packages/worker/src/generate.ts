@@ -46,6 +46,18 @@ export async function generateReport(params: GenerateParams): Promise<GenerateRe
 
 const KNOWN_STATUSES: readonly string[] = ["passed", "failed", "broken", "skipped"];
 
+interface Label { name: string; value?: string }
+
+/** First non-empty value of the label named `name`, or null. */
+function labelValue(labels: Label[] | undefined, name: string): string | null {
+  return labels?.find((l) => l.name === name && l.value)?.value ?? null;
+}
+
+/** All non-empty values of the label named `name` (Allure repeats `tag` per value). */
+function labelValues(labels: Label[] | undefined, name: string): string[] {
+  return (labels ?? []).filter((l) => l.name === name && l.value).map((l) => l.value as string);
+}
+
 const MESSAGE_CAP = 2 * 1024;   // bytes
 const TRACE_CAP = 16 * 1024;    // bytes
 
@@ -95,6 +107,12 @@ async function summarize(report: AllureReport): Promise<GenerateResult> {
       flaky: r.flaky ?? false,
       message: truncate(r.error?.message, MESSAGE_CAP),
       trace: truncate(r.error?.trace, TRACE_CAP),
+      severity: labelValue(r.labels, "severity"),
+      owner: labelValue(r.labels, "owner"),
+      suite: labelValue(r.labels, "suite") ?? labelValue(r.labels, "parentSuite"),
+      tags: labelValues(r.labels, "tag"),
+      muted: r.muted ?? false,
+      known: r.known ?? false,
     });
   }
   return { stats, tests };

@@ -110,6 +110,14 @@ export const testResults = sqliteTable("test_results", {
   flaky: text("flaky").notNull(),    // "true" | "false"
   message: text("message"),          // failure message | null (truncated by the worker on write)
   trace: text("trace"),              // failure stack/trace | null (truncated by the worker on write)
+  // Slice-able dimensions lifted from Allure labels at ingest; all nullable so the migration ADDs
+  // them onto existing rows without a default.
+  severity: text("severity"),        // label "severity" | null
+  owner: text("owner"),              // label "owner" | null
+  suite: text("suite"),              // label "suite"/"parentSuite" | null
+  tags: text("tags"),                // JSON string[] of "tag" labels | null
+  muted: text("muted"),              // "true" | "false" | null (Allure known-issue flags)
+  known: text("known"),              // "true" | "false" | null
 }, (t) => ({
   byRun: index("idx_test_results_run").on(t.runId),
   // Composite (match-key, run_id): covers the historyByKey match predicate AND the join key to runs
