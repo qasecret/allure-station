@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ProjectRole, CreatedToken, NotificationKind, NotificationTrigger } from "@allure-station/shared";
 import { relativeTime } from "@/lib/format";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { qgConfigToForm, qgFormToConfig, type QgForm } from "@/lib/quality-gate-form";
 
 const PROJECT_ROLES: ProjectRole[] = ["viewer", "maintainer", "owner"];
@@ -49,6 +50,7 @@ export function ProjectSettings() {
                 </CardContent></Card>
               )}
               <VisibilityCard projectId={id} />
+              <BadgeCard projectId={id} />
               <QualityGateCard projectId={id} />
               <TokensCard projectId={id} />
               <NotificationsCard projectId={id} />
@@ -64,6 +66,7 @@ export function ProjectSettings() {
                     : "You need the owner or admin role to manage members and view the audit log."}
                 </CardContent></Card>
               )}
+              {(state === "manage" || state === "open") && <DangerZoneCard projectId={id} />}
             </>
           )}
         </div>
@@ -89,6 +92,65 @@ function VisibilityCard({ projectId }: { projectId: string }) {
         <Badge variant={project.visibility === "private" ? "secondary" : "outline"}>{project.visibility}</Badge>
         <Button variant="outline" size="sm" disabled={setVis.isPending} onClick={() => setVis.mutate(next)}>Make {next}</Button>
         {project.visibility === "private" && <span className="text-sm text-muted-foreground">Reads require viewer+; the badge stays public.</span>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function BadgeCard({ projectId }: { projectId: string }) {
+  const path = `/api/projects/${projectId}/badge.svg`;
+  // Absolute URL so the snippet works when pasted into a README/dashboard off-site.
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const markdown = `![tests](${origin}${path})`;
+  return (
+    <Card>
+      <CardHeader><CardTitle>Status badge</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        <img src={path} alt={`${projectId} status badge`} className="h-5" />
+        <div className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs">{markdown}</code>
+          <Button size="sm" variant="outline" onClick={() => { void navigator.clipboard?.writeText(markdown).then(() => toast.success("Copied")); }}>Copy</Button>
+        </div>
+        <p className="text-xs text-muted-foreground">Public SVG of the latest run — embed it in a README or dashboard. No auth required; it reflects the quality-gate verdict when one is set.</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DangerZoneCard({ projectId }: { projectId: string }) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState("");
+  const del = useMutation({
+    mutationFn: () => api.deleteProject(projectId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["projects"] }); toast.success(`Deleted ${projectId}`); navigate("/"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  return (
+    <Card className="border-destructive/40">
+      <CardHeader><CardTitle className="text-destructive">Danger zone</CardTitle></CardHeader>
+      <CardContent className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Permanently delete <code className="font-medium text-foreground">{projectId}</code> — every run, report, token, and setting. This can't be undone.
+        </p>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setConfirm(""); }}>
+          <DialogTrigger asChild><Button variant="destructive" size="sm">Delete project</Button></DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete {projectId}?</DialogTitle>
+              <DialogDescription>
+                This removes all of its runs, reports, tokens, and settings for good. Type <code className="font-medium">{projectId}</code> to confirm.
+              </DialogDescription>
+            </DialogHeader>
+            <Input aria-label="Type the project id to confirm" autoFocus value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={projectId} />
+            <DialogFooter>
+              <Button variant="destructive" disabled={confirm !== projectId || del.isPending} onClick={() => del.mutate()}>
+                {del.isPending ? "Deleting…" : "Delete permanently"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

@@ -15,6 +15,7 @@ export interface ApiClient {
   listProjects(opts?: { q?: string; limit?: number; offset?: number }): Promise<{ items: Project[]; total: number }>;
   createProject(id: string): Promise<Project>;
   getProject(id: string): Promise<Project>;
+  deleteProject(id: string): Promise<void>;
   setVisibility(id: string, visibility: ProjectVisibility): Promise<Project>;
   listRuns(projectId: string, opts?: { status?: string; limit?: number; offset?: number }): Promise<Run[]>;
   getRunSummary(projectId: string, runId: string): Promise<RunSummary>;
@@ -81,6 +82,7 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     createProject: (id) =>
       json<Project>("/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }),
     getProject: (id) => json<Project>(`/projects/${id}`, { method: "GET" }),
+    deleteProject: (id) => noContent(`/projects/${id}`, { method: "DELETE" }),
     setVisibility: (id, visibility) =>
       json<Project>(`/projects/${id}/visibility`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ visibility }) }),
     listRuns: (projectId, opts = {}) => json<Run[]>(`/projects/${projectId}/runs${qs(opts)}`, { method: "GET" }),

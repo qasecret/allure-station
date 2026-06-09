@@ -38,6 +38,13 @@ describe("api client", () => {
     await expect(client.listProjects()).rejects.toThrow("500");
   });
 
+  it("deleteProject DELETEs the project endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204, headers: headers() });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.deleteProject("p");
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p", expect.objectContaining({ method: "DELETE" }));
+  });
+
   it("getRunSummary GETs the run summary endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ qualityGate: { configured: true, passed: false, checks: [] } }) });
     const client = createClient("/api", fetchMock as unknown as typeof fetch);
