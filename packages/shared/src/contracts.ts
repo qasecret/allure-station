@@ -86,6 +86,13 @@ export const testDiffSchema = z.object({
   baseStatus: testStatusSchema.nullable(),   // null = absent in base
   targetStatus: testStatusSchema.nullable(), // null = absent in target
   flaky: z.boolean(),                          // flaky in target (or base if absent in target)
+  // Slice-able dimensions copied from the diffed test (target, falling back to base) so the compare
+  // UI can show severity/suite/owner without a second read. Optional/back-compat like testSummarySchema.
+  // `tags` is carried for a stable contract but not rendered yet (see the filter slice).
+  severity: z.string().nullable().optional(),
+  suite: z.string().nullable().optional(),
+  owner: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 export const compareResultSchema = z.object({
