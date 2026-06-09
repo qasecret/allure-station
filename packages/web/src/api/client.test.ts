@@ -53,6 +53,14 @@ describe("api client", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/p", expect.objectContaining({ method: "DELETE" }));
   });
 
+  it("retryRun POSTs to the run retry endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "r1", status: "generating" }) });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    const res = await client.retryRun("p", "r1");
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/runs/r1/retry", expect.objectContaining({ method: "POST" }));
+    expect(res.status).toBe("generating");
+  });
+
   it("getRunSummary GETs the run summary endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ qualityGate: { configured: true, passed: false, checks: [] } }) });
     const client = createClient("/api", fetchMock as unknown as typeof fetch);

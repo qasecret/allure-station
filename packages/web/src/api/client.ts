@@ -19,6 +19,7 @@ export interface ApiClient {
   setVisibility(id: string, visibility: ProjectVisibility): Promise<Project>;
   listRuns(projectId: string, opts?: { status?: string; limit?: number; offset?: number }): Promise<Run[]>;
   getRunSummary(projectId: string, runId: string): Promise<RunSummary>;
+  retryRun(projectId: string, runId: string): Promise<Run>;
   sendResults(projectId: string, files: File[]): Promise<{ runId: string }>;
   generate(projectId: string): Promise<Run>;
   listTrends(projectId: string): Promise<TrendPoint[]>;
@@ -88,6 +89,7 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
       json<Project>(`/projects/${id}/visibility`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ visibility }) }),
     listRuns: (projectId, opts = {}) => json<Run[]>(`/projects/${projectId}/runs${qs(opts)}`, { method: "GET" }),
     getRunSummary: (projectId, runId) => json<RunSummary>(`/projects/${projectId}/runs/${runId}/summary`, { method: "GET" }),
+    retryRun: (projectId, runId) => json<Run>(`/projects/${projectId}/runs/${runId}/retry`, { method: "POST" }),
     sendResults: (projectId, files) => {
       const fd = new FormData();
       for (const file of files) fd.append("files", file, file.name);

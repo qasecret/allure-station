@@ -83,4 +83,34 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
     deps.bus.publish({ type: "run", projectId, run: generating });
     return reply.code(202).send(generating); // 202 Accepted
   });
+
+  // Re-run generation for a FAILED run, reusing its already-staged results (send-results' files
+  // survive a failed generation — only the local work dir is cleaned). Returns 202; poll GET /runs/:id.
+  app.post("/projects/:projectId/runs/:runId/retry", async (req, reply) => {
+    const { projectId, runId } = req.params as { projectId: string; runId: string };
+    if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
+    if ((await requireProjectWrite(deps, req, projectId)) === "unauthorized") {
+      return reply.code(401).send({ error: "unauthorized" });
+    }
+    const run = await deps.runs.get(runId);
+    if (!run || run.projectId !== projectId) return reply.code(404).send({ error: "run not found" });
+    if (run.status !== "failed") return reply.code(409).send({ error: `run is not failed (status: ${run.status})` });
+    if (!(await deps.storage.exists(`${projectId}/runs/${runId}/results`))) {
+      return reply.code(409).send({ error: "no staged results to retry; re-upload via send-results" });
+    }
+    const startedAt = deps.now();
+    if (!(await deps.runs.retryFailed(runId, startedAt))) return reply.code(409).send({ error: "run is no longer failed" });
+    try {
+      await deps.queue.enqueue({ projectId, runId });
+    } catch (err) {
+      const failedAt = deps.now();
+      await deps.runs.markFailed(runId, failedAt, "failed to enqueue retry");
+      deps.bus.publish({ type: "run", projectId, run: { ...run, status: "failed", finishedAt: failedAt } });
+      req.log?.error?.(err);
+      return reply.code(503).send({ error: "failed to enqueue generation" });
+    }
+    const generating = { ...run, status: "generating" as const, error: null, finishedAt: null };
+    deps.bus.publish({ type: "run", projectId, run: generating });
+    return reply.code(202).send(generating); // 202 Accepted
+  });
 }

@@ -201,6 +201,31 @@ for (const backend of backends) {
         expect((await projects.get("p"))?.latestRunId).toBe("r1");
       });
 
+      it("markFailed stores a (truncated) error; retryFailed clears it and re-claims; markReady clears it", async () => {
+        await projects.create("p", "2026-06-06T00:00:00.000Z");
+        await runs.create("p", "rf", "R", "2026-06-06T00:00:00.000Z");
+
+        await runs.markFailed("rf", "2026-06-06T00:01:00.000Z", "x".repeat(5000));
+        const failed = await runs.get("rf");
+        expect(failed?.status).toBe("failed");
+        expect(failed?.error).toHaveLength(2000); // truncated
+        expect(failed?.finishedAt).toBe("2026-06-06T00:01:00.000Z");
+
+        // retry re-claims a failed run, clearing error + finishedAt
+        expect(await runs.retryFailed("rf", "2026-06-06T00:02:00.000Z")).toBe(true);
+        const retrying = await runs.get("rf");
+        expect(retrying?.status).toBe("generating");
+        expect(retrying?.error).toBeNull();
+        expect(retrying?.finishedAt).toBeNull();
+        // a non-failed run can't be re-claimed for retry
+        expect(await runs.retryFailed("rf", "2026-06-06T00:03:00.000Z")).toBe(false);
+
+        // a subsequent success clears any lingering error
+        await runs.markFailed("rf", "2026-06-06T00:04:00.000Z", "boom");
+        await runs.markReady("rf", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0 }, "2026-06-06T00:05:00.000Z");
+        expect((await runs.get("rf"))?.error).toBeNull();
+      });
+
       it("claimPending returns true the first time and false the second time (simulates a race)", async () => {
         await projects.create("p2", "2026-06-06T00:00:00.000Z");
         await runs.create("p2", "r2", "Race Report", "2026-06-06T00:00:00.000Z");

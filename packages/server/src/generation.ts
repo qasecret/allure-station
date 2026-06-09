@@ -55,7 +55,7 @@ export async function runGeneration(deps: AppDeps, projectId: string, runId: str
     await publishRun(deps, projectId, runId);
     await dispatchNotifications(deps, projectId, runId); // best-effort, never throws
   } catch (err) {
-    await deps.runs.markFailed(runId, deps.now());
+    await deps.runs.markFailed(runId, deps.now(), err instanceof Error ? err.message : String(err));
     await publishRun(deps, projectId, runId);
     await dispatchNotifications(deps, projectId, runId); // best-effort, never throws
     throw err;
