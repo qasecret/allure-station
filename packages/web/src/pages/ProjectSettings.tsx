@@ -66,7 +66,7 @@ export function ProjectSettings() {
                     : "You need the owner or admin role to manage members and view the audit log."}
                 </CardContent></Card>
               )}
-              {(state === "manage" || state === "open") && <DangerZoneCard projectId={id} />}
+              <DangerZoneCard projectId={id} />
             </>
           )}
         </div>
@@ -111,7 +111,7 @@ function BadgeCard({ projectId }: { projectId: string }) {
           <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs">{markdown}</code>
           <Button size="sm" variant="outline" onClick={() => { void navigator.clipboard?.writeText(markdown).then(() => toast.success("Copied")); }}>Copy</Button>
         </div>
-        <p className="text-xs text-muted-foreground">Public SVG of the latest run — embed it in a README or dashboard. No auth required; it reflects the quality-gate verdict when one is set.</p>
+        <p className="text-xs text-muted-foreground">Public SVG of the latest run's pass/fail count — embed it in a README or dashboard. No auth required.</p>
       </CardContent>
     </Card>
   );
@@ -124,7 +124,14 @@ function DangerZoneCard({ projectId }: { projectId: string }) {
   const [confirm, setConfirm] = useState("");
   const del = useMutation({
     mutationFn: () => api.deleteProject(projectId),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["projects"] }); toast.success(`Deleted ${projectId}`); navigate("/"); },
+    onSuccess: () => {
+      // Drop every cache entry scoped to this project (keys are [name, projectId, …]) so a
+      // browser-back to the deleted project can't render stale runs/report; then refresh the list.
+      qc.removeQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[1] === projectId });
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      toast.success(`Deleted ${projectId}`);
+      navigate("/");
+    },
     onError: (e) => toast.error((e as Error).message),
   });
   return (
@@ -258,7 +265,7 @@ function QualityGateCard({ projectId }: { projectId: string }) {
           </div>
           <Button type="submit" size="sm" disabled={save.isPending}>Save gate</Button>
         </form>
-        <p className="text-xs text-muted-foreground">Leave a field blank to disable that rule. The badge and run summary reflect the verdict.</p>
+        <p className="text-xs text-muted-foreground">Leave a field blank to disable that rule. The run header and run summary reflect the verdict.</p>
       </CardContent>
     </Card>
   );

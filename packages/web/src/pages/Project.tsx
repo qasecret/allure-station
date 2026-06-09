@@ -157,6 +157,7 @@ function GateBadge({ projectId, runId }: { projectId: string; runId: string }) {
   const { data } = useQuery({
     queryKey: ["run-summary", projectId, runId],
     queryFn: () => api.getRunSummary(projectId, runId),
+    retry: false, // summary is read-gated → 404s for private projects; don't retry-storm (matches ["project"])
   });
   const gate = data?.qualityGate;
   if (!gate?.configured) return null;
