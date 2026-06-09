@@ -8,6 +8,7 @@ import { api } from "../main.js";
 import { useAuth } from "../auth.js";
 import { settingsState } from "@/lib/settings-access";
 import { Topbar } from "@/components/Topbar";
+import { CopyButton } from "@/components/CopyButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -109,7 +110,7 @@ function BadgeCard({ projectId }: { projectId: string }) {
         <img src={path} alt={`${projectId} status badge`} className="h-5" />
         <div className="flex items-center gap-2">
           <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs">{markdown}</code>
-          <Button size="sm" variant="outline" onClick={() => { void navigator.clipboard?.writeText(markdown).then(() => toast.success("Copied")); }}>Copy</Button>
+          <CopyButton value={markdown} />
         </div>
         <p className="text-xs text-muted-foreground">Public SVG of the latest run's pass/fail count — embed it in a README or dashboard. No auth required.</p>
       </CardContent>
@@ -302,7 +303,7 @@ function TokensCard({ projectId }: { projectId: string }) {
             <p className="font-medium">Copy this token now — it won't be shown again.</p>
             <div className="mt-1 flex items-center gap-2">
               <code className="break-all rounded bg-muted px-2 py-1">{created.token}</code>
-              <Button size="sm" variant="outline" onClick={() => { void navigator.clipboard?.writeText(created.token).then(() => toast.success("Copied")); }}>Copy</Button>
+              <CopyButton value={created.token} />
               <Button size="sm" variant="ghost" onClick={() => setCreated(null)}>Dismiss</Button>
             </div>
           </div>

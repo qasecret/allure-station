@@ -19,6 +19,11 @@ describe("formatGateCheck", () => {
     expect(formatGateCheck({ rule: "maxDurationMs", ok: false, actual: 80000, threshold: 60000 }))
       .toBe("duration 80.0s > 60.0s");
   });
+  it("rounds the actual toward the failing side so a near miss never reads as equal", () => {
+    // 99.96% pass rate failing a 100% gate must not render as "100% < 100%".
+    expect(formatGateCheck({ rule: "minPassRate", ok: false, actual: 0.9996, threshold: 1 }))
+      .toBe("pass rate 99.9% < 100%");
+  });
   it("falls back gracefully for an unknown rule", () => {
     expect(formatGateCheck({ rule: "wat", ok: false, actual: 3, threshold: 2 }))
       .toBe("wat 3 vs 2");

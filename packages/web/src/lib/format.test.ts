@@ -1,11 +1,32 @@
 import { describe, it, expect } from "vitest";
-import { passRate, relativeTime, runLabel } from "./format.js";
+import { passRate, relativeTime, runLabel, formatPercent, formatDurationSec } from "./format.js";
 
 describe("passRate", () => {
   it("returns rounded percent passed/total", () => {
     expect(passRate({ passed: 7, total: 8 })).toBe(88);
     expect(passRate({ passed: 0, total: 0 })).toBe(0);
     expect(passRate({ passed: 3, total: 3 })).toBe(100);
+  });
+});
+
+describe("formatPercent", () => {
+  it("trims trailing .0 and keeps a meaningful decimal", () => {
+    expect(formatPercent(0.95)).toBe("95%");
+    expect(formatPercent(0.875)).toBe("87.5%");
+  });
+  it("directional rounding avoids a sub-precision value reading as equal", () => {
+    expect(formatPercent(0.9996, "down")).toBe("99.9%"); // a 99.96% actual that failed a 100% gate
+    expect(formatPercent(1, "near")).toBe("100%");
+  });
+});
+
+describe("formatDurationSec", () => {
+  it("keeps one decimal", () => {
+    expect(formatDurationSec(80000)).toBe("80.0s");
+    expect(formatDurationSec(65449)).toBe("65.4s");
+  });
+  it("rounds up for an over-threshold actual so it doesn't read as equal", () => {
+    expect(formatDurationSec(60001, "up")).toBe("60.1s");
   });
 });
 
