@@ -19,6 +19,7 @@ export interface ApiClient {
   setVisibility(id: string, visibility: ProjectVisibility): Promise<Project>;
   listRuns(projectId: string, opts?: { status?: string; limit?: number; offset?: number }): Promise<Run[]>;
   getRunSummary(projectId: string, runId: string): Promise<RunSummary>;
+  retryRun(projectId: string, runId: string): Promise<Run>;
   sendResults(projectId: string, files: File[]): Promise<{ runId: string }>;
   generate(projectId: string): Promise<Run>;
   listTrends(projectId: string): Promise<TrendPoint[]>;
@@ -46,6 +47,7 @@ export interface ApiClient {
   deleteToken(projectId: string, tokenId: string): Promise<void>;
   listNotifications(projectId: string): Promise<Notification[]>;
   createNotification(projectId: string, body: { kind: NotificationKind; url: string; events: NotificationTrigger[] }): Promise<Notification>;
+  testNotification(projectId: string, notificationId: string): Promise<{ ok: boolean; status?: number; error?: string }>;
   deleteNotification(projectId: string, notificationId: string): Promise<void>;
 }
 
@@ -87,6 +89,7 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
       json<Project>(`/projects/${id}/visibility`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ visibility }) }),
     listRuns: (projectId, opts = {}) => json<Run[]>(`/projects/${projectId}/runs${qs(opts)}`, { method: "GET" }),
     getRunSummary: (projectId, runId) => json<RunSummary>(`/projects/${projectId}/runs/${runId}/summary`, { method: "GET" }),
+    retryRun: (projectId, runId) => json<Run>(`/projects/${projectId}/runs/${runId}/retry`, { method: "POST" }),
     sendResults: (projectId, files) => {
       const fd = new FormData();
       for (const file of files) fd.append("files", file, file.name);
@@ -124,6 +127,8 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     listNotifications: (projectId) => json<Notification[]>(`/projects/${projectId}/notifications`, { method: "GET" }),
     createNotification: (projectId, body) =>
       json<Notification>(`/projects/${projectId}/notifications`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    testNotification: (projectId, notificationId) =>
+      json<{ ok: boolean; status?: number; error?: string }>(`/projects/${projectId}/notifications/${notificationId}/test`, { method: "POST" }),
     deleteNotification: (projectId, notificationId) => noContent(`/projects/${projectId}/notifications/${notificationId}`, { method: "DELETE" }),
     subscribeRuns: (projectId, onEvent) => {
       // No-op where EventSource is unavailable (e.g. jsdom/SSR); the page still works via fetch.

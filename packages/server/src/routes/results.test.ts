@@ -181,6 +181,71 @@ describe("send-results + generate", () => {
     await app.close();
   });
 
+  it("retry re-runs a failed run from its staged results and reaches ready; 409 once ready, 404 unknown", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "rt" } });
+    const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
+    const f2 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000002-result.json"));
+    const mp = await multipart([
+      { field: "files", filename: "1-result.json", data: f1 },
+      { field: "files", filename: "2-result.json", data: f2 },
+    ]);
+    const send = await app.inject({ method: "POST", url: "/api/projects/rt/send-results", ...mp });
+    const runId = send.json().runId as string;
+
+    // Force the run to failed (as a crashed generation would), leaving the staged results in place.
+    await deps.runs.markFailed(runId, deps.now(), "boom: report tool exploded");
+    expect((await app.inject({ method: "GET", url: `/api/projects/rt/runs/${runId}` })).json())
+      .toMatchObject({ status: "failed", error: "boom: report tool exploded" });
+
+    const retry = await app.inject({ method: "POST", url: `/api/projects/rt/runs/${runId}/retry` });
+    expect(retry.statusCode).toBe(202);
+    expect(retry.json()).toMatchObject({ status: "generating", error: null });
+    await deps.queue.onIdle();
+    expect((await app.inject({ method: "GET", url: `/api/projects/rt/runs/${runId}` })).json()).toMatchObject({ status: "ready" });
+
+    expect((await app.inject({ method: "POST", url: `/api/projects/rt/runs/${runId}/retry` })).statusCode).toBe(409); // now ready
+    expect((await app.inject({ method: "POST", url: `/api/projects/rt/runs/nope/retry` })).statusCode).toBe(404);
+    await app.close();
+  }, 60_000);
+
+  it("enqueue failure marks the run failed with the reason and publishes that exact state", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "eq" } });
+    const f1 = await readFile(join(fixturesDir, "00000000-0000-0000-0000-000000000001-result.json"));
+    const send = await app.inject({ method: "POST", url: "/api/projects/eq/send-results", ...(await multipart([{ field: "files", filename: "1-result.json", data: f1 }])) });
+    const runId = send.json().runId as string;
+
+    const failedEvents: (string | null | undefined)[] = [];
+    deps.bus.subscribe((e) => { if (e.run.status === "failed") failedEvents.push(e.run.error); });
+    deps.queue.enqueue = async () => { throw new Error("redis down"); }; // simulate a broken queue
+
+    const gen = await app.inject({ method: "POST", url: `/api/projects/eq/generate?runId=${runId}` });
+    expect(gen.statusCode).toBe(503);
+    // persisted reason (was null before the fix)
+    expect((await app.inject({ method: "GET", url: `/api/projects/eq/runs/${runId}` })).json())
+      .toMatchObject({ status: "failed", error: "failed to enqueue generation" });
+    // the live SSE event carried the same reason, not null/stale
+    expect(failedEvents).toEqual(["failed to enqueue generation"]);
+    await app.close();
+  });
+
+  it("retry 409s when a failed run has no staged results", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "rt2" } });
+    const runId = deps.newId();
+    await deps.runs.create("rt2", runId, "R", deps.now());
+    await deps.runs.markFailed(runId, deps.now(), "never staged");
+
+    const retry = await app.inject({ method: "POST", url: `/api/projects/rt2/runs/${runId}/retry` });
+    expect(retry.statusCode).toBe(409);
+    expect(retry.json().error).toMatch(/no staged results/);
+    await app.close();
+  });
+
   it("POST /generate on unknown project returns 404", async () => {
     const app = buildApp(await makeTestDeps());
     const res = await app.inject({ method: "POST", url: "/api/projects/ghost/generate" });

@@ -102,3 +102,29 @@ export async function dispatchNotifications(deps: AppDeps, projectId: string, ru
     console.error("[notify] dispatch failed:", err);
   }
 }
+
+export interface TestSendResult { ok: boolean; status?: number; error?: string }
+
+/**
+ * Deliver a one-off test message to a single subscription so a user can verify their webhook works.
+ * Unlike dispatchNotifications (best-effort, swallows errors) this is an interactive action, so it
+ * surfaces the delivery result — and still re-checks the SSRF guard at send time.
+ */
+export async function sendTestNotification(sub: Notification, projectId: string, fetchImpl: typeof fetch = fetch): Promise<TestSendResult> {
+  const safe = checkWebhookUrl(sub.url);
+  if (!safe.ok) return { ok: false, error: `webhook url rejected: ${safe.reason}` };
+  const body = sub.kind === "slack"
+    ? { text: `🔔 *${projectId}* — test notification from Allure Station. Your Slack webhook is wired up correctly.` }
+    : { project: projectId, test: true, message: "Test notification from Allure Station" };
+  try {
+    const res = await fetchImpl(sub.url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
+    });
+    return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: `HTTP ${res.status}` };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+}

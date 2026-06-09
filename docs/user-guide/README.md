@@ -135,6 +135,11 @@ terminal needed. Handy for ad‑hoc uploads or trying it out.
 Either way, the run appears immediately as `generating` and flips to `ready` on its own (the page
 streams progress over SSE — no refresh required).
 
+If generation **fails** (e.g. a malformed result set), the run turns `failed` and the project page
+shows the captured **error** with a **Retry generation** button — one click re-runs generation against
+the results you already uploaded, no re-push needed. (`POST …/runs/:runId/retry` does the same over the
+API.)
+
 ---
 
 ## 5. Read a report — the project page
@@ -350,8 +355,10 @@ by an SSRF guard (must be http(s); loopback / private / link‑local addresses a
 In the UI, the **Notifications** card on the project
 [Settings page](#13-project-settings--visibility-quality-gate-tokens-notifications-members-audit)
 does the same: pick the kind (`webhook`/`slack`), paste the URL, tick the event checkboxes
-(`completed` · `failed` · `gate_failed` · `regression`), and add it. Existing hooks are listed with a
-**Remove** button.
+(`completed` · `failed` · `gate_failed` · `regression`), and add it. Each listed hook has a **Test**
+button that delivers a one-off message right then — so you can confirm it works before relying on it —
+and a **Remove** button. (`POST …/notifications/:id/test` does the same over the API, returning the
+delivery result.)
 
 ---
 
@@ -525,12 +532,12 @@ All endpoints are under `/api`. Reads are public; writes follow the access model
 | Area | Endpoints |
 |---|---|
 | Projects | `GET/POST /projects` · `GET/DELETE /projects/:id` |
-| Results | `POST /projects/:id/send-results` · `POST /projects/:id/generate[?runId=]` |
+| Results | `POST /projects/:id/send-results` · `POST /projects/:id/generate[?runId=]` · `POST …/runs/:runId/retry` |
 | Runs & report | `GET /projects/:id/runs[?status=&limit=&offset=]` · `GET …/runs/:runId` · `GET …/runs/:runId/report/*` · `GET …/runs/:runId/summary` |
 | Analytics | `GET /projects/:id/trends` · `GET /projects/:id/compare?base=&target=` · `GET /projects/:id/tests/history?fullName=|historyId=` · `GET /projects/:id/events` (SSE) · `GET /projects/:id/badge.svg` |
 | Quality gate | `GET/PUT /projects/:id/quality-gate` |
 | Tokens | `GET/POST /projects/:id/tokens` · `DELETE …/tokens/:tokenId` |
-| Notifications | `GET/POST /projects/:id/notifications` · `DELETE …/:notificationId` |
+| Notifications | `GET/POST /projects/:id/notifications` · `POST …/:notificationId/test` · `DELETE …/:notificationId` |
 | Auth | `POST /auth/login` · `POST /auth/logout` · `GET /auth/me` · `GET /auth/oidc/login` · `GET /auth/oidc/callback` |
 | Admin | `GET/POST /users` · `DELETE /users/:id` · `GET/PUT/DELETE /projects/:id/members` · `GET /audit` · `GET /projects/:id/audit` |
 | Meta | `GET /version` · `GET /config` |

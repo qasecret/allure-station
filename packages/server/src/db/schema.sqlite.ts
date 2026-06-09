@@ -20,6 +20,7 @@ export const runs = sqliteTable("runs", {
   commit: text("commit"),
   environment: text("environment"),
   ciUrl: text("ci_url"),
+  error: text("error"), // failure reason captured on markFailed (truncated); cleared on retry/ready
 }, (t) => ({
   byProjectStatusCreated: index("idx_runs_project_status_created").on(t.projectId, t.status, t.createdAt),
   byProjectBranch: index("idx_runs_project_branch").on(t.projectId, t.branch),

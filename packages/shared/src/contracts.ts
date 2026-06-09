@@ -46,6 +46,9 @@ export const runSchema = z.object({
   commit: z.string().nullable().optional(),
   environment: z.string().nullable().optional(),
   ciUrl: z.string().nullable().optional(),
+  // Failure reason for a `failed` run (truncated); null/absent otherwise. nullable().optional() so
+  // runs persisted before this field existed still parse — mirrors the CI-metadata fields above.
+  error: z.string().nullable().optional(),
 });
 
 export const testStatusSchema = z.enum(["passed", "failed", "broken", "skipped", "unknown"]);

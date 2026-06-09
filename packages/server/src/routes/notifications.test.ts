@@ -1,6 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { buildApp } from "../app.js";
 import { makeTestDeps } from "../test-helpers.js";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("notification routes", () => {
   it("creates, lists, and deletes a subscription", async () => {
@@ -44,6 +46,24 @@ describe("notification routes", () => {
     await app.inject({ method: "POST", url: "/api/projects/p/tokens", payload: { name: "ci" } }); // locks the project
     expect((await app.inject({ method: "GET", url: "/api/projects/p/notifications" })).statusCode).toBe(401);
     expect((await app.inject({ method: "POST", url: "/api/projects/p/notifications", payload: { kind: "webhook", url: "https://h/x" } })).statusCode).toBe(401);
+    await app.close();
+  });
+
+  it("test-send delivers to the subscription and returns the result; 404 for an unknown id", async () => {
+    const app = buildApp(await makeTestDeps());
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
+    const created = await app.inject({ method: "POST", url: "/api/projects/p/notifications", payload: { kind: "webhook", url: "https://hooks.example.com/x" } });
+    const id = created.json().id;
+
+    let posted: string | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => { posted = url; return new Response("ok", { status: 200 }); }));
+
+    const ok = await app.inject({ method: "POST", url: `/api/projects/p/notifications/${id}/test` });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toEqual({ ok: true, status: 200 });
+    expect(posted).toBe("https://hooks.example.com/x");
+
+    expect((await app.inject({ method: "POST", url: "/api/projects/p/notifications/nope/test" })).statusCode).toBe(404);
     await app.close();
   });
 });

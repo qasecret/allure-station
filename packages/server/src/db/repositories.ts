@@ -118,7 +118,7 @@ export class RunRepository {
     await this.db.insert(runs).values({
       id, projectId, status: "pending", reportName, createdAt: now, startedAt: null, finishedAt: null, statsJson: null, ...meta,
     });
-    return { id, projectId, status: "pending", reportName, createdAt: now, finishedAt: null, stats: null, ...meta };
+    return { id, projectId, status: "pending", reportName, createdAt: now, finishedAt: null, stats: null, error: null, ...meta };
   }
 
   async setStatus(id: string, status: RunStatus): Promise<void> {
@@ -149,12 +149,26 @@ export class RunRepository {
 
   async markReady(id: string, stats: RunStats, finishedAt: string): Promise<void> {
     await this.db.update(runs)
-      .set({ status: "ready", statsJson: JSON.stringify(stats), finishedAt })
+      .set({ status: "ready", statsJson: JSON.stringify(stats), finishedAt, error: null }) // clear any prior failure (e.g. a retried run)
       .where(eq(runs.id, id));
   }
 
-  async markFailed(id: string, finishedAt: string): Promise<void> {
-    await this.db.update(runs).set({ status: "failed", finishedAt }).where(eq(runs.id, id));
+  async markFailed(id: string, finishedAt: string, error?: string): Promise<void> {
+    // Faithfully store whatever reason was passed (even ""), only defaulting null when none is given.
+    await this.db.update(runs)
+      .set({ status: "failed", finishedAt, error: error == null ? null : error.slice(0, 2000) })
+      .where(eq(runs.id, id));
+  }
+
+  /** Atomically transition a 'failed' run back to 'generating' for a retry, clearing the prior error
+   * and finishedAt. Returns true if this caller won the claim (mirrors claimPending for pending runs). */
+  async retryFailed(id: string, startedAt: string): Promise<boolean> {
+    const updated = await this.db
+      .update(runs)
+      .set({ status: "generating", startedAt, finishedAt: null, error: null })
+      .where(and(eq(runs.id, id), eq(runs.status, "failed")))
+      .returning();
+    return updated.length === 1;
   }
 
   /**
@@ -238,5 +252,6 @@ export class RunRepository {
     commit: r.commit,
     environment: r.environment,
     ciUrl: r.ciUrl,
+    error: r.error ?? null,
   });
 }

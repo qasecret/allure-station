@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
+import { toast } from "sonner";
 import type { Run, RunStatus, TestDiff, TestHistoryEntry, Regression, RunRef, TrendPoint } from "@allure-station/shared";
-import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History, ShieldCheck, ShieldAlert, AlertTriangle } from "lucide-react";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
 import { Topbar } from "@/components/Topbar";
@@ -58,8 +59,10 @@ export function Project() {
       qc.setQueryData<Run[]>(["runs", id], (prev = []) => {
         // Ignore a stale/out-of-order transition (e.g. a delayed 'generating' arriving after
         // 'ready' over independent Redis paths in bullmq mode) — never regress a run's status.
+        // EXCEPT a retry, which legitimately moves a terminal 'failed' run back to 'generating'.
         const existing = prev.find((r) => r.id === event.run.id);
-        if (existing && STATUS_RANK[event.run.status] < STATUS_RANK[existing.status]) return prev;
+        const isRetry = existing?.status === "failed" && event.run.status === "generating";
+        if (existing && !isRetry && STATUS_RANK[event.run.status] < STATUS_RANK[existing.status]) return prev;
         const next = prev.filter((r) => r.id !== event.run.id);
         return [event.run, ...next].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
       });
@@ -142,12 +145,39 @@ export function Project() {
           </Card>
           <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
         </div>
-        {current
-          ? <iframe title="report" className="min-h-0 flex-1 rounded-xl border bg-card shadow-sm"
-              src={`/api/projects/${id}/runs/${current}/report/index.html`} />
-          : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use “Upload & generate” to create the first report.'} />}
+        {cur?.status === "failed"
+          ? <FailedRunPanel projectId={id} run={cur} />
+          : current
+            ? <iframe title="report" className="min-h-0 flex-1 rounded-xl border bg-card shadow-sm"
+                src={`/api/projects/${id}/runs/${current}/report/index.html`} />
+            : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use “Upload & generate” to create the first report.'} />}
       </div>
     </>
+  );
+}
+
+// A failed run has no report to embed; show the captured error and a one-click retry (which re-runs
+// generation against the still-staged results). SSE flips the run back to generating/ready live.
+function FailedRunPanel({ projectId, run }: { projectId: string; run: Run }) {
+  const qc = useQueryClient();
+  const retry = useMutation({
+    mutationFn: () => api.retryRun(projectId, run.id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["runs", projectId] }); toast.success("Retrying generation…"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  return (
+    <div className="grid min-h-0 flex-1 place-items-center rounded-xl border bg-card p-6 shadow-sm">
+      <div className="max-w-lg text-center">
+        <AlertTriangle className="mx-auto size-8 text-status-fail" />
+        <h2 className="mt-3 text-lg font-semibold">Generation failed</h2>
+        {run.error
+          ? <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-2 text-left text-xs text-muted-foreground">{run.error}</pre>
+          : <p className="mt-2 text-sm text-muted-foreground">No error detail was captured.</p>}
+        <Button className="mt-4" disabled={retry.isPending} onClick={() => retry.mutate()}>
+          {retry.isPending ? "Retrying…" : "Retry generation"}
+        </Button>
+      </div>
+    </div>
   );
 }
 

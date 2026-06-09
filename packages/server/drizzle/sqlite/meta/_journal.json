@@ -106,6 +106,13 @@
       "when": 1780886832123,
       "tag": "0014_mighty_spyke",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1780975241018,
+      "tag": "0015_wandering_magik",
+      "breakpoints": true
     }
   ]
 }

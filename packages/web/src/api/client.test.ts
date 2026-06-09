@@ -38,11 +38,27 @@ describe("api client", () => {
     await expect(client.listProjects()).rejects.toThrow("500");
   });
 
+  it("testNotification POSTs to the notification test endpoint and returns the delivery result", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: false, status: 500, error: "HTTP 500" }) });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    const res = await client.testNotification("p", "n1");
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/notifications/n1/test", expect.objectContaining({ method: "POST" }));
+    expect(res).toEqual({ ok: false, status: 500, error: "HTTP 500" });
+  });
+
   it("deleteProject DELETEs the project endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204, headers: headers() });
     const client = createClient("/api", fetchMock as unknown as typeof fetch);
     await client.deleteProject("p");
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/p", expect.objectContaining({ method: "DELETE" }));
+  });
+
+  it("retryRun POSTs to the run retry endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "r1", status: "generating" }) });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    const res = await client.retryRun("p", "r1");
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/runs/r1/retry", expect.objectContaining({ method: "POST" }));
+    expect(res.status).toBe("generating");
   });
 
   it("getRunSummary GETs the run summary endpoint", async () => {
