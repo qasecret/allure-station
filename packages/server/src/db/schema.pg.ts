@@ -111,6 +111,14 @@ export const testResults = pgTable("test_results", {
   flaky: text("flaky").notNull(),
   message: text("message"),
   trace: text("trace"),
+  // Slice-able dimensions lifted from Allure labels at ingest; all nullable so the migration ADDs
+  // them onto existing rows without a default. Kept structurally identical to schema.sqlite.ts.
+  severity: text("severity"),
+  owner: text("owner"),
+  suite: text("suite"),
+  tags: text("tags"),    // JSON string[]
+  muted: text("muted"),  // "true" | "false" | null
+  known: text("known"),  // "true" | "false" | null
 }, (t) => ({
   byRun: index("idx_test_results_run").on(t.runId),
   // Composite (match-key, run_id): covers the historyByKey match predicate AND the join key to runs

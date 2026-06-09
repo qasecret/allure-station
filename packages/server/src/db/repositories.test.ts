@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { createDb } from "./client.js";
+import type { Db } from "./client.js";
+import { testResults } from "./schema.sqlite.js";
 import { ProjectRepository, RunRepository } from "./repositories.js";
 import { TestResultRepository } from "./test-results-repo.js";
 import { ApiTokenRepository } from "./api-tokens-repo.js";
@@ -18,6 +20,7 @@ const idGen = () => {
 };
 
 type BackendHandle = {
+  db: Db; // raw handle for asserting persisted columns that no repo reader echoes back yet
   projects: ProjectRepository;
   runs: RunRepository;
   tests: TestResultRepository;
@@ -42,6 +45,7 @@ const backends: Backend[] = [
       const { db, migrate } = createDb("sqlite", { url: ":memory:" });
       await migrate();
       return {
+        db,
         projects: new ProjectRepository(db),
         runs: new RunRepository(db),
         tests: new TestResultRepository(db, idGen()),
@@ -76,6 +80,7 @@ if (process.env.PG_TEST_URL) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (db as any).execute(sql`TRUNCATE audit_log, memberships, sessions, users, notifications, api_tokens, test_results, runs, projects CASCADE`);
       return {
+        db,
         projects: new ProjectRepository(db),
         runs: new RunRepository(db),
         tests: new TestResultRepository(db, idGen()),
@@ -93,6 +98,7 @@ if (process.env.PG_TEST_URL) {
 
 for (const backend of backends) {
   describe(`repositories: ${backend.name}`, () => {
+    let db: Db;
     let projects: ProjectRepository;
     let runs: RunRepository;
     let tests: TestResultRepository;
@@ -105,7 +111,7 @@ for (const backend of backends) {
     let cleanup: () => Promise<void>;
 
     beforeEach(async () => {
-      ({ projects, runs, tests, tokens, notifs, users, sessions, members, audit, cleanup } = await backend.make());
+      ({ db, projects, runs, tests, tokens, notifs, users, sessions, members, audit, cleanup } = await backend.make());
     });
 
     // -------------------------------------------------------------------------
@@ -375,8 +381,8 @@ for (const backend of backends) {
 
     describe("TestResultRepository", () => {
       const sample: TestSummary[] = [
-        { historyId: "h-pass", name: "passing test", fullName: "suite#passing", status: "passed", duration: 1000, flaky: false, message: null, trace: null },
-        { historyId: "h-fail", name: "failing test", fullName: "suite#failing", status: "failed", duration: 2000, flaky: true, message: "boom", trace: "at x:1" },
+        { historyId: "h-pass", name: "passing test", fullName: "suite#passing", status: "passed", duration: 1000, flaky: false, message: null, trace: null, severity: "critical", owner: "alice", suite: "checkout", tags: ["smoke", "regression"], muted: false, known: false },
+        { historyId: "h-fail", name: "failing test", fullName: "suite#failing", status: "failed", duration: 2000, flaky: true, message: "boom", trace: "at x:1", severity: "blocker", owner: null, suite: "checkout", tags: [], muted: true, known: true },
         { historyId: null, name: "no-history test", fullName: null, status: "skipped", duration: null, flaky: false },
       ];
 
@@ -395,6 +401,20 @@ for (const backend of backends) {
         expect(byName["passing test"]).toMatchObject({ status: "passed", duration: 1000, flaky: false, historyId: "h-pass" });
         expect(byName["failing test"]).toMatchObject({ status: "failed", duration: 2000, flaky: true });
         expect(byName["no-history test"]).toMatchObject({ status: "skipped", duration: null, flaky: false, historyId: null, fullName: null });
+      });
+
+      // The slice-able dimensions are persisted for future trends/filter + known-issues consumers but
+      // intentionally not echoed by listByRun (the lean comparison reader). Assert the stored columns
+      // directly so we verify the write + encoding without widening the hot path.
+      it("replaceForRun persists the slice-able dimensions (severity/owner/suite/tags) and muted/known flags", async () => {
+        await tests.replaceForRun("r1", sample);
+        const rows = await db.select().from(testResults).where(eq(testResults.runId, "r1"));
+        const byName = Object.fromEntries(rows.map((r) => [r.name, r]));
+        // tags persists as a JSON string; an empty/absent tag list is stored as NULL; muted/known as "true"/"false".
+        expect(byName["passing test"]).toMatchObject({ severity: "critical", owner: "alice", suite: "checkout", tags: JSON.stringify(["smoke", "regression"]), muted: "false", known: "false" });
+        expect(byName["failing test"]).toMatchObject({ severity: "blocker", owner: null, suite: "checkout", tags: null, muted: "true", known: "true" });
+        // A summary persisted without the new fields stores NULL for the dimensions and "false" for the flags.
+        expect(byName["no-history test"]).toMatchObject({ severity: null, owner: null, suite: null, tags: null, muted: "false", known: "false" });
       });
 
       it("replaceForRun replaces (no duplicates) on re-generation", async () => {

@@ -48,6 +48,45 @@ describe("generateReport", () => {
     expect(byName["passing test"].message ?? null).toBeNull();
   }, 60_000);
 
+  it("extracts severity/owner/suite/tags from labels and muted/known flags", async () => {
+    const resultsDir = await mkdtemp(join(tmpdir(), "as-labels-"));
+    await writeFile(join(resultsDir, "l1-result.json"), JSON.stringify({
+      uuid: "l1", historyId: "case-labels", name: "labeled test", fullName: "suite#labeled",
+      status: "passed", stage: "finished", start: 1000, stop: 2000,
+      labels: [
+        { name: "severity", value: "critical" },
+        { name: "owner", value: "alice" },
+        { name: "suite", value: "checkout" },
+        { name: "tag", value: "smoke" },
+        { name: "tag", value: "regression" },
+      ],
+    }));
+    // A second result with no labels — fields must come back null/empty, not undefined.
+    await writeFile(join(resultsDir, "l2-result.json"), JSON.stringify({
+      uuid: "l2", historyId: "case-bare", name: "bare test", fullName: "suite#bare",
+      status: "passed", stage: "finished", start: 1000, stop: 2000,
+    }));
+    try {
+      const result = await generateReport({ resultsDirs: [resultsDir], outputDir: out, reportName: "Labels", dumps: [] });
+      const t = result.tests.find((x) => x.name === "labeled test")!;
+      expect(t.severity).toBe("critical");
+      expect(t.owner).toBe("alice");
+      expect(t.suite).toBe("checkout");
+      expect(t.tags).toEqual(["smoke", "regression"]);
+      // No known-issues config is fed in, so Allure flags neither muted nor known.
+      expect(t.muted).toBe(false);
+      expect(t.known).toBe(false);
+
+      const bare = result.tests.find((x) => x.name === "bare test")!;
+      expect(bare.severity).toBeNull();
+      expect(bare.owner).toBeNull();
+      expect(bare.suite).toBeNull();
+      expect(bare.tags).toEqual([]);
+    } finally {
+      await rm(resultsDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   describe("truncate", () => {
     it("returns null for empty/undefined", () => {
       expect(truncate(undefined, 10)).toBeNull();
