@@ -104,6 +104,9 @@ export class ProjectRepository {
   }
 }
 
+/** Cap a stored failure reason so a pathological stack trace can't bloat the row. */
+const ERROR_MAX_LEN = 2000;
+
 export class RunRepository {
   constructor(private readonly db: Db) {}
 
@@ -156,7 +159,7 @@ export class RunRepository {
   async markFailed(id: string, finishedAt: string, error?: string): Promise<void> {
     // Faithfully store whatever reason was passed (even ""), only defaulting null when none is given.
     await this.db.update(runs)
-      .set({ status: "failed", finishedAt, error: error == null ? null : error.slice(0, 2000) })
+      .set({ status: "failed", finishedAt, error: error == null ? null : error.slice(0, ERROR_MAX_LEN) })
       .where(eq(runs.id, id));
   }
 

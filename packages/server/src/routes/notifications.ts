@@ -36,7 +36,7 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: AppDeps):
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
     const principal = await authenticate(deps, req);
     if ((await authorizeProjectWrite(deps, principal, projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
-    const sub = (await deps.notifications.listByProject(projectId)).find((n) => n.id === notificationId);
+    const sub = await deps.notifications.get(projectId, notificationId);
     if (!sub) return reply.code(404).send({ error: "notification not found" });
     return reply.code(200).send(await sendTestNotification(sub, projectId));
   });

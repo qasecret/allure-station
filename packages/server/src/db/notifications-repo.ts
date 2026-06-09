@@ -14,15 +14,24 @@ export class NotificationRepository {
 
   async listByProject(projectId: string): Promise<Notification[]> {
     const rows = await this.db.select().from(notifications).where(eq(notifications.projectId, projectId)).orderBy(notifications.createdAt);
-    return rows.map((r) => ({
-      id: r.id,
-      projectId: r.projectId,
-      kind: r.kind as NotificationKind,
-      url: r.url,
-      events: JSON.parse(r.events) as NotificationTrigger[],
-      createdAt: r.createdAt,
-    }));
+    return rows.map(this.#toNotification);
   }
+
+  /** A single subscription scoped to its project, or null. */
+  async get(projectId: string, id: string): Promise<Notification | null> {
+    const [row] = await this.db.select().from(notifications)
+      .where(and(eq(notifications.id, id), eq(notifications.projectId, projectId)));
+    return row ? this.#toNotification(row) : null;
+  }
+
+  #toNotification = (r: typeof notifications.$inferSelect): Notification => ({
+    id: r.id,
+    projectId: r.projectId,
+    kind: r.kind as NotificationKind,
+    url: r.url,
+    events: JSON.parse(r.events) as NotificationTrigger[],
+    createdAt: r.createdAt,
+  });
 
   async countByProject(projectId: string): Promise<number> {
     const [row] = await this.db.select({ c: count() }).from(notifications).where(eq(notifications.projectId, projectId));

@@ -83,6 +83,9 @@ export function Project() {
   const selectedVisible = selectedRun && visibleRuns.some((r) => r.id === selectedRun) ? selectedRun : null;
   const current = selectedVisible ?? visibleRuns.find((r) => r.status === "ready")?.id ?? visibleRuns[0]?.id ?? null;
   const cur = runs.find((r) => r.id === current);
+  // The most recent COMPLETED run (ready/failed). If it failed and isn't what we're showing, surface a
+  // banner — so a failure isn't hidden behind an older report, even when a newer run is still generating.
+  const latestDone = visibleRuns.find((r) => r.status === "ready" || r.status === "failed");
 
   if (projectDenied) {
     return (
@@ -120,6 +123,15 @@ export function Project() {
         </>}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+        {/* The latest completed run failed but isn't what we're showing (a prior ready report is) —
+            surface it, since otherwise the failure + retry would be hidden behind the run selector. */}
+        {latestDone?.status === "failed" && current !== latestDone.id && (
+          <button type="button" onClick={() => setSelectedRun(latestDone.id)}
+            className="flex items-center gap-2 rounded-lg border border-status-fail/40 bg-status-fail/5 px-3 py-2 text-left text-sm text-status-fail hover:bg-status-fail/10">
+            <AlertTriangle className="size-4 shrink-0" />
+            <span>The latest run failed to generate. <span className="underline">View &amp; retry</span></span>
+          </button>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           {cur && <StatusBadge status={cur.status} />}
           {cur?.stats && (
