@@ -49,6 +49,31 @@ describe("buildOpenapiDocument", () => {
     }
   });
 
+  it("derives a path parameter for GET /api/projects/{id}", () => {
+    const doc = buildOpenapiDocument({ version: "x" });
+    const op = doc.paths?.["/api/projects/{id}"]?.get;
+    expect(op).toBeDefined();
+    const params = (op?.parameters ?? []) as Array<{
+      in?: string;
+      name?: string;
+      required?: boolean;
+    }>;
+    const idParam = params.find((p) => p.in === "path" && p.name === "id");
+    expect(idParam).toBeDefined();
+    expect(idParam?.required).toBe(true);
+  });
+
+  it("declares query parameters for GET /api/projects (list)", () => {
+    const doc = buildOpenapiDocument({ version: "x" });
+    const op = doc.paths?.["/api/projects"]?.get;
+    expect(op).toBeDefined();
+    const params = (op?.parameters ?? []) as Array<{ in?: string; name?: string }>;
+    const queryParams = params.filter((p) => p.in === "query");
+    expect(queryParams.length).toBeGreaterThan(0);
+    const names = queryParams.map((p) => p.name);
+    expect(names).toEqual(expect.arrayContaining(["limit"]));
+  });
+
   it("declares a 204 route (DELETE /api/projects/{id}) with no content schema", () => {
     const doc = buildOpenapiDocument({ version: "x" });
     const op = doc.paths?.["/api/projects/{id}"]?.delete;

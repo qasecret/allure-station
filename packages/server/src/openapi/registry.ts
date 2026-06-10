@@ -24,6 +24,11 @@ extendZodWithOpenApi(z);
 // Reused response/inline schemas not present in the shared contracts.
 const errorSchema = z.object({ error: z.string() }).openapi("Error");
 const okResponse = z.object({ ok: z.boolean() });
+// Pagination query shared by list endpoints (handlers parse ?limit/?offset).
+const pageQuery = z.object({
+  limit: z.coerce.number().int().min(1).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
 const versionResponse = z.object({ version: z.string(), allure: z.string() });
 const configResponse = z.object({
   securityEnabled: z.boolean(),
@@ -53,6 +58,10 @@ function declare(registry: OpenAPIRegistry, r: RouteDecl) {
   const okContent = r.ok?.schema
     ? { content: { [contentType]: { schema: r.ok.schema } } }
     : {};
+  const pathParamNames = [...r.path.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+  const paramsSchema = pathParamNames.length
+    ? z.object(Object.fromEntries(pathParamNames.map((name) => [name, z.string()])))
+    : undefined;
   registry.registerPath({
     method: r.method,
     path: r.path,
@@ -60,6 +69,7 @@ function declare(registry: OpenAPIRegistry, r: RouteDecl) {
     summary: r.summary,
     ...(r.security ? { security: r.security.map((s) => ({ [s]: [] })) } : {}),
     request: {
+      ...(paramsSchema ? { params: paramsSchema } : {}),
       ...(r.body ? { body: { content: { "application/json": { schema: r.body } } } } : {}),
       ...(r.query ? { query: r.query } : {}),
     },
@@ -84,7 +94,7 @@ const metaRoutes: RouteDecl[] = [
 
 const projectRoutes: RouteDecl[] = [
   { method: "post", path: "/api/projects", tag: "projects", summary: "Create a project", security: WRITE_AUTH, body: createProjectSchema, ok: { status: 201, schema: projectSchema } },
-  { method: "get", path: "/api/projects", tag: "projects", summary: "List projects", ok: { status: 200, schema: z.array(projectSchema) } },
+  { method: "get", path: "/api/projects", tag: "projects", summary: "List projects", query: pageQuery.extend({ q: z.string().optional() }), ok: { status: 200, schema: z.array(projectSchema) } },
   { method: "get", path: "/api/projects/{id}", tag: "projects", summary: "Get a project", ok: { status: 200, schema: projectSchema } },
   { method: "delete", path: "/api/projects/{id}", tag: "projects", summary: "Delete a project", security: WRITE_AUTH, ok: { status: 204 } },
   { method: "put", path: "/api/projects/{id}/visibility", tag: "projects", summary: "Set project visibility", security: SESSION_ONLY, body: setVisibilityRequestSchema, ok: { status: 200, schema: projectSchema } },
@@ -92,18 +102,18 @@ const projectRoutes: RouteDecl[] = [
 
 const resultsRoutes: RouteDecl[] = [
   { method: "post", path: "/api/projects/{projectId}/send-results", tag: "results", summary: "Upload raw Allure results (multipart)", security: WRITE_AUTH, ok: { status: 202, schema: z.object({ runId: z.string(), files: z.number() }) } },
-  { method: "post", path: "/api/projects/{projectId}/generate", tag: "results", summary: "Enqueue report generation", security: WRITE_AUTH, ok: { status: 202, schema: runSchema } },
+  { method: "post", path: "/api/projects/{projectId}/generate", tag: "results", summary: "Enqueue report generation", security: WRITE_AUTH, query: z.object({ runId: z.string().optional() }), ok: { status: 202, schema: runSchema } },
   { method: "post", path: "/api/projects/{projectId}/runs/{runId}/retry", tag: "results", summary: "Retry a failed run", security: WRITE_AUTH, ok: { status: 202, schema: runSchema } },
 ];
 
 const runRoutes: RouteDecl[] = [
   { method: "get", path: "/api/projects/{projectId}/trends", tag: "runs", summary: "Run trend points", ok: { status: 200, schema: z.array(trendPointSchema) } },
-  { method: "get", path: "/api/projects/{projectId}/runs", tag: "runs", summary: "List runs", ok: { status: 200, schema: z.array(runSchema) } },
+  { method: "get", path: "/api/projects/{projectId}/runs", tag: "runs", summary: "List runs", query: pageQuery.extend({ status: z.string().optional(), branch: z.string().optional() }), ok: { status: 200, schema: z.array(runSchema) } },
   { method: "get", path: "/api/projects/{projectId}/runs/{runId}", tag: "runs", summary: "Get a run", ok: { status: 200, schema: runSchema } },
 ];
 
 const compareRoutes: RouteDecl[] = [
-  { method: "get", path: "/api/projects/{projectId}/compare", tag: "compare", summary: "Compare two runs", ok: { status: 200, schema: compareResultSchema } },
+  { method: "get", path: "/api/projects/{projectId}/compare", tag: "compare", summary: "Compare two runs", query: z.object({ base: z.string().optional(), target: z.string().optional() }), ok: { status: 200, schema: compareResultSchema } },
 ];
 
 const qualityGateRoutes: RouteDecl[] = [
@@ -113,8 +123,8 @@ const qualityGateRoutes: RouteDecl[] = [
 ];
 
 const testHistoryRoutes: RouteDecl[] = [
-  { method: "get", path: "/api/projects/{projectId}/tests/history", tag: "test-history", summary: "Per-test history", ok: { status: 200, schema: testHistorySchema } },
-  { method: "get", path: "/api/projects/{projectId}/tests/history/trace", tag: "test-history", summary: "Per-test trace", ok: { status: 200, schema: testTraceSchema } },
+  { method: "get", path: "/api/projects/{projectId}/tests/history", tag: "test-history", summary: "Per-test history", query: z.object({ historyId: z.string().optional(), fullName: z.string().optional(), name: z.string().optional(), limit: z.string().optional() }), ok: { status: 200, schema: testHistorySchema } },
+  { method: "get", path: "/api/projects/{projectId}/tests/history/trace", tag: "test-history", summary: "Per-test trace", query: z.object({ runId: z.string().optional(), historyId: z.string().optional(), fullName: z.string().optional() }), ok: { status: 200, schema: testTraceSchema } },
 ];
 
 const tokenRoutes: RouteDecl[] = [
@@ -149,8 +159,8 @@ const memberRoutes: RouteDecl[] = [
 ];
 
 const auditRoutes: RouteDecl[] = [
-  { method: "get", path: "/api/audit", tag: "audit", summary: "Global audit log", security: SESSION_ONLY, ok: { status: 200, schema: z.array(auditEntrySchema) } },
-  { method: "get", path: "/api/projects/{projectId}/audit", tag: "audit", summary: "Project audit log", security: SESSION_ONLY, ok: { status: 200, schema: z.array(auditEntrySchema) } },
+  { method: "get", path: "/api/audit", tag: "audit", summary: "Global audit log", security: SESSION_ONLY, query: pageQuery, ok: { status: 200, schema: z.array(auditEntrySchema) } },
+  { method: "get", path: "/api/projects/{projectId}/audit", tag: "audit", summary: "Project audit log", security: SESSION_ONLY, query: pageQuery, ok: { status: 200, schema: z.array(auditEntrySchema) } },
 ];
 
 const allRoutes: RouteDecl[] = [
@@ -175,6 +185,7 @@ function registerNonJsonRoutes(registry: OpenAPIRegistry) {
   registry.registerPath({
     method: "get", path: "/api/projects/{projectId}/runs/{runId}/report/{wildcard}",
     tags: ["runs"], summary: "Serve a generated report asset",
+    request: { params: z.object({ projectId: z.string(), runId: z.string(), wildcard: z.string() }) },
     responses: {
       200: { description: "Report asset", content: { "text/html": { schema: z.string() } } },
       404: { description: "Not found", content: { "application/json": { schema: errorSchema } } },
@@ -183,6 +194,7 @@ function registerNonJsonRoutes(registry: OpenAPIRegistry) {
   registry.registerPath({
     method: "get", path: "/api/projects/{projectId}/events",
     tags: ["events"], summary: "Server-Sent Events stream of run lifecycle events",
+    request: { params: z.object({ projectId: z.string() }) },
     responses: {
       200: { description: "SSE stream", content: { "text/event-stream": { schema: z.string() } } },
       404: { description: "Not found", content: { "application/json": { schema: errorSchema } } },
@@ -191,6 +203,7 @@ function registerNonJsonRoutes(registry: OpenAPIRegistry) {
   registry.registerPath({
     method: "get", path: "/api/projects/{projectId}/badge.svg",
     tags: ["badge"], summary: "Status badge for the latest ready run (always 200)",
+    request: { params: z.object({ projectId: z.string() }) },
     responses: { 200: { description: "SVG badge", content: { "image/svg+xml": { schema: z.string() } } } },
   });
   registry.registerPath({
