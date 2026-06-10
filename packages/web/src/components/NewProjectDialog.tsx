@@ -14,17 +14,18 @@ export function NewProjectDialog() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [id, setId] = useState("");
+  const [name, setName] = useState("");
   const create = useMutation({
-    mutationFn: () => api.createProject(id),
+    mutationFn: () => api.createProject(id, name.trim() || undefined),
     onSuccess: () => {
-      setId(""); setOpen(false);
+      setId(""); setName(""); setOpen(false);
       qc.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Project created");
     },
     onError: (e) => toast.error((e as Error).message),
   });
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setId(""); }}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setId(""); setName(""); } }}>
       <DialogTrigger asChild><Button><Plus className="size-4" /> New project</Button></DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -34,6 +35,8 @@ export function NewProjectDialog() {
         <form id="new-project" onSubmit={(e) => { e.preventDefault(); if (!id || create.isPending) return; create.mutate(); }} className="space-y-2">
           <Label htmlFor="np-id">Project id</Label>
           <Input id="np-id" autoFocus value={id} onChange={(e) => setId(e.target.value)} placeholder="my-service" />
+          <Label htmlFor="np-name">Display name <span className="text-muted-foreground">(optional)</span></Label>
+          <Input id="np-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Demo Web App" />
         </form>
         <DialogFooter>
           <Button type="submit" form="new-project" disabled={!id || create.isPending}>Create</Button>

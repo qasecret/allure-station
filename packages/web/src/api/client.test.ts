@@ -216,4 +216,17 @@ describe("api client", () => {
     await client.deleteNotification("p", "n1");
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/notifications/n1", expect.objectContaining({ method: "DELETE" }));
   });
+
+  it("createProject sends displayName and updateProject PATCHes it", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const f = (async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({ id: "p", displayName: "Demo", createdAt: "", latestRunId: null, visibility: "public" }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    const c = createClient("/api", f);
+    await c.createProject("p", "Demo");
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ id: "p", displayName: "Demo" });
+    await c.updateProject("p", { displayName: null });
+    expect(calls[1].init.method).toBe("PATCH");
+  });
 });

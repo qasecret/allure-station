@@ -33,7 +33,8 @@ export function ProjectCard({ p }: { p: Project }) {
             : <div className="grid size-16 place-items-center rounded-full bg-muted"><FolderOpen className="size-6 text-muted-foreground" /></div>}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="truncate font-semibold group-hover:text-primary">{p.id}</span>
+              <span className="truncate font-semibold group-hover:text-primary">{p.displayName ?? p.id}</span>
+              {p.displayName && <span className="truncate text-xs text-muted-foreground">{p.id}</span>}
               {p.visibility === "private" && <Badge variant="secondary" className="text-xs">private</Badge>}
             </div>
             <p className="mt-0.5 text-sm text-muted-foreground">

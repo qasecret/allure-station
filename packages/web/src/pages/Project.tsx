@@ -37,7 +37,7 @@ export function Project() {
 
   // A read-gated project 404s for anonymous/non-members — surface that as a clear message
   // instead of a silently-empty page.
-  const { isError: projectDenied } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
+  const { isError: projectDenied, data: project } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
 
   // SSE drives instant updates; a slow refetch is kept only as a backstop while a run is
   // generating, so the UI still self-heals if SSE is unavailable or an event is missed.
@@ -107,7 +107,7 @@ export function Project() {
   return (
     <>
       <Topbar
-        title={<span className="flex items-center gap-2"><Link to="/" className="text-muted-foreground hover:text-foreground">Projects</Link><span className="text-muted-foreground">/</span><span className="truncate">{id}</span></span>}
+        title={<span className="flex items-center gap-2"><Link to="/" className="text-muted-foreground hover:text-foreground">Projects</Link><span className="text-muted-foreground">/</span><span className="truncate">{project?.displayName ?? id}</span></span>}
         actions={<>
           {branches.length > 0 && (
             <Select value={branchFilter || "__all"} onValueChange={(v) => { setBranchFilter(v === "__all" ? "" : v); setSelectedRun(null); }}>
