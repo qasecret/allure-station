@@ -23,6 +23,7 @@ const PROJECT_ROLES: ProjectRole[] = ["viewer", "maintainer", "owner"];
 export function ProjectSettings() {
   const { id = "" } = useParams();
   const { user, isLoading: authLoading } = useAuth();
+  const { data: project } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
   const { data: config, isLoading: configLoading } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
   // Owner-gated members fetch doubles as the capability probe.
   const { data: members, isError } = useQuery({
@@ -33,7 +34,7 @@ export function ProjectSettings() {
 
   return (
     <>
-      <Topbar title={<span className="flex items-center gap-2"><Link to={`/projects/${id}`} className="text-muted-foreground hover:text-foreground">{id}</Link><span className="text-muted-foreground">/</span>Settings</span>} />
+      <Topbar title={<span className="flex items-center gap-2"><Link to={`/projects/${id}`} className="text-muted-foreground hover:text-foreground">{project?.displayName ?? id}</Link><span className="text-muted-foreground">/</span>Settings</span>} />
       <main className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-3xl space-y-6">
           {(configLoading || authLoading) ? (

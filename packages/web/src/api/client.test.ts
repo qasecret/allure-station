@@ -228,5 +228,7 @@ describe("api client", () => {
     expect(JSON.parse(String(calls[0].init.body))).toEqual({ id: "p", displayName: "Demo" });
     await c.updateProject("p", { displayName: null });
     expect(calls[1].init.method).toBe("PATCH");
+    expect(calls[1].url).toBe("/api/projects/p");
+    expect(JSON.parse(String(calls[1].init.body))).toEqual({ displayName: null });
   });
 });
