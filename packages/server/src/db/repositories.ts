@@ -18,9 +18,13 @@ function likeContains(column: AnySQLiteColumn, q: string) {
 export class ProjectRepository {
   constructor(private readonly db: Db) {}
 
-  async create(id: string, now: string): Promise<Project> {
-    await this.db.insert(projects).values({ id, createdAt: now, visibility: "public" });
-    return { id, createdAt: now, latestRunId: null, visibility: "public" };
+  async create(id: string, now: string, displayName: string | null = null): Promise<Project> {
+    await this.db.insert(projects).values({ id, createdAt: now, visibility: "public", displayName });
+    return { id, displayName, createdAt: now, latestRunId: null, visibility: "public" };
+  }
+
+  async setDisplayName(id: string, displayName: string | null): Promise<void> {
+    await this.db.update(projects).set({ displayName }).where(eq(projects.id, id));
   }
 
   // Combine the optional substring filter with the visibility scope into a single WHERE.
@@ -45,7 +49,7 @@ export class ProjectRepository {
       if (opts.offset !== undefined) query = query.offset(opts.offset);
     }
     const rows = await query;
-    return Promise.all(rows.map((r) => this.#withLatest(r.id, r.createdAt, r.visibility as ProjectVisibility)));
+    return Promise.all(rows.map((r) => this.#withLatest(r.id, r.createdAt, r.visibility as ProjectVisibility, r.displayName ?? null)));
   }
 
   async count(opts: { q?: string; scope?: VisibilityScope } = {}): Promise<number> {
@@ -55,7 +59,7 @@ export class ProjectRepository {
 
   async get(id: string): Promise<Project | null> {
     const [row] = await this.db.select().from(projects).where(eq(projects.id, id));
-    return row ? this.#withLatest(row.id, row.createdAt, row.visibility as ProjectVisibility) : null;
+    return row ? this.#withLatest(row.id, row.createdAt, row.visibility as ProjectVisibility, row.displayName ?? null) : null;
   }
 
   async setVisibility(id: string, visibility: ProjectVisibility): Promise<void> {
@@ -93,14 +97,14 @@ export class ProjectRepository {
     await this.db.update(projects).set({ qualityGate: config ? JSON.stringify(config) : null }).where(eq(projects.id, id));
   }
 
-  async #withLatest(id: string, createdAt: string, visibility: ProjectVisibility): Promise<Project> {
+  async #withLatest(id: string, createdAt: string, visibility: ProjectVisibility, displayName: string | null): Promise<Project> {
     const [latest] = await this.db
       .select({ id: runs.id })
       .from(runs)
       .where(eq(runs.projectId, id))
       .orderBy(desc(runs.createdAt))
       .limit(1);
-    return { id, createdAt, latestRunId: latest?.id ?? null, visibility };
+    return { id, displayName, createdAt, latestRunId: latest?.id ?? null, visibility };
   }
 }
 

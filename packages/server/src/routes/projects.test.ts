@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildApp } from "../app.js";
 import { makeTestDeps } from "../test-helpers.js";
+import type { AuditEntry } from "@allure-station/shared";
 
 describe("project routes", () => {
   it("creates, lists, gets and deletes a project", async () => {
@@ -43,6 +44,46 @@ describe("project routes", () => {
     expect(page.headers["x-total-count"]).toBe("3"); // total ignores pagination
 
     expect((await app.inject({ method: "GET", url: "/api/projects?limit=-1" })).statusCode).toBe(400);
+    await app.close();
+  });
+});
+
+describe("project display name", () => {
+  it("creates with a display name, trims it, and returns it on GET", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    const created = await app.inject({ method: "POST", url: "/api/projects", payload: { id: "named", displayName: "  Demo Web App  " } });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().displayName).toBe("Demo Web App");
+    expect((await app.inject({ method: "GET", url: "/api/projects/named" })).json().displayName).toBe("Demo Web App");
+    await app.close();
+  });
+
+  it("defaults displayName to null and PATCH updates + clears it (audited)", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
+    expect((await app.inject({ method: "GET", url: "/api/projects/p" })).json().displayName).toBeNull();
+
+    const renamed = await app.inject({ method: "PATCH", url: "/api/projects/p", payload: { displayName: "Payments" } });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json().displayName).toBe("Payments");
+
+    // empty string clears back to null
+    const cleared = await app.inject({ method: "PATCH", url: "/api/projects/p", payload: { displayName: "" } });
+    expect(cleared.json().displayName).toBeNull();
+
+    const audit = await deps.audit.list({ limit: 10 });
+    expect(audit.some((e: AuditEntry) => e.action === "project_renamed")).toBe(true);
+    await app.close();
+  });
+
+  it("PATCH 404s unknown project and 400s an over-long name", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    expect((await app.inject({ method: "PATCH", url: "/api/projects/nope", payload: { displayName: "x" } })).statusCode).toBe(404);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
+    expect((await app.inject({ method: "PATCH", url: "/api/projects/p", payload: { displayName: "x".repeat(121) } })).statusCode).toBe(400);
     await app.close();
   });
 });

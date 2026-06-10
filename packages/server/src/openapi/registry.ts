@@ -5,7 +5,7 @@ import {
 } from "@asteasolutions/zod-to-openapi";
 import { z, type ZodTypeAny } from "zod";
 import {
-  projectSchema, createProjectSchema, setVisibilityRequestSchema,
+  projectSchema, createProjectSchema, setVisibilityRequestSchema, updateProjectRequestSchema,
   runSchema, trendPointSchema, compareResultSchema,
   qualityGateConfigSchema, runSummarySchema,
   testHistorySchema, testTraceSchema,
@@ -97,6 +97,7 @@ const projectRoutes: RouteDecl[] = [
   { method: "get", path: "/api/projects", tag: "projects", summary: "List projects", query: pageQuery.extend({ q: z.string().optional() }), ok: { status: 200, schema: z.array(projectSchema) } },
   { method: "get", path: "/api/projects/{id}", tag: "projects", summary: "Get a project", ok: { status: 200, schema: projectSchema } },
   { method: "delete", path: "/api/projects/{id}", tag: "projects", summary: "Delete a project", security: WRITE_AUTH, ok: { status: 204 } },
+  { method: "patch", path: "/api/projects/{id}", tag: "projects", summary: "Set the project display name", security: WRITE_AUTH, body: updateProjectRequestSchema, ok: { status: 200, schema: projectSchema } },
   { method: "put", path: "/api/projects/{id}/visibility", tag: "projects", summary: "Set project visibility", security: SESSION_ONLY, body: setVisibilityRequestSchema, ok: { status: 200, schema: projectSchema } },
 ];
 

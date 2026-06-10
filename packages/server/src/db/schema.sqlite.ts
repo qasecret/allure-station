@@ -2,6 +2,7 @@ import { index, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
+  displayName: text("display_name"),
   createdAt: text("created_at").notNull(),
   qualityGate: text("quality_gate"), // JSON QualityGateConfig | null
   visibility: text("visibility").notNull().default("public"), // public|private (read-gating)

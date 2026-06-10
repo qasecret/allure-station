@@ -7,7 +7,10 @@ export const projectIdSchema = z
   .max(64)
   .regex(/^[a-z0-9][a-z0-9-_]*$/, "id must be lowercase alphanumeric, dash or underscore");
 
-export const createProjectSchema = z.object({ id: projectIdSchema });
+export const displayNameSchema = z.string().trim().min(1).max(120);
+export const createProjectSchema = z.object({ id: projectIdSchema, displayName: displayNameSchema.optional() });
+// PATCH body: empty string is allowed and means "clear" (normalized to null by the route).
+export const updateProjectRequestSchema = z.object({ displayName: z.string().trim().max(120).nullable() });
 
 export const runStatusSchema = z.enum(["pending", "generating", "ready", "failed"]);
 
@@ -209,6 +212,7 @@ export const setVisibilityRequestSchema = z.object({ visibility: projectVisibili
 
 export const projectSchema = z.object({
   id: projectIdSchema,
+  displayName: z.string().nullable().default(null),
   createdAt: z.string(),
   latestRunId: z.string().nullable(),
   // public = readable by anyone; private = reads require viewer+ / admin / project token.
@@ -278,7 +282,7 @@ export const auditActionSchema = z.enum([
   "user_created", "user_deleted",
   "token_created", "token_deleted",
   "member_set", "member_removed",
-  "project_created", "project_deleted",
+  "project_created", "project_deleted", "project_renamed",
   "project_visibility_set",
   "quality_gate_set",
   "notification_created", "notification_deleted",
@@ -297,6 +301,7 @@ export const auditEntrySchema = z.object({
   metadata: z.record(z.unknown()).nullable(),
 });
 
+export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
 export type ProjectId = z.infer<typeof projectIdSchema>;
 export type Run = z.infer<typeof runSchema>;
 export type RunStats = z.infer<typeof runStatsSchema>;

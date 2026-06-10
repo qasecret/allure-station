@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createProjectSchema, projectIdSchema, setVisibilityRequestSchema } from "@allure-station/shared";
+import { createProjectSchema, projectIdSchema, setVisibilityRequestSchema, updateProjectRequestSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { parsePage } from "./pagination.js";
 import { authenticate, authorizeProjectCreate, authorizeProjectOwner, authorizeProjectWrite, visibilityScopeFor } from "../auth.js";
@@ -19,7 +19,7 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     if (await deps.projects.get(parsed.data.id)) {
       return reply.code(409).send({ error: "project already exists" });
     }
-    const project = await deps.projects.create(parsed.data.id, deps.now());
+    const project = await deps.projects.create(parsed.data.id, deps.now(), parsed.data.displayName ?? null);
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "project_created", targetType: "project", targetId: project.id, projectId: project.id });
     return reply.code(201).send(project);
   });
@@ -61,6 +61,23 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     }
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "project_deleted", targetType: "project", targetId: id, projectId: id });
     return reply.code(204).send();
+  });
+
+  // Rename (presentation-only display name; id is the immutable handle). Maintainer+/token/open.
+  app.patch("/projects/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const existing = await deps.projects.get(id);
+    if (!existing) return reply.code(404).send({ error: "not found" });
+    const principal = await authenticate(deps, req);
+    if ((await authorizeProjectWrite(deps, principal, id)) === "unauthorized") {
+      return reply.code(401).send({ error: "unauthorized" });
+    }
+    const parsed = updateProjectRequestSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
+    const displayName = parsed.data.displayName || null; // "" → null (clear)
+    await deps.projects.setDisplayName(id, displayName);
+    await recordAudit(deps, { ...actorFromPrincipal(principal), action: "project_renamed", targetType: "project", targetId: id, projectId: id, metadata: { from: existing.displayName, to: displayName } });
+    return reply.send(await deps.projects.get(id));
   });
 
   // Set project visibility (public/private) — owner or global admin.
