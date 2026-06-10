@@ -398,14 +398,14 @@ for (const backend of backends) {
         const got = await tests.listByRun("r1");
         expect(got).toHaveLength(3);
         const byName = Object.fromEntries(got.map((t) => [t.name, t]));
-        expect(byName["passing test"]).toMatchObject({ status: "passed", duration: 1000, flaky: false, historyId: "h-pass" });
-        expect(byName["failing test"]).toMatchObject({ status: "failed", duration: 2000, flaky: true });
-        expect(byName["no-history test"]).toMatchObject({ status: "skipped", duration: null, flaky: false, historyId: null, fullName: null });
+        expect(byName["passing test"]).toMatchObject({ status: "passed", duration: 1000, flaky: false, historyId: "h-pass", severity: "critical", owner: "alice", suite: "checkout", tags: ["smoke", "regression"] });
+        expect(byName["failing test"]).toMatchObject({ status: "failed", duration: 2000, flaky: true, severity: "blocker", owner: null, suite: "checkout", tags: [] });
+        expect(byName["no-history test"]).toMatchObject({ status: "skipped", duration: null, flaky: false, historyId: null, fullName: null, severity: null, owner: null, suite: null, tags: [] });
       });
 
-      // The slice-able dimensions are persisted for future trends/filter + known-issues consumers but
-      // intentionally not echoed by listByRun (the lean comparison reader). Assert the stored columns
-      // directly so we verify the write + encoding without widening the hot path.
+      // severity/owner/suite/tags are now read back by listByRun (covered above); this test asserts the
+      // raw stored columns directly to verify the write encoding — including the write-only muted/known
+      // flags, which listByRun does NOT return (they feed the planned known-issues feature).
       it("replaceForRun persists the slice-able dimensions (severity/owner/suite/tags) and muted/known flags", async () => {
         await tests.replaceForRun("r1", sample);
         const rows = await db.select().from(testResults).where(eq(testResults.runId, "r1"));
@@ -415,6 +415,20 @@ for (const backend of backends) {
         expect(byName["failing test"]).toMatchObject({ severity: "blocker", owner: null, suite: "checkout", tags: null, muted: "true", known: "true" });
         // A summary persisted without the new fields stores NULL for the dimensions and "false" for the flags.
         expect(byName["no-history test"]).toMatchObject({ severity: null, owner: null, suite: null, tags: null, muted: "false", known: "false" });
+      });
+
+      // The tags column is plain TEXT — the app only ever writes a JSON array or NULL, but listByRun
+      // must not throw (or return a non-array) if an out-of-band write leaves malformed/non-array JSON.
+      it("listByRun tolerates a malformed/non-array tags column (reads back [])", async () => {
+        await db.insert(testResults).values([
+          { id: "x1", runId: "r1", name: "bad-json", status: "passed", flaky: "false", tags: "not-json" },
+          { id: "x2", runId: "r1", name: "json-null", status: "passed", flaky: "false", tags: "null" },
+          { id: "x3", runId: "r1", name: "json-number", status: "passed", flaky: "false", tags: "5" },
+        ]);
+        const byName = Object.fromEntries((await tests.listByRun("r1")).map((t) => [t.name, t]));
+        expect(byName["bad-json"].tags).toEqual([]);
+        expect(byName["json-null"].tags).toEqual([]);
+        expect(byName["json-number"].tags).toEqual([]);
       });
 
       it("replaceForRun replaces (no duplicates) on re-generation", async () => {

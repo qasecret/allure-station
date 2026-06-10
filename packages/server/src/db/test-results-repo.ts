@@ -5,6 +5,19 @@ import { runs, testResults } from "./schema.sqlite.js";
 
 const HISTORY_MAX = 200;
 
+/** Decode the `tags` TEXT column. The app only ever writes a JSON string[] or NULL, but the column is
+ *  untyped, so a malformed or non-array value (from an out-of-band write) reads back as [] rather than
+ *  throwing out of the comparison read path. */
+function parseTags(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 export class TestResultRepository {
   constructor(private readonly db: Db, private readonly newId: () => string) {}
 
@@ -28,9 +41,9 @@ export class TestResultRepository {
         flaky: t.flaky ? "true" : "false",
         message: t.message ?? null,
         trace: t.trace ?? null,
-        // Slice-able dimensions persisted for the upcoming trends/filter + known-issues features.
-        // Deliberately NOT echoed by listByRun (the lean comparison reader) — the readers land with
-        // the features that consume them, so the hot compare path stays lean.
+        // Slice-able dimensions. severity/owner/suite/tags are read back by listByRun for the compare
+        // consumer; muted/known stay write-only (no reader yet — they feed the planned known-issues
+        // feature). An empty/absent tag list stores as NULL and reads back as [].
         severity: t.severity ?? null,
         owner: t.owner ?? null,
         suite: t.suite ?? null,
@@ -42,13 +55,14 @@ export class TestResultRepository {
   }
 
   async listByRun(runId: string): Promise<TestSummary[]> {
-    // Lean projection: message/trace are intentionally excluded — the only caller (run comparison)
-    // never reads them, so we avoid pulling the (potentially 16 KB) trace blobs per test. Per-test
-    // error detail is served by historyByKey for the timeline view.
+    // Comparison reader: returns the small per-test fields compare needs, including the slice-able
+    // dimensions (severity/owner/suite/tags). Still excludes the heavy message/trace blobs (fetched
+    // lazily via the timeline) and the write-only muted/known flags (no consumer yet).
     const rows = await this.db
       .select({
         historyId: testResults.historyId, name: testResults.name, fullName: testResults.fullName,
         status: testResults.status, duration: testResults.duration, flaky: testResults.flaky,
+        severity: testResults.severity, owner: testResults.owner, suite: testResults.suite, tags: testResults.tags,
       })
       .from(testResults).where(eq(testResults.runId, runId));
     return rows.map((r) => ({
@@ -58,6 +72,10 @@ export class TestResultRepository {
       status: r.status as TestStatus,
       duration: r.duration === null ? null : Number(r.duration),
       flaky: r.flaky === "true",
+      severity: r.severity,
+      owner: r.owner,
+      suite: r.suite,
+      tags: parseTags(r.tags),
     }));
   }
 

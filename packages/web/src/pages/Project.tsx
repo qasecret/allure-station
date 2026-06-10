@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { relativeTime, runLabel, formatDurationSec } from "@/lib/format";
 import { failedReasons } from "@/lib/quality-gate-verdict";
+import { severityChipClass } from "@/lib/severity";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
 const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
@@ -307,14 +308,26 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
   );
 }
 
+function SeverityChip({ severity }: { severity?: string | null }) {
+  const cls = severityChipClass(severity);
+  if (!cls) return null;
+  return <span title={severity ?? undefined} className={`shrink-0 rounded px-1 text-[10px] font-medium uppercase ${cls}`}>{severity}</span>;
+}
+
 function Bucket({ label, color, tests, onOpen }: { label: string; color: string; tests: TestDiff[]; onOpen: (t: TestDiff) => void }) {
   if (tests.length === 0) return null;
   return (
     <div className="min-w-[180px]">
       <div className={`text-sm font-semibold ${color}`}>{label} ({tests.length})</div>
       <ul className="mt-1 space-y-0.5 text-sm">
-        {tests.map((t) => (
+        {tests.map((t) => {
+          const meta = [t.suite, t.owner].filter(Boolean).join(" · ");
+          return (
           <li key={(t.historyId ?? t.fullName ?? t.name) + label} className="flex items-center gap-1">
+            <SeverityChip severity={t.severity} />
+            {meta ? (
+              <span title={meta} className="max-w-[10rem] shrink truncate text-xs text-muted-foreground">{meta}</span>
+            ) : null}
             <span>{t.name}{t.baseStatus && t.targetStatus ? <span className="text-muted-foreground"> ({t.baseStatus}→{t.targetStatus})</span> : null}</span>
             {(t.historyId ?? t.fullName) ? (
               <button type="button" onClick={() => onOpen(t)} aria-label={`History for ${t.name}`}
@@ -324,7 +337,8 @@ function Bucket({ label, color, tests, onOpen }: { label: string; color: string;
               </button>
             ) : null}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );
