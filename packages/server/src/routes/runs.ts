@@ -60,7 +60,9 @@ export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
     if (run.status === "generating") {
       return reply.code(409).send({ error: "run is generating; wait or let the reconciler fail it first" });
     }
-    await deps.runs.remove(runId);
+    if (!(await deps.runs.remove(runId))) {
+      return reply.code(409).send({ error: "run is generating; wait or let the reconciler fail it first" });
+    }
     try {
       await deps.storage.remove(`${projectId}/runs/${runId}`); // best-effort; orphans are reapable later
     } catch {

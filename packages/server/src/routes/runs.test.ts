@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildApp } from "../app.js";
 import { makeTestDeps } from "../test-helpers.js";
+import { hashPassword } from "../password.js";
 import type { AuditEntry } from "@allure-station/shared";
 
 describe("run routes", () => {
@@ -107,6 +108,44 @@ describe("DELETE run", () => {
     await app.inject({ method: "DELETE", url: "/api/projects/p/runs/r1" });
     expect(events.some((e) => (e as { deleted?: boolean }).deleted === true)).toBe(true);
     unsub();
+    await app.close();
+  });
+
+  it("cascade regression: test_results rows are gone after run is deleted", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
+    await deps.runs.create("p", "r1", "R", "2026-06-10T00:00:01.000Z");
+    // Seed test results for the run
+    await deps.testResults.replaceForRun("r1", [
+      { historyId: "h1", name: "Test A", fullName: "suite.TestA", status: "passed", duration: 100, flaky: false },
+    ]);
+    // Verify they exist before delete
+    expect(await deps.testResults.listByRun("r1")).toHaveLength(1);
+
+    const res = await app.inject({ method: "DELETE", url: "/api/projects/p/runs/r1" });
+    expect(res.statusCode).toBe(204);
+
+    // Row gone from runs
+    expect(await deps.runs.get("r1")).toBeNull();
+    // test_results rows must also be gone (cascade)
+    expect(await deps.testResults.listByRun("r1")).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it("anonymous DELETE returns 401 when security is enabled (a user exists)", async () => {
+    const deps = await makeTestDeps();
+    // Seeding a user enables security (zero-config open mode requires no users).
+    await deps.users.create("admin@x.com", await hashPassword("password123"), "admin", deps.now());
+    const app = buildApp(deps);
+    // Seed project and run directly through the repos (API is now auth-guarded).
+    await deps.projects.create("p", deps.now());
+    await deps.runs.create("p", "r1", "R", "2026-06-10T00:00:01.000Z");
+
+    const res = await app.inject({ method: "DELETE", url: "/api/projects/p/runs/r1" });
+    expect(res.statusCode).toBe(401);
+
     await app.close();
   });
 });

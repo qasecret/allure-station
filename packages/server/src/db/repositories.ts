@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { Project, ProjectVisibility, QualityGateConfig, Run, RunMetadata, RunStats, RunStatus } from "@allure-station/shared";
 
@@ -74,8 +74,9 @@ export class ProjectRepository {
   }
 
   async remove(id: string): Promise<void> {
-    // libsql doesn't enforce FK ON DELETE CASCADE (pragma off), so delete children explicitly,
-    // deepest first: test_results -> runs -> project. (Sequential, not a transaction: the libsql
+    // FK ON DELETE CASCADE is enforced (foreign_keys pragma ON). The explicit child deletes below are
+    // belt-and-braces — they keep the order deterministic and guard against any future schema that
+    // adds a child table before its cascade is wired. (Sequential, not a transaction: the libsql
     // `:memory:` driver opens a fresh connection per transaction; project removal is a rare,
     // operator-initiated action where a partial delete is recoverable by re-running.)
     await this.db.delete(testResults).where(
@@ -247,8 +248,10 @@ export class RunRepository {
     return row ? this.#toRun(row) : null;
   }
 
-  async remove(id: string): Promise<void> {
-    await this.db.delete(runs).where(eq(runs.id, id)); // test_results rows cascade
+  /** Atomic guard against a concurrent claim: refuses to delete a run that is generating. */
+  async remove(id: string): Promise<boolean> {
+    const res = await this.db.delete(runs).where(and(eq(runs.id, id), ne(runs.status, "generating"))).returning({ id: runs.id });
+    return res.length > 0;
   }
 
   #toRun = (r: typeof runs.$inferSelect): Run => ({
