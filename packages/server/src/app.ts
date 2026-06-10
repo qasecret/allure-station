@@ -32,6 +32,7 @@ import { registerUserRoutes } from "./routes/users.js";
 import { registerMemberRoutes } from "./routes/members.js";
 import { registerAuditRoutes } from "./routes/audit.js";
 import { registerTestHistoryRoutes } from "./routes/test-history.js";
+import { registerOpenapi } from "./openapi/plugin.js";
 
 export interface AppDeps {
   projects: ProjectRepository;
@@ -70,6 +71,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
 
   app.register(
     async (api) => {
+      await registerOpenapi(api, deps);
       registerMetaRoutes(api, deps);
       registerProjectRoutes(api, deps);
       registerResultRoutes(api, deps);
