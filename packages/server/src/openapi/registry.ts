@@ -3,7 +3,7 @@ import {
   OpenApiGeneratorV31,
   extendZodWithOpenApi,
 } from "@asteasolutions/zod-to-openapi";
-import { z } from "zod";
+import { z, type ZodTypeAny } from "zod";
 
 type OpenApiDocument = ReturnType<OpenApiGeneratorV31["generateDocument"]>;
 
@@ -20,6 +20,43 @@ const configResponse = z.object({
 
 export interface OpenapiOptions {
   version: string;
+}
+
+type Method = "get" | "post" | "put" | "delete";
+interface RouteDecl {
+  method: Method;
+  path: string;
+  tag: string;
+  summary: string;
+  security?: Array<"bearerToken" | "sessionCookie">;
+  body?: ZodTypeAny;
+  query?: ZodTypeAny;
+  ok?: { status: number; schema?: ZodTypeAny; contentType?: string };
+}
+
+function declare(registry: OpenAPIRegistry, r: RouteDecl) {
+  const okStatus = r.ok?.status ?? 200;
+  const contentType = r.ok?.contentType ?? "application/json";
+  const okContent = r.ok?.schema
+    ? { content: { [contentType]: { schema: r.ok.schema } } }
+    : {};
+  registry.registerPath({
+    method: r.method,
+    path: r.path,
+    tags: [r.tag],
+    summary: r.summary,
+    ...(r.security ? { security: r.security.map((s) => ({ [s]: [] })) } : {}),
+    request: {
+      ...(r.body ? { body: { content: { "application/json": { schema: r.body } } } } : {}),
+      ...(r.query ? { query: r.query as z.AnyZodObject } : {}),
+    },
+    responses: {
+      [okStatus]: { description: "Success", ...okContent },
+      400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } },
+      401: { description: "Unauthorized", content: { "application/json": { schema: errorSchema } } },
+      404: { description: "Not found", content: { "application/json": { schema: errorSchema } } },
+    },
+  });
 }
 
 export function buildOpenapiDocument(opts: OpenapiOptions): OpenApiDocument {
