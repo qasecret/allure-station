@@ -8,14 +8,16 @@
 
 **A self-hosted, multi-project [Allure 3](https://allurereport.org/) report hub for your whole organization.**
 
-Push test results from any CI, generate rich reports, track trends and flakiness, gate pull requests, and control access with accounts, RBAC, and SSO — all in one container.
+Push test results from any CI, generate rich reports, track trends and flakiness,
+gate pull requests, and control access with accounts, RBAC, and SSO — all in one container.
 
-![TypeScript](https://img.shields.io/badge/TypeScript-ESM-3178C6?logo=typescript&logoColor=white)
-![Allure](https://img.shields.io/badge/Allure-3.9-FF6C37)
-![Node](https://img.shields.io/badge/Node-%E2%89%A520-339933?logo=nodedotjs&logoColor=white)
-![Fastify](https://img.shields.io/badge/API-Fastify%204-black)
-![Self-hosted](https://img.shields.io/badge/Self--hosted-✓-success)
+[![Release](https://img.shields.io/github/v/release/qasecret/allure-station?color=1db980&label=release)](https://github.com/qasecret/allure-station/releases)
 [![License](https://img.shields.io/github/license/qasecret/allure-station?color=success)](LICENSE)
+[![Allure](https://img.shields.io/badge/Allure-3.9_embedded-FF6C37)](https://allurereport.org/)
+![TypeScript](https://img.shields.io/badge/TypeScript-ESM-3178C6?logo=typescript&logoColor=white)
+![Node](https://img.shields.io/badge/Node-%E2%89%A520-339933?logo=nodedotjs&logoColor=white)
+
+[Quick start](#quick-start) · [Screenshots](#screenshots) · [User guide](docs/user-guide/README.md) · [Configuration](#configuration) · [API](#api-at-a-glance)
 
 </div>
 
@@ -25,7 +27,7 @@ Push test results from any CI, generate rich reports, track trends and flakiness
 
 ## Contents
 
-[Highlights](#highlights) · [Screenshots](#screenshots) · [Architecture](#architecture) · [Quick start](#quick-start) · [Configuration](#configuration) · [Security &amp; access](#security--access) · [CI/CD integration](#cicd-integration) · [Analytics](#analytics) · [Deployment](#deployment-topologies) · [API](#api-at-a-glance) · [Development](#development) · [Status](#project-status)
+[Highlights](#highlights) · [Screenshots](#screenshots) · [Architecture](#architecture) · [Quick start](#quick-start) · [Documentation](#documentation) · [Configuration](#configuration) · [Security &amp; access](#security--access) · [CI/CD integration](#cicd-integration) · [Analytics](#analytics) · [Deployment](#deployment-topologies) · [API](#api-at-a-glance) · [Development](#development) · [Status](#project-status) · [Contributing](#contributing)
 
 ---
 
@@ -40,26 +42,26 @@ Push test results from any CI, generate rich reports, track trends and flakiness
 | **Scales by config** | In-process queue, or BullMQ + Redis with horizontally-scaled worker replicas. |
 | **Live updates** | Server-Sent Events stream run status to the UI in real time — no polling. |
 | **Trends &amp; comparison** | Pass-rate / flakiness / duration trends; diff any two runs (new failures, fixed, flaky). |
+| **Per-test history** | Every test's outcome timeline across runs, with a "failing since" regression hint. |
+| **Run metadata** | Branch, commit, environment, and CI build URL attached to every run at upload. |
 | **CI/CD native** | Reusable GitHub Action, quality gates, PR status checks &amp; comments, status badges. |
 | **Notifications** | Slack &amp; generic-webhook on completion / failure / gate breach / regression. |
-| **Enterprise auth** | Accounts + per-project RBAC, scoped API tokens, **OIDC/SSO**, and an audit log. |
+| **Enterprise auth** | Accounts + per-project RBAC, scoped API tokens, **OIDC/SSO**, private projects, and an audit log. |
 
 ## Screenshots
 
-The React UI lets you browse projects and runs, view the embedded Allure report, track trends, and diff runs side-by-side — with light/dark themes.
+Browse projects and runs, read the embedded Allure report, track trends, and trace any test's history across runs — with light/dark themes.
 
-<!-- Add the four PNGs to docs/img/ (naming: docs/img/README.md), then delete the note below and uncomment this block:
 <p align="center">
-  <img src="docs/img/projects.png" alt="Project list" width="49%" />
-  <img src="docs/img/report.png" alt="Embedded Allure report" width="49%" />
+  <img src="docs/user-guide/images/01-projects-list.png" alt="Projects list — every project with latest-run status at a glance" width="49%" />
+  <img src="docs/user-guide/images/03-project-overview.png" alt="Project overview — runs, trends, and quality-gate verdicts" width="49%" />
 </p>
 <p align="center">
-  <img src="docs/img/trends.png" alt="Trend dashboard" width="49%" />
-  <img src="docs/img/compare.png" alt="Run comparison" width="49%" />
+  <img src="docs/user-guide/images/04-allure-report-test-detail.png" alt="Embedded Allure 3 report — full test detail with steps and attachments" width="49%" />
+  <img src="docs/user-guide/images/05-test-history-regression-hint.png" alt="Per-test history with the 'failing since' regression hint" width="49%" />
 </p>
--->
 
-> 📸 Prefer to see it for yourself first — the [quick start](#quick-start) brings up the full UI at `http://localhost:5050` in one command.
+> 📸 These four are just the start — the **[end-user guide](docs/user-guide/README.md)** walks through every screen, and the [quick start](#quick-start) brings up the full UI at `http://localhost:5050` in one command.
 
 ## Architecture
 
@@ -96,7 +98,7 @@ packages/
   e2e/      Playwright full-stack tests
 docker/         Dockerfile + docker-compose (postgres / bullmq / minio profiles)
 github-action/  reusable upload → generate → gate action
-docs/           architecture spec, per-slice plans, FUTURE-WORK.md
+docs/           user guide, architecture spec, per-slice plans, FUTURE-WORK.md
 ```
 
 | Layer | Choice |
@@ -147,6 +149,7 @@ curl -XPOST localhost:5050/api/projects -H 'content-type: application/json' -d '
 
 # 2) upload Allure result files (the *-result.json / *-container.json files your
 #    test run produces — any Allure adapter for Pytest, Jest, JUnit, etc. emits them)
+#    Optional CI context: -F branch=main -F commit=$SHA -F environment=staging -F ciUrl=$BUILD_URL
 curl -XPOST localhost:5050/api/projects/my-app/send-results -F files=@allure-results/abc-result.json
 
 # 3) generate the report (async → 202 Accepted), then open the UI
@@ -154,6 +157,18 @@ curl -XPOST localhost:5050/api/projects/my-app/generate
 ```
 
 Open **http://localhost:5050** and watch the run go `generating → ready` live.
+
+> 🧪 No result files handy? The user guide's [Appendix C](docs/user-guide/README.md#appendix-c--reproduce-the-demo-dataset) builds a realistic two-run demo (green baseline → regression) from the open-source [kotest-examples-allure](https://github.com/kotest/kotest-examples-allure) suite — the same dataset behind all the screenshots.
+
+## Documentation
+
+| Resource | What's inside |
+|---|---|
+| **[End-user guide](docs/user-guide/README.md)** | Screenshot-by-screenshot walkthrough of every feature — from first upload to RBAC, gates, and audit. |
+| **[Interactive API docs](#api-documentation)** | Swagger UI at `/api/docs`, OpenAPI 3.1 at `/api/openapi.json`, generated from the zod contracts. |
+| **[GitHub Action](github-action/)** | The reusable upload → generate → gate action, plus GitLab CI and Jenkins recipes. |
+| **[Roadmap &amp; gap analysis](docs/FUTURE-WORK.md)** | What's shipped, what's next, and why. |
+| **[Security policy](SECURITY.md)** | How to report a vulnerability privately. |
 
 ## Configuration
 
@@ -237,11 +252,10 @@ Allure Station is **secure-by-default through progressive disclosure**: it runs 
 
 - **Scoped API tokens (CI).** Per-project, least-privilege bearer tokens for pipelines. A project with no tokens is open; once it has one, writes require a token scoped to that project. Tokens are stored sha256-hashed; the plaintext is shown **once**. A token for project A can never write to project B.
 - **Accounts + RBAC (humans).** Seed a global **admin**, then manage users and grant per-project roles — **`owner` / `maintainer` / `viewer`**. Writes need `maintainer+` (or a token); member/token management needs `owner`/admin. Local email+password login issues an httpOnly, DB-backed session (cookie hashed at rest).
+- **Private projects.** Reads are public by default (tokens/RBAC protect *integrity*); flip a project to **private** (`PUT /api/projects/:id/visibility`) and reads — runs, reports, trends, badge — require `viewer+`, admin, or a project token.
 - **OIDC / SSO.** Add "Sign in with …" for any OIDC provider (Keycloak, Okta, Auth0, Entra, Google) via authorization-code + PKCE. First-time users are **auto-provisioned** as `user` (keyed on verified email; existing accounts are linked). Local login stays available.
-- **Audit log.** Append-only record of sensitive actions (logins, user/token/member/project/gate/notification changes). `GET /api/audit` (admin), `GET /api/projects/:id/audit` (owner).
+- **Audit log.** Append-only record of sensitive actions (logins, user/token/member/project/visibility/gate/notification changes). `GET /api/audit` (admin), `GET /api/projects/:id/audit` (owner).
 
-> **Reads are public by default** — tokens/RBAC protect *integrity* (who can push/delete/manage), not *confidentiality* (report contents are readable). Per-project private visibility is a planned follow-up — see [docs/FUTURE-WORK.md](docs/FUTURE-WORK.md).
->
 > **SSRF guard:** the server fetches webhook URLs you configure. URLs must be http(s) and may not target loopback/private/link-local **IP literals** or `localhost` (rejected at create + dispatch). Internal *hostnames* are allowed; on an internet-exposed instance, restrict who can configure webhooks and apply egress controls.
 
 ## CI/CD integration
@@ -255,6 +269,8 @@ Push results from any pipeline with the reusable **[GitHub Action](github-action
     project: my-app
     token: ${{ secrets.ALLURE_TOKEN }}   # only if the project is token-protected
 ```
+
+**Run metadata.** Attach CI context at upload time — `branch`, `commit`, `environment`, `ciUrl` — as extra form fields on `send-results`. It shows up on the run, in comparisons, and in per-test history.
 
 **Quality gates &amp; PR checks.** Configure a per-project gate; on `pull_request` the action posts a **commit status + PR comment** (pass/fail, gate verdict, stats, trend delta) and fails on a breach.
 
@@ -284,6 +300,7 @@ Triggers: `completed` · `failed` · `gate_failed` · `regression` (≥1 newly-f
 
 - **Trends** — `GET /api/projects/:id/trends` returns recent ready runs as a stats series (pass/fail/broken/skipped + flaky count); the UI renders a pass-rate bar chart with a flaky marker and a duration sparkline.
 - **Run comparison** — `GET /api/projects/:id/compare?base=&target=` diffs two runs into `newlyFailing` / `fixed` / `stillFailing` / `added` / `removed` / `flaky`, matched by Allure's stable `historyId`.
+- **Per-test history** — `GET /api/projects/:id/tests/history` traces one test's outcome across runs (with each run's branch/commit) and surfaces a **"failing since"** hint for regressions; `…/tests/history/trace` returns the failure detail per run.
 - **Live updates** — the UI subscribes to `GET /api/projects/:id/events` (SSE); every lifecycle transition is pushed as a `RunEvent`. Backed by an in-memory bus (default) or Redis pub/sub (BullMQ mode).
 - **Search &amp; pagination** — list endpoints accept `?q=&status=&limit=&offset=` and return `X-Total-Count`; `limit` caps at 200.
 
@@ -321,14 +338,14 @@ A plain `docker compose up` (no profiles) stays single-process on SQLite + local
 
 ## API at a glance
 
-All endpoints are under `/api`. Reads are public; writes follow the access model above.
+All endpoints are under `/api`. Reads are public unless the project is private; writes follow the access model above.
 
 | Area | Endpoints |
 |---|---|
-| Projects | `GET/POST /projects` · `GET/DELETE /projects/:id` |
-| Results | `POST /projects/:id/send-results` · `POST /projects/:id/generate` |
+| Projects | `GET/POST /projects` · `GET/DELETE /projects/:id` · `PUT /projects/:id/visibility` |
+| Results | `POST /projects/:id/send-results` (+ `branch`/`commit`/`environment`/`ciUrl` fields) · `POST /projects/:id/generate` |
 | Runs &amp; report | `GET /projects/:id/runs[?status=&limit=&offset=]` · `GET …/runs/:runId` · `GET …/runs/:runId/report/*` · `GET …/runs/:runId/summary` |
-| Analytics | `GET /projects/:id/trends` · `GET /projects/:id/compare?base=&target=` · `GET /projects/:id/events` (SSE) · `GET /projects/:id/badge.svg` |
+| Analytics | `GET /projects/:id/trends` · `GET /projects/:id/compare?base=&target=` · `GET /projects/:id/tests/history[/trace]` · `GET /projects/:id/events` (SSE) · `GET /projects/:id/badge.svg` |
 | Quality gate | `GET/PUT /projects/:id/quality-gate` |
 | Tokens | `GET/POST /projects/:id/tokens` · `DELETE …/tokens/:tokenId` |
 | Notifications | `GET/POST /projects/:id/notifications` · `DELETE …/:notificationId` |
@@ -385,12 +402,24 @@ pnpm --filter @allure-station/e2e test:e2e
 
 ## Project status
 
-All five roadmap phases are complete: **(1)** core ingest → generate → serve · **(2)** scale &amp; live (S3 / Postgres / BullMQ / SSE) · **(3)** modern UX (trends, comparison, search, dark mode, a11y) · **(4)** CI/DevOps (Action, gates, PR checks, badges) · **(5)** auth &amp; notifications (notifications, accounts + RBAC, audit log, OIDC/SSO).
+All five roadmap phases are complete — **(1)** core ingest → generate → serve · **(2)** scale &amp; live (S3 / Postgres / BullMQ / SSE) · **(3)** modern UX (trends, comparison, search, dark mode, a11y) · **(4)** CI/DevOps (Action, gates, PR checks, badges) · **(5)** auth &amp; notifications (accounts + RBAC, audit log, OIDC/SSO) — plus **run metadata**, **private projects**, and **per-test history** from the follow-up slices.
 
-Planned next steps and gap analysis (run metadata, private reports, per-test history, known-issue muting, …) live in **[docs/FUTURE-WORK.md](docs/FUTURE-WORK.md)**.
+Planned next steps and gap analysis (known-issue muting, sharded-run aggregation, a language-agnostic CLI, …) live in **[docs/FUTURE-WORK.md](docs/FUTURE-WORK.md)**.
 
-## Security &amp; License
+## Contributing
 
-Found a vulnerability? Please report it privately — see [SECURITY.md](SECURITY.md).
+Contributions are welcome — bug reports, docs, and PRs alike.
+
+1. Fork and clone, then `pnpm install` (Node ≥ 20, pnpm 9).
+2. Make your change with tests; `pnpm test && pnpm typecheck` must pass.
+3. Open a PR with a clear description of the why, not just the what.
+
+Start with the [Development](#development) section above; [docs/FUTURE-WORK.md](docs/FUTURE-WORK.md) lists good areas to pick up.
+
+## Security
+
+Found a vulnerability? Please report it **privately** — see [SECURITY.md](SECURITY.md).
+
+## License
 
 Licensed under the **[Apache License 2.0](LICENSE)**.

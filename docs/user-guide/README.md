@@ -8,10 +8,12 @@ Docker single‑container setup). If it isn't up yet, jump to
 [Appendix A — Bring it up](#appendix-a--bring-it-up) and come back.
 
 > The screenshots below were captured against a demo project named **`demo-web`** with two real
-> runs generated from the [kotest‑examples](https://github.com/kotest/kotest) Allure output — a
-> green baseline (`commit a1b2c3d`) followed by a run where one test was made to fail
-> (`commit e4f5a6b`). That single regression is what lights up Compare, per‑test history, and the
-> "failing since" hint throughout the guide. [Reproduce the exact dataset](#appendix-c--reproduce-the-demo-dataset).
+> runs generated from the
+> [kotest‑examples‑allure](https://github.com/kotest/kotest-examples-allure) project's Allure
+> output (8 Kotlin/Kotest tests) — a green baseline (`commit a1b2c3d`) followed by a run where one
+> test (`SquareTest / positive square`) was made to fail (`commit e4f5a6b`). That single regression
+> is what lights up Compare, per‑test history, and the "failing since" hint throughout the guide.
+> [Reproduce the exact dataset](#appendix-c--reproduce-the-demo-dataset).
 
 ---
 
@@ -67,7 +69,7 @@ cards, each showing the project id, its latest pass ratio, and a pass‑rate spa
 
 ![Projects list](images/01-projects-list.png)
 
-The ring on the card (`88%`) and the line under it (`7/8 passed · just now`) are the at‑a‑glance health
+The ring on the card (`88%`) and the line under it (`7/8 passed · 1m ago`) are the at‑a‑glance health
 of the project's latest run. Click a card to open the project. The top bar has theme toggles
 (System / Light / Dark) and a **Sign in** button (used in [step 12](#12-turn-on-accounts--sign-in)).
 
@@ -205,7 +207,7 @@ What you get:
 
 - **Flake rate** — `Flaky 0% over 2 runs` (how often it flipped within the window).
 - **The regression bisect hint** — the red line:
-  **"Failing since 3m ago · `e4f5a6b` — last passed 3m ago"**. This pinpoints the *first run where the
+  **"Failing since 5m ago · `e4f5a6b` — last passed 6m ago"**. This pinpoints the *first run where the
   test started failing* and the *last run it passed* — i.e. the commit window the regression was
   introduced in. No more manually scanning runs to find when something broke.
 - **The timeline** — one entry per run (newest first) with status, relative time (hover for the exact
@@ -224,7 +226,7 @@ Expand **▸ Stack trace** on any failing entry to read the full trace inline:
 
 The **Trend** card (top‑left of the project page) plots pass‑rate, flakiness, and duration across
 runs as a compact sparkline. Hover any bar for that run's exact numbers (e.g.
-`08/06/2026, 19:21:35 · 7/8 passed, 1 failed · 65.4s total`). It's the fastest way to spot a slide in
+`10/06/2026, 20:57:49 · 7/8 passed, 1 failed, 0 broken · 65.4s total`). It's the fastest way to spot a slide in
 health or a creeping slowdown over time. The raw series is also available at
 `GET /api/projects/demo-web/trends`.
 
@@ -374,7 +376,7 @@ services:
   allure-station:
     # …
     environment:
-      ADMIN_EMAIL: admin@demo.local
+      ADMIN_EMAIL: admin@example.com
       ADMIN_PASSWORD: a-strong-password   # ≥ 8 chars
 ```
 
@@ -499,28 +501,70 @@ docker compose -f docker/docker-compose.yml down -v
 ## Appendix C — Reproduce the demo dataset
 
 The exact two‑run dataset behind this guide (green baseline → one‑test regression), so your screens
-match:
+match. You need any Allure result directory; we use the
+[kotest‑examples‑allure](https://github.com/kotest/kotest-examples-allure) sample project (8 tests,
+Java 11+ required for the Gradle build):
+
+**Step 0 — produce the result files** (skip if you already have an `allure-results` dir from your
+own test run):
+
+```bash
+git clone https://github.com/kotest/kotest-examples-allure.git
+cd kotest-examples-allure
+./gradlew check        # runs the Kotest suite → writes build/allure-results/
+```
+
+**Step 1 — push the green baseline** (run 1):
 
 ```bash
 API=localhost:5050/api
-SRC=/path/to/allure-results          # any Allure result dir; this guide used the kotest-examples output
+SRC=./build/allure-results           # the directory produced by step 0
 
 curl -XPOST $API/projects -H 'content-type: application/json' -d '{"id":"demo-web","name":"Demo Web App"}'
 
-# Run 1 — green baseline
 R1=$(curl -s -XPOST $API/projects/demo-web/send-results \
        $(for f in "$SRC"/*; do echo -n " -F files=@$f"; done) \
        -F branch=main -F commit=a1b2c3d4 -F environment=staging | jq -r .runId)
 curl -XPOST "$API/projects/demo-web/generate?runId=$R1"
+```
 
-# Run 2 — copy the files, flip one test to "failed" with an assertion message + trace, push under a new commit
-#   (edit one *-result.json: set "status":"failed" and add
-#    "statusDetails":{"message":"expected:<16> but was:<15>","trace":"java.lang.AssertionError: …"})
+**Step 2 — create the regression** (run 2): copy the result files and flip the
+`SquareTest / positive square` test to `failed` with a realistic assertion message + stack trace:
+
+```bash
+cp -r "$SRC" /tmp/run2-results
+
+python3 - <<'EOF'
+import glob, json
+for p in glob.glob('/tmp/run2-results/*-result.json'):
+    d = json.load(open(p))
+    if d.get('name') == 'positive square':          # the test we break
+        d['status'] = 'failed'
+        d['statusDetails'] = {
+            'message': 'expected:<16> but was:<15>',
+            'trace': 'java.lang.AssertionError: expected:<16> but was:<15>\n'
+                     '\tat com.sksamuel.kotest.example.allure.SquareTest$1$1.invokeSuspend(SquareTest.kt:12)\n'
+                     '\tat io.kotest.core.spec.style.scopes.FunSpecRootContext.test(FunSpecRootContext.kt:84)\n'
+                     '\tat io.kotest.engine.test.TestCaseExecutor.execute(TestCaseExecutor.kt:62)',
+        }
+        json.dump(d, open(p, 'w'))
+        print('flipped:', p)
+EOF
+```
+
+**Step 3 — push the regression under a new commit:**
+
+```bash
 R2=$(curl -s -XPOST $API/projects/demo-web/send-results \
-       $(for f in ./run2-results/*; do echo -n " -F files=@$f"; done) \
+       $(for f in /tmp/run2-results/*; do echo -n " -F files=@$f"; done) \
        -F branch=main -F commit=e4f5a6b7 -F environment=staging | jq -r .runId)
 curl -XPOST "$API/projects/demo-web/generate?runId=$R2"
 ```
+
+Open **http://localhost:5050/projects/demo-web** — you should see `7/8 passed · 1 failed`, the
+Compare card reporting **Newly failing (1)**, and the history drawer's *failing since* hint, exactly
+as in the screenshots. (With the step‑9 quality gate configured, the run header also shows
+**Quality gate failed**.)
 
 To remove the demo afterwards: `curl -XDELETE localhost:5050/api/projects/demo-web`
 (needs admin/owner once security is on).
