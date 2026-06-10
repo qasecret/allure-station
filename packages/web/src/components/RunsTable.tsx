@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Run, RunStatus } from "@allure-station/shared";
 import { api } from "@/main";
@@ -29,8 +29,9 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
   const { data } = useQuery({
     queryKey: ["runs-page", projectId, status ?? "all", page],
     queryFn: () => api.listRunsWithTotal(projectId, { status, limit: PAGE, offset: page * PAGE }),
+    placeholderData: keepPreviousData,
   });
-  const { data: gate } = useQuery({ queryKey: ["quality-gate", projectId], queryFn: () => api.getQualityGate(projectId) });
+  const { data: gate } = useQuery({ queryKey: ["quality-gate", projectId], queryFn: () => api.getQualityGate(projectId), retry: false });
 
   const del = useMutation({
     mutationFn: (runId: string) => api.deleteRun(projectId, runId),
@@ -56,11 +57,14 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
   const total = data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE));
 
+  useEffect(() => { if (page >= pages) setPage(pages - 1); }, [page, pages]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex gap-1">
         {FILTERS.map((f) => (
           <Button key={f.label} size="sm" variant={status === f.value ? "default" : "outline"}
+            aria-pressed={status === f.value}
             onClick={() => { setStatus(f.value); setPage(0); }}>{f.label}</Button>
         ))}
       </div>
@@ -68,9 +72,9 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
         <table className="w-full text-sm">
           <thead className="text-left text-muted-foreground">
             <tr className="border-b">
-              <th className="p-2">Status</th><th className="p-2">Result</th><th className="p-2">Gate</th>
-              <th className="p-2">Branch</th><th className="p-2">Env</th><th className="p-2">Duration</th>
-              <th className="p-2">Age</th><th className="p-2" />
+              <th scope="col" className="p-2">Status</th><th scope="col" className="p-2">Result</th><th scope="col" className="p-2">Gate</th>
+              <th scope="col" className="p-2">Branch</th><th scope="col" className="p-2">Env</th><th scope="col" className="p-2">Duration</th>
+              <th scope="col" className="p-2">Age</th><th scope="col" className="p-2"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -80,7 +84,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
                 <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40">
                   <td className="p-2"><StatusBadge status={r.status} /></td>
                   <td className="p-2">{r.stats ? <>{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail"> · {r.stats.failed} failed</span> : null}</> : "—"}</td>
-                  <td className="p-2" title={verdict?.reasons.join(", ") || undefined}>{verdict === null ? "—" : verdict.passed ? <span className="text-status-pass">✓</span> : <span className="text-status-fail">✗</span>}</td>
+                  <td className="p-2" title={verdict?.reasons.join(", ") || undefined}>{verdict === null ? "—" : verdict.passed ? <span className="text-status-pass" aria-label="Gate passed">✓</span> : <span className="text-status-fail" aria-label={`Gate failed: ${verdict.reasons.join(", ")}`}>✗</span>}</td>
                   <td className="p-2">{r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : "—"}</td>
                   <td className="p-2">{r.environment ?? "—"}</td>
                   <td className="p-2">{r.stats?.durationMs ? formatDurationSec(r.stats.durationMs) : "—"}</td>

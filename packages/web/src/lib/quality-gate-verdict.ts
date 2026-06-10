@@ -32,28 +32,12 @@ export function failedReasons(verdict: QualityGateVerdict): string[] {
 /** Evaluate a gate config directly against run stats (client-side; mirrors the server's rules).
  *  Returns null when no rule is configured (nothing to evaluate). */
 export function evaluateGate(cfg: QualityGateConfig, stats: RunStats): { passed: boolean; reasons: string[] } | null {
-  const reasons: string[] = [];
-  let configured = false;
+  const checks: QualityGateCheck[] = [];
   const failures = stats.failed + stats.broken;
-  if (cfg.maxFailures !== undefined) {
-    configured = true;
-    if (failures > cfg.maxFailures) reasons.push(`failures ${failures} > ${cfg.maxFailures}`);
-  }
-  if (cfg.minTests !== undefined) {
-    configured = true;
-    if (stats.total < cfg.minTests) reasons.push(`tests ${stats.total} < ${cfg.minTests}`);
-  }
-  if (cfg.minPassRate !== undefined) {
-    configured = true;
-    const rate = stats.total ? stats.passed / stats.total : 0;
-    if (rate < cfg.minPassRate)
-      reasons.push(`pass rate ${formatPercent(rate, "down")} < ${formatPercent(cfg.minPassRate, "near")}`);
-  }
-  if (cfg.maxDurationMs !== undefined) {
-    configured = true;
-    const dur = stats.durationMs ?? 0;
-    if (dur > cfg.maxDurationMs)
-      reasons.push(`duration ${formatDurationSec(dur, "up")} > ${formatDurationSec(cfg.maxDurationMs, "near")}`);
-  }
-  return configured ? { passed: reasons.length === 0, reasons } : null;
+  if (cfg.maxFailures !== undefined) checks.push({ rule: "maxFailures", actual: failures, threshold: cfg.maxFailures, ok: failures <= cfg.maxFailures });
+  if (cfg.minTests !== undefined) checks.push({ rule: "minTests", actual: stats.total, threshold: cfg.minTests, ok: stats.total >= cfg.minTests });
+  if (cfg.minPassRate !== undefined) { const rate = stats.total ? stats.passed / stats.total : 0; checks.push({ rule: "minPassRate", actual: rate, threshold: cfg.minPassRate, ok: rate >= cfg.minPassRate }); }
+  if (cfg.maxDurationMs !== undefined) { const dur = stats.durationMs ?? 0; checks.push({ rule: "maxDurationMs", actual: dur, threshold: cfg.maxDurationMs, ok: dur <= cfg.maxDurationMs }); }
+  if (checks.length === 0) return null;
+  return { passed: checks.every((c) => c.ok), reasons: checks.filter((c) => !c.ok).map(formatGateCheck) };
 }

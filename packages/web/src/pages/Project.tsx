@@ -83,9 +83,10 @@ export function Project() {
         const next = prev.filter((r) => r.id !== event.run.id);
         return [event.run, ...next].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
       });
+      // Keep the paginated runs table live on every run event (status changes are always relevant).
+      qc.invalidateQueries({ queryKey: ["runs-page", id] });
       if (event.run.status === "ready" || event.run.status === "failed") {
         qc.invalidateQueries({ queryKey: ["trends", id] });
-        qc.invalidateQueries({ queryKey: ["runs-page", id] });
         // A newly-ready run adds a point to every open test timeline — refresh them too.
         qc.invalidateQueries({ queryKey: ["test-history", id] });
       }
