@@ -220,10 +220,13 @@ export const projectSchema = z.object({
 });
 
 // Pushed to the UI over SSE on every run lifecycle transition (created/generating/ready/failed).
+// `deleted: true` signals that the run has been hard-deleted so live UIs can remove it rather
+// than upserting a stale row (the SSE handler upserts all other events).
 export const runEventSchema = z.object({
   type: z.literal("run"),
   projectId: z.string(),
   run: runSchema,
+  deleted: z.boolean().optional(),
 });
 
 // API token as shown to clients (never includes the hash or plaintext).
@@ -286,6 +289,7 @@ export const auditActionSchema = z.enum([
   "project_visibility_set",
   "quality_gate_set",
   "notification_created", "notification_deleted",
+  "run_deleted",
 ]);
 export const auditActorTypeSchema = z.enum(["user", "token", "anonymous"]);
 export const auditEntrySchema = z.object({

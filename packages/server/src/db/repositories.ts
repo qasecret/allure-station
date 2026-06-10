@@ -247,6 +247,10 @@ export class RunRepository {
     return row ? this.#toRun(row) : null;
   }
 
+  async remove(id: string): Promise<void> {
+    await this.db.delete(runs).where(eq(runs.id, id)); // test_results rows cascade
+  }
+
   #toRun = (r: typeof runs.$inferSelect): Run => ({
     id: r.id,
     projectId: r.projectId,
