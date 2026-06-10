@@ -23,7 +23,7 @@ export interface ApiClient {
   deleteRun(projectId: string, runId: string): Promise<void>;
   getRunSummary(projectId: string, runId: string): Promise<RunSummary>;
   retryRun(projectId: string, runId: string): Promise<Run>;
-  sendResults(projectId: string, files: File[]): Promise<{ runId: string }>;
+  sendResults(projectId: string, files: File[], meta?: { branch?: string; commit?: string; environment?: string; ciUrl?: string }): Promise<{ runId: string }>;
   generate(projectId: string): Promise<Run>;
   listTrends(projectId: string): Promise<TrendPoint[]>;
   compareRuns(projectId: string, base: string, target: string): Promise<CompareResult>;
@@ -97,9 +97,10 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     deleteRun: (projectId, runId) => noContent(`/projects/${projectId}/runs/${runId}`, { method: "DELETE" }),
     getRunSummary: (projectId, runId) => json<RunSummary>(`/projects/${projectId}/runs/${runId}/summary`, { method: "GET" }),
     retryRun: (projectId, runId) => json<Run>(`/projects/${projectId}/runs/${runId}/retry`, { method: "POST" }),
-    sendResults: (projectId, files) => {
+    sendResults: (projectId, files, meta = {}) => {
       const fd = new FormData();
       for (const file of files) fd.append("files", file, file.name);
+      for (const [k, v] of Object.entries(meta)) if (v) fd.append(k, v);
       return json<{ runId: string }>(`/projects/${projectId}/send-results`, { method: "POST", body: fd });
     },
     generate: (projectId) => json<Run>(`/projects/${projectId}/generate`, { method: "POST" }),

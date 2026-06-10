@@ -217,6 +217,19 @@ describe("api client", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/projects/p/notifications/n1", expect.objectContaining({ method: "DELETE" }));
   });
 
+  it("sendResults appends CI metadata fields when provided", async () => {
+    let body: FormData | undefined;
+    const f = (async (_url: string, init: RequestInit) => {
+      body = init.body as FormData;
+      return new Response(JSON.stringify({ runId: "r" }), { status: 202, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    const c = createClient("/api", f);
+    await c.sendResults("p", [new File(["{}"], "a-result.json")], { branch: "main", commit: "abc", environment: "", ciUrl: undefined });
+    expect(body!.get("branch")).toBe("main");
+    expect(body!.get("commit")).toBe("abc");
+    expect(body!.get("environment")).toBeNull(); // empty/undefined fields are not appended
+  });
+
   it("createProject sends displayName and updateProject PATCHes it", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const f = (async (url: string, init: RequestInit) => {
