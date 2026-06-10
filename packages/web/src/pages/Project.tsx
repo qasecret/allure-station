@@ -16,9 +16,11 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { relativeTime, runLabel, formatDurationSec } from "@/lib/format";
 import { failedReasons } from "@/lib/quality-gate-verdict";
 import { severityChipClass } from "@/lib/severity";
+import { RunsTable } from "@/components/RunsTable";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
 const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
@@ -28,11 +30,18 @@ export function Project() {
   const qc = useQueryClient();
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [branchFilter, setBranchFilter] = useState("");
+  const [tab, setTab] = useState<"report" | "runs">("report");
   const { user } = useAuth();
+
+  const { data: config } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
+  // canWrite: true in open mode (no security), true when signed in; false otherwise.
+  // Mirrors the permissive stance of ProjectSettings's "open" state.
+  const canWrite = !config?.securityEnabled || !!user;
 
   useEffect(() => {
     setSelectedRun(null);
     setBranchFilter(""); // don't carry a previous project's branch filter (could hide all its runs)
+    setTab("report"); // reset to report tab when navigating to a new project
   }, [id]);
 
   // A read-gated project 404s for anonymous/non-members — surface that as a clear message
@@ -53,10 +62,17 @@ export function Project() {
     refetchInterval: () => (runs.some((r) => r.status === "generating") ? 5000 : false),
   });
 
-  // Live updates over SSE: upsert the run on every lifecycle event, and refresh trends once a
-  // run reaches a terminal status.
+  // Live updates over SSE: handle deletions first, then upsert lifecycle events.
+  // Refresh trends once a run reaches a terminal status.
   useEffect(() => {
     const unsub = api.subscribeRuns(id, (event) => {
+      // A deletion event removes the run from both caches and refreshes paginated/trend views.
+      if (event.deleted) {
+        qc.setQueryData<Run[]>(["runs", id], (prev = []) => prev.filter((r) => r.id !== event.run.id));
+        qc.invalidateQueries({ queryKey: ["runs-page", id] });
+        qc.invalidateQueries({ queryKey: ["trends", id] });
+        return;
+      }
       qc.setQueryData<Run[]>(["runs", id], (prev = []) => {
         // Ignore a stale/out-of-order transition (e.g. a delayed 'generating' arriving after
         // 'ready' over independent Redis paths in bullmq mode) — never regress a run's status.
@@ -69,6 +85,7 @@ export function Project() {
       });
       if (event.run.status === "ready" || event.run.status === "failed") {
         qc.invalidateQueries({ queryKey: ["trends", id] });
+        qc.invalidateQueries({ queryKey: ["runs-page", id] });
         // A newly-ready run adds a point to every open test timeline — refresh them too.
         qc.invalidateQueries({ queryKey: ["test-history", id] });
       }
@@ -158,12 +175,23 @@ export function Project() {
           </Card>
           <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
         </div>
-        {cur?.status === "failed"
-          ? <FailedRunPanel projectId={id} run={cur} />
-          : current
-            ? <iframe title="report" className="min-h-0 flex-1 rounded-xl border bg-card shadow-sm"
-                src={`/api/projects/${id}/runs/${current}/report/index.html`} />
-            : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use “Upload & generate” to create the first report.'} />}
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "report" | "runs")} className="flex min-h-0 flex-1 flex-col">
+          <TabsList className="self-start">
+            <TabsTrigger value="report">Report</TabsTrigger>
+            <TabsTrigger value="runs">Runs</TabsTrigger>
+          </TabsList>
+          <TabsContent value="report" className="flex min-h-0 flex-1 flex-col">
+            {cur?.status === "failed"
+              ? <FailedRunPanel projectId={id} run={cur} />
+              : current
+                ? <iframe title="report" className="min-h-0 flex-1 rounded-xl border bg-card shadow-sm"
+                    src={`/api/projects/${id}/runs/${current}/report/index.html`} />
+                : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use "Upload & generate" to create the first report.'} />}
+          </TabsContent>
+          <TabsContent value="runs" className="flex min-h-0 flex-1 flex-col">
+            <RunsTable projectId={id} canWrite={canWrite} onOpenRun={(runId) => { setSelectedRun(runId); setTab("report"); }} />
+          </TabsContent>
+        </Tabs>
       </div>
     </>
   );
