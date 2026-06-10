@@ -21,4 +21,40 @@ describe("buildOpenapiDocument", () => {
     expect(schemes.bearerToken).toBeDefined();
     expect(schemes.sessionCookie).toBeDefined();
   });
+
+  it("declares POST /api/projects with security, body, and standard error responses", () => {
+    const doc = buildOpenapiDocument({ version: "x" });
+    const op = doc.paths?.["/api/projects"]?.post;
+    expect(op).toBeDefined();
+
+    // Both security schemes are offered as alternatives.
+    const securityKeys = (op?.security ?? []).flatMap((s) => Object.keys(s));
+    expect(securityKeys).toContain("bearerToken");
+    expect(securityKeys).toContain("sessionCookie");
+
+    // Request body present, as application/json.
+    const body = op?.requestBody as { content?: Record<string, unknown> } | undefined;
+    expect(body?.content?.["application/json"]).toBeDefined();
+
+    // 201 success plus the standard JSON error responses referencing the Error schema.
+    const responses = op?.responses ?? {};
+    expect(responses["201"]).toBeDefined();
+    for (const status of ["400", "401", "404"] as const) {
+      const schemaRef = (
+        responses[status] as {
+          content?: { "application/json"?: { schema?: { $ref?: string } } };
+        }
+      )?.content?.["application/json"]?.schema?.$ref;
+      expect(schemaRef).toMatch(/Error$/);
+    }
+  });
+
+  it("declares a 204 route (DELETE /api/projects/{id}) with no content schema", () => {
+    const doc = buildOpenapiDocument({ version: "x" });
+    const op = doc.paths?.["/api/projects/{id}"]?.delete;
+    expect(op).toBeDefined();
+    const ok = op?.responses?.["204"] as { content?: unknown } | undefined;
+    expect(ok).toBeDefined();
+    expect(ok?.content).toBeUndefined();
+  });
 });

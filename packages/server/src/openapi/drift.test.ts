@@ -11,16 +11,10 @@ function toOpenapiPath(url: string): string {
     .replace(/\*/g, "{wildcard}");
 }
 
-// Routes that are not part of the documented surface (infra/UI added by plugins).
-const IGNORED = new Set<string>([
-  "GET /api/openapi.json",
-  "GET /api/docs",
-  "GET /api/docs/",
-  "GET /api/docs/*",
-  "GET /api/docs/json",
-  "GET /api/docs/yaml",
-  "GET /api/docs/static/*",
-]);
+// Infra routes added by the swagger plugins — not part of the documented API surface.
+function isInfraRoute(url: string): boolean {
+  return url === "/api/openapi.json" || url === "/api/docs" || url.startsWith("/api/docs/");
+}
 
 describe("openapi drift guard", () => {
   it("documents every /api route", async () => {
@@ -42,12 +36,15 @@ describe("openapi drift guard", () => {
 
     const missing = collected
       .filter((r) => r.url.startsWith("/api"))
-      .filter((r) => ["GET", "POST", "PUT", "DELETE"].includes(r.method))
+      .filter((r) => !isInfraRoute(r.url))
+      .filter((r) => ["GET", "POST", "PUT", "PATCH", "DELETE"].includes(r.method))
       .map((r) => `${r.method} ${toOpenapiPath(r.url)}`)
-      .filter((key) => !IGNORED.has(key))
       .filter((key) => !documented.has(key));
 
-    await app.close();
-    expect(missing, `undocumented routes:\n${missing.join("\n")}`).toEqual([]);
+    try {
+      expect(missing, `undocumented routes:\n${missing.join("\n")}`).toEqual([]);
+    } finally {
+      await app.close();
+    }
   });
 });
