@@ -398,9 +398,9 @@ for (const backend of backends) {
         const got = await tests.listByRun("r1");
         expect(got).toHaveLength(3);
         const byName = Object.fromEntries(got.map((t) => [t.name, t]));
-        expect(byName["passing test"]).toMatchObject({ status: "passed", duration: 1000, flaky: false, historyId: "h-pass" });
-        expect(byName["failing test"]).toMatchObject({ status: "failed", duration: 2000, flaky: true });
-        expect(byName["no-history test"]).toMatchObject({ status: "skipped", duration: null, flaky: false, historyId: null, fullName: null });
+        expect(byName["passing test"]).toMatchObject({ status: "passed", duration: 1000, flaky: false, historyId: "h-pass", severity: "critical", owner: "alice", suite: "checkout", tags: ["smoke", "regression"] });
+        expect(byName["failing test"]).toMatchObject({ status: "failed", duration: 2000, flaky: true, severity: "blocker", owner: null, suite: "checkout", tags: [] });
+        expect(byName["no-history test"]).toMatchObject({ status: "skipped", duration: null, flaky: false, historyId: null, fullName: null, severity: null, owner: null, suite: null, tags: [] });
       });
 
       // The slice-able dimensions are persisted for future trends/filter + known-issues consumers but
