@@ -417,6 +417,20 @@ for (const backend of backends) {
         expect(byName["no-history test"]).toMatchObject({ severity: null, owner: null, suite: null, tags: null, muted: "false", known: "false" });
       });
 
+      // The tags column is plain TEXT — the app only ever writes a JSON array or NULL, but listByRun
+      // must not throw (or return a non-array) if an out-of-band write leaves malformed/non-array JSON.
+      it("listByRun tolerates a malformed/non-array tags column (reads back [])", async () => {
+        await db.insert(testResults).values([
+          { id: "x1", runId: "r1", name: "bad-json", status: "passed", flaky: "false", tags: "not-json" },
+          { id: "x2", runId: "r1", name: "json-null", status: "passed", flaky: "false", tags: "null" },
+          { id: "x3", runId: "r1", name: "json-number", status: "passed", flaky: "false", tags: "5" },
+        ]);
+        const byName = Object.fromEntries((await tests.listByRun("r1")).map((t) => [t.name, t]));
+        expect(byName["bad-json"].tags).toEqual([]);
+        expect(byName["json-null"].tags).toEqual([]);
+        expect(byName["json-number"].tags).toEqual([]);
+      });
+
       it("replaceForRun replaces (no duplicates) on re-generation", async () => {
         await tests.replaceForRun("r1", sample);
         await tests.replaceForRun("r1", [sample[0]]);

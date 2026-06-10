@@ -5,6 +5,19 @@ import { runs, testResults } from "./schema.sqlite.js";
 
 const HISTORY_MAX = 200;
 
+/** Decode the `tags` TEXT column. The app only ever writes a JSON string[] or NULL, but the column is
+ *  untyped, so a malformed or non-array value (from an out-of-band write) reads back as [] rather than
+ *  throwing out of the comparison read path. */
+function parseTags(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 export class TestResultRepository {
   constructor(private readonly db: Db, private readonly newId: () => string) {}
 
@@ -62,7 +75,7 @@ export class TestResultRepository {
       severity: r.severity,
       owner: r.owner,
       suite: r.suite,
-      tags: r.tags ? (JSON.parse(r.tags) as string[]) : [],
+      tags: parseTags(r.tags),
     }));
   }
 

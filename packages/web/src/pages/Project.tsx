@@ -320,11 +320,13 @@ function Bucket({ label, color, tests, onOpen }: { label: string; color: string;
     <div className="min-w-[180px]">
       <div className={`text-sm font-semibold ${color}`}>{label} ({tests.length})</div>
       <ul className="mt-1 space-y-0.5 text-sm">
-        {tests.map((t) => (
+        {tests.map((t) => {
+          const meta = [t.suite, t.owner].filter(Boolean).join(" · ");
+          return (
           <li key={(t.historyId ?? t.fullName ?? t.name) + label} className="flex items-center gap-1">
             <SeverityChip severity={t.severity} />
-            {(t.suite || t.owner) ? (
-              <span title={[t.suite, t.owner].filter(Boolean).join(" · ")} className="max-w-[10rem] shrink truncate text-xs text-muted-foreground">{[t.suite, t.owner].filter(Boolean).join(" · ")}</span>
+            {meta ? (
+              <span title={meta} className="max-w-[10rem] shrink truncate text-xs text-muted-foreground">{meta}</span>
             ) : null}
             <span>{t.name}{t.baseStatus && t.targetStatus ? <span className="text-muted-foreground"> ({t.baseStatus}→{t.targetStatus})</span> : null}</span>
             {(t.historyId ?? t.fullName) ? (
@@ -335,7 +337,8 @@ function Bucket({ label, color, tests, onOpen }: { label: string; color: string;
               </button>
             ) : null}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );

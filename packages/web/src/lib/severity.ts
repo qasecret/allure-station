@@ -1,8 +1,11 @@
+import type { SeverityLevel } from "@allure-station/shared";
+
 // Severity → Tailwind chip classes, tiered onto the existing status color tokens: blocker/critical
 // red (status-fail), normal amber (status-broken), minor/trivial muted. Unknown/absent → null so the
 // chip renders nothing. Guards on the value type (not `in`) so prototype keys like "constructor"
-// don't leak a bogus class.
-const SEVERITY_CHIP: Record<string, string> = {
+// don't leak a bogus class. Keyed by `SeverityLevel` from shared, so adding a level there without a
+// color here is a compile error (keeps the chip from silently dropping a new severity).
+const SEVERITY_CHIP: Record<SeverityLevel, string> = {
   blocker: "bg-status-fail/15 text-status-fail",
   critical: "bg-status-fail/15 text-status-fail",
   normal: "bg-status-broken/15 text-status-broken",
