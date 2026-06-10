@@ -11,3 +11,9 @@ packages/e2e/playwright-report
 branding/node_modules/
 branding/_fav256.png
 branding/Sora-*.ttf
+
+# local tooling debris
+.playwright-mcp/
+verify-shots/
+.claude/settings.local.json
+.claude/skills/
