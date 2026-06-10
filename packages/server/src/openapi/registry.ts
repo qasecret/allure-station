@@ -35,7 +35,7 @@ export interface OpenapiOptions {
   version: string;
 }
 
-type Method = "get" | "post" | "put" | "delete";
+type Method = "get" | "post" | "put" | "delete" | "patch";
 interface RouteDecl {
   method: Method;
   path: string;
@@ -73,9 +73,9 @@ function declare(registry: OpenAPIRegistry, r: RouteDecl) {
 }
 
 // CI token OR human session.
-const B: Array<"bearerToken" | "sessionCookie"> = ["bearerToken", "sessionCookie"];
+const WRITE_AUTH: Array<"bearerToken" | "sessionCookie"> = ["bearerToken", "sessionCookie"];
 // Human session only.
-const C: Array<"bearerToken" | "sessionCookie"> = ["sessionCookie"];
+const SESSION_ONLY: Array<"bearerToken" | "sessionCookie"> = ["sessionCookie"];
 
 const metaRoutes: RouteDecl[] = [
   { method: "get", path: "/api/version", tag: "meta", summary: "Server and embedded Allure versions", ok: { status: 200, schema: versionResponse } },
@@ -83,17 +83,17 @@ const metaRoutes: RouteDecl[] = [
 ];
 
 const projectRoutes: RouteDecl[] = [
-  { method: "post", path: "/api/projects", tag: "projects", summary: "Create a project", security: B, body: createProjectSchema, ok: { status: 201, schema: projectSchema } },
+  { method: "post", path: "/api/projects", tag: "projects", summary: "Create a project", security: WRITE_AUTH, body: createProjectSchema, ok: { status: 201, schema: projectSchema } },
   { method: "get", path: "/api/projects", tag: "projects", summary: "List projects", ok: { status: 200, schema: z.array(projectSchema) } },
   { method: "get", path: "/api/projects/{id}", tag: "projects", summary: "Get a project", ok: { status: 200, schema: projectSchema } },
-  { method: "delete", path: "/api/projects/{id}", tag: "projects", summary: "Delete a project", security: B, ok: { status: 204 } },
-  { method: "put", path: "/api/projects/{id}/visibility", tag: "projects", summary: "Set project visibility", security: C, body: setVisibilityRequestSchema, ok: { status: 200, schema: projectSchema } },
+  { method: "delete", path: "/api/projects/{id}", tag: "projects", summary: "Delete a project", security: WRITE_AUTH, ok: { status: 204 } },
+  { method: "put", path: "/api/projects/{id}/visibility", tag: "projects", summary: "Set project visibility", security: SESSION_ONLY, body: setVisibilityRequestSchema, ok: { status: 200, schema: projectSchema } },
 ];
 
 const resultsRoutes: RouteDecl[] = [
-  { method: "post", path: "/api/projects/{projectId}/send-results", tag: "results", summary: "Upload raw Allure results (multipart)", security: B, ok: { status: 202, schema: okResponse } },
-  { method: "post", path: "/api/projects/{projectId}/generate", tag: "results", summary: "Enqueue report generation", security: B, ok: { status: 202, schema: runSchema } },
-  { method: "post", path: "/api/projects/{projectId}/runs/{runId}/retry", tag: "results", summary: "Retry a failed run", security: B, ok: { status: 202, schema: runSchema } },
+  { method: "post", path: "/api/projects/{projectId}/send-results", tag: "results", summary: "Upload raw Allure results (multipart)", security: WRITE_AUTH, ok: { status: 202, schema: z.object({ runId: z.string(), files: z.number() }) } },
+  { method: "post", path: "/api/projects/{projectId}/generate", tag: "results", summary: "Enqueue report generation", security: WRITE_AUTH, ok: { status: 202, schema: runSchema } },
+  { method: "post", path: "/api/projects/{projectId}/runs/{runId}/retry", tag: "results", summary: "Retry a failed run", security: WRITE_AUTH, ok: { status: 202, schema: runSchema } },
 ];
 
 const runRoutes: RouteDecl[] = [
@@ -108,7 +108,7 @@ const compareRoutes: RouteDecl[] = [
 
 const qualityGateRoutes: RouteDecl[] = [
   { method: "get", path: "/api/projects/{projectId}/quality-gate", tag: "quality-gate", summary: "Get quality gate config", ok: { status: 200, schema: qualityGateConfigSchema } },
-  { method: "put", path: "/api/projects/{projectId}/quality-gate", tag: "quality-gate", summary: "Set quality gate config", security: B, body: qualityGateConfigSchema, ok: { status: 200, schema: qualityGateConfigSchema } },
+  { method: "put", path: "/api/projects/{projectId}/quality-gate", tag: "quality-gate", summary: "Set quality gate config", security: WRITE_AUTH, body: qualityGateConfigSchema, ok: { status: 200, schema: qualityGateConfigSchema } },
   { method: "get", path: "/api/projects/{projectId}/runs/{runId}/summary", tag: "quality-gate", summary: "Run quality-gate summary", ok: { status: 200, schema: runSummarySchema } },
 ];
 
@@ -118,39 +118,39 @@ const testHistoryRoutes: RouteDecl[] = [
 ];
 
 const tokenRoutes: RouteDecl[] = [
-  { method: "post", path: "/api/projects/{projectId}/tokens", tag: "tokens", summary: "Create API token", security: C, body: createTokenRequestSchema, ok: { status: 201, schema: createdTokenSchema } },
-  { method: "get", path: "/api/projects/{projectId}/tokens", tag: "tokens", summary: "List API tokens", security: C, ok: { status: 200, schema: z.array(apiTokenSchema) } },
-  { method: "delete", path: "/api/projects/{projectId}/tokens/{tokenId}", tag: "tokens", summary: "Revoke an API token", security: C, ok: { status: 204 } },
+  { method: "post", path: "/api/projects/{projectId}/tokens", tag: "tokens", summary: "Create API token", security: SESSION_ONLY, body: createTokenRequestSchema, ok: { status: 201, schema: createdTokenSchema } },
+  { method: "get", path: "/api/projects/{projectId}/tokens", tag: "tokens", summary: "List API tokens", security: SESSION_ONLY, ok: { status: 200, schema: z.array(apiTokenSchema) } },
+  { method: "delete", path: "/api/projects/{projectId}/tokens/{tokenId}", tag: "tokens", summary: "Revoke an API token", security: SESSION_ONLY, ok: { status: 204 } },
 ];
 
 const notificationRoutes: RouteDecl[] = [
-  { method: "post", path: "/api/projects/{projectId}/notifications", tag: "notifications", summary: "Create a notification", security: C, body: createNotificationRequestSchema, ok: { status: 201, schema: notificationSchema } },
-  { method: "get", path: "/api/projects/{projectId}/notifications", tag: "notifications", summary: "List notifications", security: C, ok: { status: 200, schema: z.array(notificationSchema) } },
-  { method: "post", path: "/api/projects/{projectId}/notifications/{notificationId}/test", tag: "notifications", summary: "Send a test notification", security: C, ok: { status: 200, schema: okResponse } },
-  { method: "delete", path: "/api/projects/{projectId}/notifications/{notificationId}", tag: "notifications", summary: "Delete a notification", security: C, ok: { status: 204 } },
+  { method: "post", path: "/api/projects/{projectId}/notifications", tag: "notifications", summary: "Create a notification", security: SESSION_ONLY, body: createNotificationRequestSchema, ok: { status: 201, schema: notificationSchema } },
+  { method: "get", path: "/api/projects/{projectId}/notifications", tag: "notifications", summary: "List notifications", security: SESSION_ONLY, ok: { status: 200, schema: z.array(notificationSchema) } },
+  { method: "post", path: "/api/projects/{projectId}/notifications/{notificationId}/test", tag: "notifications", summary: "Send a test notification", security: SESSION_ONLY, ok: { status: 200, schema: okResponse } },
+  { method: "delete", path: "/api/projects/{projectId}/notifications/{notificationId}", tag: "notifications", summary: "Delete a notification", security: SESSION_ONLY, ok: { status: 204 } },
 ];
 
 const authRoutes: RouteDecl[] = [
   { method: "post", path: "/api/auth/login", tag: "auth", summary: "Password login", body: loginRequestSchema, ok: { status: 200, schema: sessionUserSchema } },
-  { method: "post", path: "/api/auth/logout", tag: "auth", summary: "Log out", security: C, ok: { status: 204 } },
-  { method: "get", path: "/api/auth/me", tag: "auth", summary: "Current session user", security: C, ok: { status: 200, schema: sessionUserSchema } },
+  { method: "post", path: "/api/auth/logout", tag: "auth", summary: "Log out", security: SESSION_ONLY, ok: { status: 204 } },
+  { method: "get", path: "/api/auth/me", tag: "auth", summary: "Current session user", security: SESSION_ONLY, ok: { status: 200, schema: sessionUserSchema } },
 ];
 
 const userRoutes: RouteDecl[] = [
-  { method: "post", path: "/api/users", tag: "users", summary: "Create a user", security: C, body: createUserRequestSchema, ok: { status: 201, schema: userSchema } },
-  { method: "get", path: "/api/users", tag: "users", summary: "List users", security: C, ok: { status: 200, schema: z.array(userSchema) } },
-  { method: "delete", path: "/api/users/{id}", tag: "users", summary: "Delete a user", security: C, ok: { status: 204 } },
+  { method: "post", path: "/api/users", tag: "users", summary: "Create a user", security: SESSION_ONLY, body: createUserRequestSchema, ok: { status: 201, schema: userSchema } },
+  { method: "get", path: "/api/users", tag: "users", summary: "List users", security: SESSION_ONLY, ok: { status: 200, schema: z.array(userSchema) } },
+  { method: "delete", path: "/api/users/{id}", tag: "users", summary: "Delete a user", security: SESSION_ONLY, ok: { status: 204 } },
 ];
 
 const memberRoutes: RouteDecl[] = [
-  { method: "get", path: "/api/projects/{projectId}/members", tag: "members", summary: "List project members", security: C, ok: { status: 200, schema: z.array(membershipWithUserSchema) } },
-  { method: "put", path: "/api/projects/{projectId}/members", tag: "members", summary: "Set a member role", security: C, body: setMembershipRequestSchema, ok: { status: 200, schema: membershipSchema } },
-  { method: "delete", path: "/api/projects/{projectId}/members/{userId}", tag: "members", summary: "Remove a member", security: C, ok: { status: 204 } },
+  { method: "get", path: "/api/projects/{projectId}/members", tag: "members", summary: "List project members", security: SESSION_ONLY, ok: { status: 200, schema: z.array(membershipWithUserSchema) } },
+  { method: "put", path: "/api/projects/{projectId}/members", tag: "members", summary: "Set a member role", security: SESSION_ONLY, body: setMembershipRequestSchema, ok: { status: 200, schema: membershipSchema } },
+  { method: "delete", path: "/api/projects/{projectId}/members/{userId}", tag: "members", summary: "Remove a member", security: SESSION_ONLY, ok: { status: 204 } },
 ];
 
 const auditRoutes: RouteDecl[] = [
-  { method: "get", path: "/api/audit", tag: "audit", summary: "Global audit log", security: C, ok: { status: 200, schema: z.array(auditEntrySchema) } },
-  { method: "get", path: "/api/projects/{projectId}/audit", tag: "audit", summary: "Project audit log", security: C, ok: { status: 200, schema: z.array(auditEntrySchema) } },
+  { method: "get", path: "/api/audit", tag: "audit", summary: "Global audit log", security: SESSION_ONLY, ok: { status: 200, schema: z.array(auditEntrySchema) } },
+  { method: "get", path: "/api/projects/{projectId}/audit", tag: "audit", summary: "Project audit log", security: SESSION_ONLY, ok: { status: 200, schema: z.array(auditEntrySchema) } },
 ];
 
 const allRoutes: RouteDecl[] = [
@@ -233,6 +233,3 @@ export function buildOpenapiDocument(opts: OpenapiOptions): OpenApiDocument {
     },
   });
 }
-
-// Exported for reuse by route-declaration helpers in later tasks.
-export { errorSchema };
