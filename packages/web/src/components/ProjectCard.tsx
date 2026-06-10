@@ -34,9 +34,9 @@ export function ProjectCard({ p }: { p: Project }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="truncate font-semibold group-hover:text-primary">{p.displayName ?? p.id}</span>
-              {p.displayName && <span className="truncate text-xs text-muted-foreground">{p.id}</span>}
               {p.visibility === "private" && <Badge variant="secondary" className="text-xs">private</Badge>}
             </div>
+            {p.displayName && <p className="truncate text-xs text-muted-foreground">{p.id}</p>}
             <p className="mt-0.5 text-sm text-muted-foreground">
               {!hasRuns
                 ? "No runs yet"
