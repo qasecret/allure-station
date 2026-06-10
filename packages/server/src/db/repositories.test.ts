@@ -403,9 +403,9 @@ for (const backend of backends) {
         expect(byName["no-history test"]).toMatchObject({ status: "skipped", duration: null, flaky: false, historyId: null, fullName: null, severity: null, owner: null, suite: null, tags: [] });
       });
 
-      // The slice-able dimensions are persisted for future trends/filter + known-issues consumers but
-      // intentionally not echoed by listByRun (the lean comparison reader). Assert the stored columns
-      // directly so we verify the write + encoding without widening the hot path.
+      // severity/owner/suite/tags are now read back by listByRun (covered above); this test asserts the
+      // raw stored columns directly to verify the write encoding — including the write-only muted/known
+      // flags, which listByRun does NOT return (they feed the planned known-issues feature).
       it("replaceForRun persists the slice-able dimensions (severity/owner/suite/tags) and muted/known flags", async () => {
         await tests.replaceForRun("r1", sample);
         const rows = await db.select().from(testResults).where(eq(testResults.runId, "r1"));
