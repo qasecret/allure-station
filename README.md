@@ -334,7 +334,18 @@ All endpoints are under `/api`. Reads are public; writes follow the access model
 | Notifications | `GET/POST /projects/:id/notifications` · `DELETE …/:notificationId` |
 | Auth | `POST /auth/login` · `POST /auth/logout` · `GET /auth/me` · `GET /auth/oidc/login` · `GET /auth/oidc/callback` |
 | Admin | `GET/POST /users` · `DELETE /users/:id` · `GET/PUT/DELETE /projects/:id/members` · `GET /audit` · `GET /projects/:id/audit` |
-| Meta | `GET /version` · `GET /config` |
+| Meta | `GET /version` · `GET /config` · `GET /openapi.json` · `GET /docs` |
+
+### API documentation
+
+A live OpenAPI 3.1 specification is generated from the server's Zod contracts:
+
+- **Interactive docs (Swagger UI):** `GET /api/docs`
+- **Raw document:** `GET /api/openapi.json`
+
+The document is built at startup from `@allure-station/shared`; a drift-guard test
+(`packages/server/src/openapi/drift.test.ts`) fails CI if a route is added without a
+spec entry.
 
 ## Development
 
