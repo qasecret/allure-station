@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Search, FolderOpen } from "lucide-react";
+import { projectSortSchema } from "@allure-station/shared";
 import type { ProjectSort } from "@allure-station/shared";
 import { api } from "../main.js";
 import { Topbar } from "@/components/Topbar";
@@ -43,7 +44,7 @@ function OverviewStrip({ onTriage }: { onTriage: () => void }) {
 export function Projects() {
   const [searchParams, setSearchParams] = useSearchParams();
   const q = searchParams.get("q") ?? "";
-  const sort = (searchParams.get("sort") as ProjectSort) ?? "name";
+  const sort = projectSortSchema.safeParse(searchParams.get("sort")).data ?? "name";
   const [page, setPage] = useState(0);
 
   const onSearch = (v: string) => {
