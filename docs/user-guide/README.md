@@ -509,7 +509,7 @@ Filter the log using the bar above the table:
 
 | Filter | Effect |
 |---|---|
-| **Event type** | Drop-down of every action kind (`project_created`, `token_minted`, `user_deleted`, …). |
+| **Event type** | Drop-down of every action kind (`project_created`, `token_created`, `user_deleted`, …). |
 | **Actor** | Substring match on the actor's label (email or token prefix). |
 | **From / To** | Narrow to a date range using the date pickers. |
 

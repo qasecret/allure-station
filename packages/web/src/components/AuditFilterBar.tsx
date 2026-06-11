@@ -21,6 +21,8 @@ const ACTION_OPTIONS = auditActionSchema.options;
 /** Reusable filter bar for global and per-project audit logs. */
 export function AuditFilterBar({ filters, onChange }: AuditFilterBarProps) {
   const actorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
 
   const setAction = useCallback(
     (val: string) => onChange({ ...filters, action: val === "__all__" ? "" : (val as AuditAction) }),
@@ -31,10 +33,10 @@ export function AuditFilterBar({ filters, onChange }: AuditFilterBarProps) {
     (val: string) => {
       if (actorTimer.current) clearTimeout(actorTimer.current);
       actorTimer.current = setTimeout(() => {
-        onChange({ ...filters, actor: val || undefined });
+        onChange({ ...filtersRef.current, actor: val || undefined });
       }, 300);
     },
-    [filters, onChange]
+    [onChange]
   );
 
   // Clear the actor debounce timer on unmount to prevent calling onChange after the component is gone
