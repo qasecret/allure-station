@@ -230,7 +230,13 @@ export const latestRunSummarySchema = z.object({
   stats: runStatsSchema.nullable(),
   gatePassed: z.boolean().nullable(), // null = no gate configured or no stats
 });
-export const projectListItemSchema = projectSchema.extend({ latestRun: latestRunSummarySchema.nullable() });
+export const projectListItemSchema = projectSchema.extend({
+  latestRun: latestRunSummarySchema.nullable(),
+  // The most-recent run whose status is 'ready' AND has stats. Null when no such run exists.
+  // Unaffected by in-flight (pending/generating) or failed runs — lets UI always show the last
+  // good report stats even when a newer run is in progress or failed to generate.
+  lastReadyRun: latestRunSummarySchema.nullable(),
+});
 export const projectSortSchema = z.enum(["name", "worst", "active"]);
 export type LatestRunSummary = z.infer<typeof latestRunSummarySchema>;
 export type ProjectListItem = z.infer<typeof projectListItemSchema>;

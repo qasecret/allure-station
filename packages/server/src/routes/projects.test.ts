@@ -188,6 +188,58 @@ describe("enriched project list + sort", () => {
     await app.close();
   });
 
+  it("sort=worst: generation-failed run sorts after gate-breached but before healthy/no-runs", async () => {
+    // Scenario: gamma (gate-breached), delta (generation-failed), beta (healthy), alpha (no runs).
+    // Expected worst order: gamma → delta → beta → alpha.
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    for (const id of ["alpha", "beta", "delta", "gamma"]) {
+      await app.inject({ method: "POST", url: "/api/projects", payload: { id } });
+    }
+    // beta: ready 8/8 (healthy)
+    await deps.runs.create("beta", "b1", "R", "2026-06-11T01:00:00.000Z");
+    await deps.runs.claimPending("b1", "2026-06-11T01:00:01.000Z");
+    await deps.runs.markReady("b1", { total: 8, passed: 8, failed: 0, broken: 0, skipped: 0 }, "2026-06-11T01:00:02.000Z");
+    // gamma: gate breach (maxFailures=0 with failures)
+    await deps.projects.setQualityGate("gamma", { maxFailures: 0 });
+    await deps.runs.create("gamma", "g1", "R", "2026-06-11T02:00:00.000Z");
+    await deps.runs.claimPending("g1", "2026-06-11T02:00:01.000Z");
+    await deps.runs.markReady("g1", { total: 8, passed: 5, failed: 3, broken: 0, skipped: 0 }, "2026-06-11T02:00:02.000Z");
+    // delta: generation failed (latest run status=failed, no stats)
+    await deps.runs.create("delta", "d1", "R", "2026-06-11T03:00:00.000Z");
+    await deps.runs.claimPending("d1", "2026-06-11T03:00:01.000Z");
+    await deps.runs.markFailed("d1", "2026-06-11T03:00:02.000Z", "allure core crashed");
+
+    const worst = (await app.inject({ method: "GET", url: "/api/projects?sort=worst" })).json() as Array<{ id: string }>;
+    expect(worst.map((p) => p.id)).toEqual(["gamma", "delta", "beta", "alpha"]);
+    await app.close();
+  });
+
+  it("lastReadyRun is present and still holds stats when latestRun is generating", async () => {
+    // delta has a ready run, then a newer generating run — latestRun should be generating but
+    // lastReadyRun should still point to the previous ready run with stats.
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "delta" } });
+    // run1: ready with stats
+    await deps.runs.create("delta", "d1", "R", "2026-06-11T01:00:00.000Z");
+    await deps.runs.claimPending("d1", "2026-06-11T01:00:01.000Z");
+    await deps.runs.markReady("d1", { total: 4, passed: 4, failed: 0, broken: 0, skipped: 0 }, "2026-06-11T01:00:02.000Z");
+    // run2: still generating (in-flight)
+    await deps.runs.create("delta", "d2", "R", "2026-06-11T02:00:00.000Z");
+    await deps.runs.claimPending("d2", "2026-06-11T02:00:01.000Z");
+
+    const res = await app.inject({ method: "GET", url: "/api/projects" });
+    const items = res.json() as Array<{ id: string; latestRun: { id: string; status: string; stats: null | { passed: number } } | null; lastReadyRun: { id: string; stats: { passed: number } } | null }>;
+    const delta = items.find((p) => p.id === "delta")!;
+    expect(delta.latestRun?.id).toBe("d2");
+    expect(delta.latestRun?.status).toBe("generating");
+    expect(delta.latestRun?.stats).toBeNull();
+    expect(delta.lastReadyRun?.id).toBe("d1");
+    expect(delta.lastReadyRun?.stats?.passed).toBe(4);
+    await app.close();
+  });
+
   it("sort composes with q and pagination, X-Total-Count intact", async () => {
     const deps = await makeTestDeps();
     const app = await seed(deps);

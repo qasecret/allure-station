@@ -228,6 +228,59 @@ for (const backend of backends) {
         expect(paged.map((p) => p.id)).toEqual(["alpha"]);
         expect(pagedTotal).toBe(2);
       });
+
+      it("listEnriched: worst sort — generation-failed runs rank between gate-breached and healthy", async () => {
+        // gamma: gate breach; delta: latest run failed (generation); beta: healthy; alpha: no runs.
+        // Expected worst order: gamma → delta → beta → alpha.
+        await projects.create("alpha", "2026-06-06T00:00:00.000Z");
+        await projects.create("beta", "2026-06-06T00:00:00.000Z");
+        await projects.create("delta", "2026-06-06T00:00:00.000Z");
+        await projects.create("gamma", "2026-06-06T00:00:00.000Z");
+        // beta: healthy
+        await runs.create("beta", "b1", "R", "2026-06-11T01:00:00.000Z");
+        await runs.claimPending("b1", "2026-06-11T01:00:01.000Z");
+        await runs.markReady("b1", { total: 8, passed: 8, failed: 0, broken: 0, skipped: 0 }, "2026-06-11T01:00:02.000Z");
+        // gamma: gate breach
+        await projects.setQualityGate("gamma", { maxFailures: 0 });
+        await runs.create("gamma", "g1", "R", "2026-06-11T02:00:00.000Z");
+        await runs.claimPending("g1", "2026-06-11T02:00:01.000Z");
+        await runs.markReady("g1", { total: 8, passed: 5, failed: 3, broken: 0, skipped: 0 }, "2026-06-11T02:00:02.000Z");
+        // delta: generation failed
+        await runs.create("delta", "d1", "R", "2026-06-11T03:00:00.000Z");
+        await runs.claimPending("d1", "2026-06-11T03:00:01.000Z");
+        await runs.markFailed("d1", "2026-06-11T03:00:02.000Z", "crash");
+
+        const { items: worst } = await projects.listEnriched({ sort: "worst" });
+        expect(worst.map((p) => p.id)).toEqual(["gamma", "delta", "beta", "alpha"]);
+      });
+
+      it("listEnriched: lastReadyRun is the newest ready+stats run; null when no ready run exists", async () => {
+        // proj1: run1 ready → run2 generating (lastReadyRun=run1, latestRun=run2)
+        // proj2: no runs at all (lastReadyRun=null)
+        await projects.create("proj1", "2026-06-06T00:00:00.000Z");
+        await projects.create("proj2", "2026-06-06T00:00:00.000Z");
+
+        // proj1 run1: ready with stats
+        await runs.create("proj1", "r1", "R", "2026-06-11T01:00:00.000Z");
+        await runs.claimPending("r1", "2026-06-11T01:00:01.000Z");
+        await runs.markReady("r1", { total: 4, passed: 4, failed: 0, broken: 0, skipped: 0 }, "2026-06-11T01:00:02.000Z");
+        // proj1 run2: pending (in-flight)
+        await runs.create("proj1", "r2", "R", "2026-06-11T02:00:00.000Z");
+        await runs.claimPending("r2", "2026-06-11T02:00:01.000Z");
+
+        const { items } = await projects.listEnriched();
+        const byId = Object.fromEntries(items.map((p) => [p.id, p]));
+
+        // latestRun is the in-flight run2, lastReadyRun is the completed run1
+        expect(byId.proj1.latestRun?.id).toBe("r2");
+        expect(byId.proj1.latestRun?.status).toBe("generating");
+        expect(byId.proj1.lastReadyRun?.id).toBe("r1");
+        expect(byId.proj1.lastReadyRun?.stats?.passed).toBe(4);
+
+        // proj2 has no runs at all
+        expect(byId.proj2.latestRun).toBeNull();
+        expect(byId.proj2.lastReadyRun).toBeNull();
+      });
     });
 
     // -------------------------------------------------------------------------

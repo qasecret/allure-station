@@ -1,6 +1,6 @@
-import { and, asc, count, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import type { Project, ProjectListItem, ProjectSort, ProjectVisibility, QualityGateConfig, Run, RunMetadata, RunStats, RunStatus } from "@allure-station/shared";
+import type { LatestRunSummary, Project, ProjectListItem, ProjectSort, ProjectVisibility, QualityGateConfig, Run, RunMetadata, RunStats, RunStatus } from "@allure-station/shared";
 import { evaluateGate } from "@allure-station/shared";
 
 // Who may see which projects in a listing. admin → all; member → public ∪ their projects;
@@ -83,8 +83,9 @@ export class ProjectRepository {
   }
 
   /** One-pass enriched listing: a drizzle CTE with ROW_NUMBER() picks each project's latest run
-   *  (rn=1) — both SQLite (≥3.25) and Postgres support ROW_NUMBER. Sorting happens in JS over the
-   *  full filtered set (instance project counts are small); pagination slices afterwards.
+   *  (rn=1) — both SQLite (≥3.25) and Postgres support ROW_NUMBER. A second CTE (ranked_ready)
+   *  picks the most-recent ready run with stats. Sorting happens in JS over the full filtered set
+   *  (instance project counts are small); pagination slices afterwards.
    *
    *  Judgment point resolution: instead of db.all() (libsql-only) we use drizzle's $with() CTE
    *  which generates portable SQL on both dialects via the query builder — no raw db.all() call. */
@@ -111,24 +112,49 @@ export class ProjectRepository {
         .where(inArray(runs.projectId, ids)),
     );
 
-    const latest = await this.db.with(ranked).select().from(ranked).where(eq(ranked.rn, 1));
+    // CTE: rank only ready runs that have stats — rn=1 is the most-recent ready+stats run.
+    // Used for lastReadyRun (the last run with a complete report, unaffected by in-flight runs).
+    const rankedReady = this.db.$with("ranked_ready").as(
+      this.db.select({
+        projectId: runs.projectId,
+        id: runs.id,
+        status: runs.status,
+        createdAt: runs.createdAt,
+        finishedAt: runs.finishedAt,
+        statsJson: runs.statsJson,
+        rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${runs.projectId} ORDER BY ${runs.createdAt} DESC, ${runs.id} DESC)`.as("rn"),
+      })
+        .from(runs)
+        .where(and(inArray(runs.projectId, ids), eq(runs.status, "ready"), isNotNull(runs.statsJson))),
+    );
+
+    const [latest, lastReady] = await Promise.all([
+      this.db.with(ranked).select().from(ranked).where(eq(ranked.rn, 1)),
+      this.db.with(rankedReady).select().from(rankedReady).where(eq(rankedReady.rn, 1)),
+    ]);
 
     const latestByProject = new Map(latest.map((r) => [r.projectId, r]));
-    const items: ProjectListItem[] = rows.map((p) => {
-      const lr = latestByProject.get(p.id);
-      const stats = lr?.statsJson ? (JSON.parse(lr.statsJson) as RunStats) : null;
-      const gateCfg = p.qualityGate ? (JSON.parse(p.qualityGate) as QualityGateConfig) : null;
+    const lastReadyByProject = new Map(lastReady.map((r) => [r.projectId, r]));
+
+    const makeRunSummary = (lr: typeof latest[0], gateCfg: QualityGateConfig | null): LatestRunSummary => {
+      const stats = lr.statsJson ? (JSON.parse(lr.statsJson) as RunStats) : null;
       const verdict = gateCfg && stats ? evaluateGate(stats, gateCfg) : null;
       const gatePassed = verdict?.configured ? verdict.passed : null;
+      return { id: lr.id, status: lr.status as RunStatus, createdAt: lr.createdAt, finishedAt: lr.finishedAt ?? null, stats, gatePassed };
+    };
+
+    const items: ProjectListItem[] = rows.map((p) => {
+      const lr = latestByProject.get(p.id);
+      const lrr = lastReadyByProject.get(p.id);
+      const gateCfg = p.qualityGate ? (JSON.parse(p.qualityGate) as QualityGateConfig) : null;
       return {
         id: p.id,
         displayName: p.displayName ?? null,
         createdAt: p.createdAt,
         visibility: p.visibility as ProjectVisibility,
         latestRunId: lr?.id ?? null,
-        latestRun: lr
-          ? { id: lr.id, status: lr.status as RunStatus, createdAt: lr.createdAt, finishedAt: lr.finishedAt ?? null, stats, gatePassed }
-          : null,
+        latestRun: lr ? makeRunSummary(lr, gateCfg) : null,
+        lastReadyRun: lrr ? makeRunSummary(lrr, gateCfg) : null,
       };
     });
 
@@ -136,9 +162,18 @@ export class ProjectRepository {
       i.latestRun?.stats ? i.latestRun.stats.passed / Math.max(1, i.latestRun.stats.total) : null;
 
     if (opts.sort === "worst") {
+      // Three tiers: 0 = gate breached, 1 = generation failed, 2 = everything else.
+      // Within tier 2: lowest pass-rate first, then no-runs last, then id.
+      const tier = (i: ProjectListItem) => {
+        if (i.latestRun?.gatePassed === false) return 0;
+        if (i.latestRun?.status === "failed") return 1;
+        return 2;
+      };
       items.sort((a, b) => {
-        const breach = (i: ProjectListItem) => (i.latestRun?.gatePassed === false ? 0 : 1);
-        if (breach(a) !== breach(b)) return breach(a) - breach(b);
+        const ta = tier(a), tb = tier(b);
+        if (ta !== tb) return ta - tb;
+        if (ta < 2) return a.id.localeCompare(b.id); // within tier 0/1 sort by id
+        // tier 2: pass-rate ascending, no-runs last, then id
         const ra = passRate(a), rb = passRate(b);
         if (ra === null && rb === null) return a.id.localeCompare(b.id);
         if (ra === null) return 1; // no-runs last
