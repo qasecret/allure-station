@@ -183,6 +183,45 @@ for (const backend of backends) {
         // offset without limit must not emit OFFSET-without-LIMIT (a SQLite syntax error) — offset is ignored.
         expect((await projects.list({ offset: 3 })).map((p) => p.id)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
       });
+
+      it("listEnriched: embeds latestRun per project and sorts worst-first (covers window fn on both dialects)", async () => {
+        await projects.create("alpha", "2026-06-06T00:00:00.000Z");
+        await projects.create("beta", "2026-06-06T00:00:00.000Z");
+        // beta: healthy, all passed
+        await runs.create("beta", "b1", "R", "2026-06-11T01:00:00.000Z");
+        await runs.claimPending("b1", "2026-06-11T01:00:01.000Z");
+        await runs.markReady("b1", { total: 8, passed: 8, failed: 0, broken: 0, skipped: 0 }, "2026-06-11T01:00:02.000Z");
+        // alpha: gate breach (maxFailures=0 with 3 failures)
+        await projects.setQualityGate("alpha", { maxFailures: 0 });
+        await runs.create("alpha", "a1", "R", "2026-06-11T02:00:00.000Z");
+        await runs.claimPending("a1", "2026-06-11T02:00:01.000Z");
+        await runs.markReady("a1", { total: 8, passed: 5, failed: 3, broken: 0, skipped: 0 }, "2026-06-11T02:00:02.000Z");
+
+        const { items, total } = await projects.listEnriched();
+        expect(total).toBe(2);
+        const byId = Object.fromEntries(items.map((p) => [p.id, p]));
+        // alpha has a latestRun with gate breach
+        expect(byId.alpha.latestRun?.id).toBe("a1");
+        expect(byId.alpha.latestRun?.stats?.passed).toBe(5);
+        expect(byId.alpha.latestRun?.gatePassed).toBe(false);
+        // beta has a latestRun, no gate configured → gatePassed = null
+        expect(byId.beta.latestRun?.id).toBe("b1");
+        expect(byId.beta.latestRun?.stats?.passed).toBe(8);
+        expect(byId.beta.latestRun?.gatePassed).toBeNull();
+
+        // worst sort: gate-breached first, then by pass rate (lowest first)
+        const { items: worst } = await projects.listEnriched({ sort: "worst" });
+        expect(worst.map((p) => p.id)).toEqual(["alpha", "beta"]);
+
+        // active sort: newest run first (alpha's run is newer)
+        const { items: active } = await projects.listEnriched({ sort: "active" });
+        expect(active.map((p) => p.id)).toEqual(["alpha", "beta"]);
+
+        // pagination: limit 1, offset 0 → first item only, total still 2
+        const { items: paged, total: pagedTotal } = await projects.listEnriched({ sort: "worst", limit: 1, offset: 0 });
+        expect(paged.map((p) => p.id)).toEqual(["alpha"]);
+        expect(pagedTotal).toBe(2);
+      });
     });
 
     // -------------------------------------------------------------------------

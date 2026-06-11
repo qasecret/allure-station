@@ -222,6 +222,20 @@ export const projectSchema = z.object({
   canWrite: z.boolean().optional(),
 });
 
+export const latestRunSummarySchema = z.object({
+  id: z.string(),
+  status: runStatusSchema,
+  finishedAt: z.string().nullable(),
+  createdAt: z.string(),
+  stats: runStatsSchema.nullable(),
+  gatePassed: z.boolean().nullable(), // null = no gate configured or no stats
+});
+export const projectListItemSchema = projectSchema.extend({ latestRun: latestRunSummarySchema.nullable() });
+export const projectSortSchema = z.enum(["name", "worst", "active"]);
+export type LatestRunSummary = z.infer<typeof latestRunSummarySchema>;
+export type ProjectListItem = z.infer<typeof projectListItemSchema>;
+export type ProjectSort = z.infer<typeof projectSortSchema>;
+
 // Pushed to the UI over SSE on every run lifecycle transition (created/generating/ready/failed).
 // `deleted: true` signals that the run has been hard-deleted so live UIs can remove it rather
 // than upserting a stale row (the SSE handler upserts all other events).

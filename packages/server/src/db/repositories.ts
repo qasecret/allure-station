@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import type { Project, ProjectVisibility, QualityGateConfig, Run, RunMetadata, RunStats, RunStatus } from "@allure-station/shared";
+import type { Project, ProjectListItem, ProjectSort, ProjectVisibility, QualityGateConfig, Run, RunMetadata, RunStats, RunStatus } from "@allure-station/shared";
+import { evaluateGate } from "@allure-station/shared";
 
 // Who may see which projects in a listing. admin → all; member → public ∪ their projects;
 // public → public only (anonymous / token).
@@ -96,6 +97,85 @@ export class ProjectRepository {
 
   async setQualityGate(id: string, config: QualityGateConfig | null): Promise<void> {
     await this.db.update(projects).set({ qualityGate: config ? JSON.stringify(config) : null }).where(eq(projects.id, id));
+  }
+
+  /** One-pass enriched listing: a drizzle CTE with ROW_NUMBER() picks each project's latest run
+   *  (rn=1) — both SQLite (≥3.25) and Postgres support ROW_NUMBER. Sorting happens in JS over the
+   *  full filtered set (instance project counts are small); pagination slices afterwards.
+   *
+   *  Judgment point resolution: instead of db.all() (libsql-only) we use drizzle's $with() CTE
+   *  which generates portable SQL on both dialects via the query builder — no raw db.all() call. */
+  async listEnriched(opts: { q?: string; scope?: VisibilityScope; sort?: ProjectSort; limit?: number; offset?: number } = {}): Promise<{ items: ProjectListItem[]; total: number }> {
+    const rows = await this.db.select().from(projects).where(this.#where(opts.q, opts.scope)).orderBy(projects.id);
+    if (rows.length === 0) return { items: [], total: 0 };
+
+    const ids = rows.map((p) => p.id);
+
+    // CTE: rank each run per project by (created_at DESC, id DESC) — rn=1 is the latest.
+    // ROW_NUMBER() is supported by SQLite ≥3.25 and Postgres; drizzle generates the correct
+    // SQL for each dialect from the same query builder call (no dialect-specific raw SQL).
+    const ranked = this.db.$with("ranked").as(
+      this.db.select({
+        projectId: runs.projectId,
+        id: runs.id,
+        status: runs.status,
+        createdAt: runs.createdAt,
+        finishedAt: runs.finishedAt,
+        statsJson: runs.statsJson,
+        rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${runs.projectId} ORDER BY ${runs.createdAt} DESC, ${runs.id} DESC)`.as("rn"),
+      })
+        .from(runs)
+        .where(inArray(runs.projectId, ids)),
+    );
+
+    const latest = await this.db.with(ranked).select().from(ranked).where(eq(ranked.rn, 1));
+
+    const latestByProject = new Map(latest.map((r) => [r.projectId, r]));
+    const items: ProjectListItem[] = rows.map((p) => {
+      const lr = latestByProject.get(p.id);
+      const stats = lr?.statsJson ? (JSON.parse(lr.statsJson) as RunStats) : null;
+      const gateCfg = p.qualityGate ? (JSON.parse(p.qualityGate) as QualityGateConfig) : null;
+      const gatePassed = gateCfg && stats ? evaluateGate(stats, gateCfg).passed : null;
+      return {
+        id: p.id,
+        displayName: p.displayName ?? null,
+        createdAt: p.createdAt,
+        visibility: p.visibility as ProjectVisibility,
+        latestRunId: lr?.id ?? null,
+        latestRun: lr
+          ? { id: lr.id, status: lr.status as RunStatus, createdAt: lr.createdAt, finishedAt: lr.finishedAt ?? null, stats, gatePassed }
+          : null,
+      };
+    });
+
+    const passRate = (i: ProjectListItem) =>
+      i.latestRun?.stats ? i.latestRun.stats.passed / Math.max(1, i.latestRun.stats.total) : null;
+
+    if (opts.sort === "worst") {
+      items.sort((a, b) => {
+        const breach = (i: ProjectListItem) => (i.latestRun?.gatePassed === false ? 0 : 1);
+        if (breach(a) !== breach(b)) return breach(a) - breach(b);
+        const ra = passRate(a), rb = passRate(b);
+        if (ra === null && rb === null) return a.id.localeCompare(b.id);
+        if (ra === null) return 1; // no-runs last
+        if (rb === null) return -1;
+        if (ra !== rb) return ra - rb; // lowest pass-rate first
+        return a.id.localeCompare(b.id);
+      });
+    } else if (opts.sort === "active") {
+      items.sort((a, b) => {
+        const ca = a.latestRun?.createdAt, cb = b.latestRun?.createdAt;
+        if (!ca && !cb) return a.id.localeCompare(b.id);
+        if (!ca) return 1;
+        if (!cb) return -1;
+        return cb.localeCompare(ca); // newest first
+      });
+    } // "name"/default: already ordered by id
+
+    const total = items.length;
+    const offset = opts.offset ?? 0;
+    const paged = opts.limit !== undefined ? items.slice(offset, offset + opts.limit) : items;
+    return { items: paged, total };
   }
 
   async #withLatest(id: string, createdAt: string, visibility: ProjectVisibility, displayName: string | null): Promise<Project> {

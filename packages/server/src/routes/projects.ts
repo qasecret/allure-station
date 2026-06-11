@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createProjectSchema, projectIdSchema, setVisibilityRequestSchema, updateProjectRequestSchema } from "@allure-station/shared";
+import { createProjectSchema, projectIdSchema, projectSortSchema, setVisibilityRequestSchema, updateProjectRequestSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { parsePage } from "./pagination.js";
 import { authenticate, authorizeProjectCreate, authorizeProjectOwner, authorizeProjectWrite, visibilityScopeFor } from "../auth.js";
@@ -25,16 +25,15 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
   });
 
   app.get("/projects", async (req, reply) => {
-    const { q } = req.query as { q?: string };
+    const { q, sort } = req.query as { q?: string; sort?: string };
+    const parsedSort = sort === undefined ? undefined : projectSortSchema.safeParse(sort);
+    if (parsedSort && !parsedSort.success) return reply.code(400).send({ error: `invalid sort "${sort}"` });
     let page;
     try { page = parsePage(req.query as Record<string, unknown>); }
     catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
     // Filter to what the caller may see — private projects don't leak to non-members via the list.
     const scope = await visibilityScopeFor(deps, await authenticate(deps, req));
-    const [items, total] = await Promise.all([
-      deps.projects.list({ q, ...page, scope }),
-      deps.projects.count({ q, scope }),
-    ]);
+    const { items, total } = await deps.projects.listEnriched({ q, scope, sort: parsedSort?.data, ...page });
     reply.header("X-Total-Count", String(total));
     return items;
   });
