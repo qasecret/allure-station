@@ -42,11 +42,6 @@ export function Project() {
   const [tab, setTab] = useState<"report" | "runs">("report");
   const { user } = useAuth();
 
-  const { data: config } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
-  // canWrite: true in open mode (no security), true when signed in; false otherwise.
-  // Mirrors the permissive stance of ProjectSettings's "open" state.
-  const canWrite = !config?.securityEnabled || !!user;
-
   useEffect(() => {
     setBranchFilter(""); // don't carry a previous project's branch filter (could hide all its runs)
     setTab("report"); // reset to report tab when navigating to a new project
@@ -55,6 +50,10 @@ export function Project() {
   // A read-gated project 404s for anonymous/non-members — surface that as a clear message
   // instead of a silently-empty page.
   const { isError: projectDenied, data: project } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
+  // canWrite comes from the server (already part of GET /projects/:id) so the UI always reflects
+  // the authoritative permission state — undefined → false while loading (no destructive buttons
+  // visible until the server confirms write access).
+  const canWrite = project?.canWrite ?? false;
 
   // SSE drives instant updates; a slow refetch is kept only as a backstop while a run is
   // generating, so the UI still self-heals if SSE is unavailable or an event is missed.
@@ -79,7 +78,13 @@ export function Project() {
         qc.setQueryData<Run[]>(["runs", id], (prev = []) => prev.filter((r) => r.id !== event.run.id));
         qc.invalidateQueries({ queryKey: ["runs-page", id] });
         qc.invalidateQueries({ queryKey: ["trends", id] });
-        if (searchParams.get("run") === event.run.id) setSelectedRun(null);
+        // C5: also invalidate test-history and the deleted run's summary so they don't show stale data.
+        qc.invalidateQueries({ queryKey: ["test-history", id] });
+        qc.invalidateQueries({ queryKey: ["run-summary", id, event.run.id] });
+        // C1: read the CURRENT ?run= value at event time (not the closed-over searchParams object
+        // which was captured when the effect ran and doesn't update on navigation).
+        const currentRun = new URLSearchParams(window.location.search).get("run");
+        if (currentRun === event.run.id) setSelectedRun(null);
         return;
       }
       qc.setQueryData<Run[]>(["runs", id], (prev = []) => {
@@ -119,9 +124,29 @@ export function Project() {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   // Capture the initial #report= once (lazy so parsing runs exactly once, not on every render).
   // runId is set to the first run that consumed the hash; subsequent run switches must not re-apply it.
-  const initialDeepLink = useRef<{ hash: string | null; runId: string | null } | null>(null);
-  if (initialDeepLink.current === null) initialDeepLink.current = { hash: parseReportFragment(window.location.hash), runId: null };
-  if (current && initialDeepLink.current.runId === null) initialDeepLink.current.runId = current;
+  // requestedRun captures the ?run= at page load so we can detect a fallback (deleted/missing run).
+  const initialDeepLink = useRef<{ hash: string | null; runId: string | null; requestedRun: string | null } | null>(null);
+  if (initialDeepLink.current === null) {
+    initialDeepLink.current = {
+      hash: parseReportFragment(window.location.hash),
+      runId: null,
+      requestedRun: new URLSearchParams(window.location.search).get("run"),
+    };
+  }
+  // C4(a): pin the run that first consumes the hash; if the resolved run differs from the
+  // originally requested run (i.e. we fell back to a different run), drop the hash entirely.
+  if (current && initialDeepLink.current.runId === null) {
+    const d = initialDeepLink.current;
+    if (d.requestedRun && d.requestedRun !== current) d.hash = null;
+    d.runId = current;
+  }
+
+  // C4(b): once the user navigates away from the deep-linked run, consume the hash permanently
+  // so switching back to it doesn't jump to a stale test position.
+  useEffect(() => {
+    const d = initialDeepLink.current;
+    if (d?.runId && current && current !== d.runId) d.hash = null;
+  }, [current]);
 
   // Poll the iframe's location hash and mirror it to the parent URL fragment.
   // When the inner hash is empty or just "#" (fresh load / run switch), clean up the parent fragment.
@@ -131,6 +156,9 @@ export function Project() {
       const frame = frameRef.current;
       if (!frame?.contentWindow) return;
       try {
+        // C4(c): only trust the inner hash once the report document has committed — about:blank's
+        // pathname is "" or "/" and doesn't contain "/report/", so we skip it entirely.
+        if (!frame.contentWindow.location.pathname.includes("/report/")) return;
         const inner = frame.contentWindow.location.hash;
         // Treat "#" (Allure's default root hash) the same as empty — no meaningful test selected.
         const meaningfulInner = inner && inner !== "#" ? inner : "";
