@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { Run, RunStatus, TestDiff, TestHistoryEntry, Regression, RunRef, TrendPoint } from "@allure-station/shared";
 import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History, ShieldCheck, ShieldAlert, AlertTriangle } from "lucide-react";
@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { relativeTime, runLabel, formatDurationSec } from "@/lib/format";
+import { parseReportFragment, buildReportFragment, withReportHash } from "@/lib/report-deep-link";
 import { failedReasons } from "@/lib/quality-gate-verdict";
 import { severityChipClass } from "@/lib/severity";
 import { RunsTable } from "@/components/RunsTable";
@@ -28,7 +29,15 @@ const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, read
 export function Project() {
   const { id = "" } = useParams();
   const qc = useQueryClient();
-  const [selectedRun, setSelectedRun] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedRun = searchParams.get("run");
+  const setSelectedRun = (runId: string | null) => {
+    setSearchParams((p) => {
+      const next = new URLSearchParams(p);
+      if (runId) next.set("run", runId); else next.delete("run");
+      return next;
+    }, { replace: true });
+  };
   const [branchFilter, setBranchFilter] = useState("");
   const [tab, setTab] = useState<"report" | "runs">("report");
   const { user } = useAuth();
@@ -39,7 +48,6 @@ export function Project() {
   const canWrite = !config?.securityEnabled || !!user;
 
   useEffect(() => {
-    setSelectedRun(null);
     setBranchFilter(""); // don't carry a previous project's branch filter (could hide all its runs)
     setTab("report"); // reset to report tab when navigating to a new project
   }, [id]);
@@ -106,6 +114,35 @@ export function Project() {
   // banner — so a failure isn't hidden behind an older report, even when a newer run is still generating.
   const latestDone = visibleRuns.find((r) => r.status === "ready" || r.status === "failed");
 
+  // Ref to the report iframe; used to mirror the Allure SPA's internal hash into the parent URL.
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  // Capture the initial #report= once; the iframe src restores it, then the poll takes over mirroring.
+  const initialReportHash = useRef(parseReportFragment(window.location.hash));
+
+  // Poll the iframe's location hash and mirror it to the parent URL fragment.
+  // When the inner hash is empty or just "#" (fresh load / run switch), clean up the parent fragment.
+  useEffect(() => {
+    const t = setInterval(() => {
+      const frame = frameRef.current;
+      if (!frame?.contentWindow) return;
+      try {
+        const inner = frame.contentWindow.location.hash;
+        // Treat "#" (Allure's default root hash) the same as empty — no meaningful test selected.
+        const meaningfulInner = inner && inner !== "#" ? inner : "";
+        if (meaningfulInner) {
+          const outer = buildReportFragment(meaningfulInner);
+          if (window.location.hash !== outer) {
+            history.replaceState(null, "", window.location.pathname + window.location.search + outer);
+          }
+        } else if (window.location.hash.startsWith("#report=")) {
+          // Inner hash cleared — remove the stale parent fragment (e.g. after run switch).
+          history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
+      } catch { /* cross-origin or detached frame — ignore */ }
+    }, 500);
+    return () => clearInterval(t);
+  }, [current]);
+
   if (projectDenied) {
     return (
       <>
@@ -166,6 +203,12 @@ export function Project() {
           {cur?.branch && <Badge variant="secondary">branch {cur.branch}{cur.commit ? `@${cur.commit.slice(0, 7)}` : ""}</Badge>}
           {cur?.environment && <Badge variant="secondary">env {cur.environment}</Badge>}
           {cur?.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">CI build ↗</a>}
+          {current && (
+            <Button variant="ghost" size="sm" className="text-muted-foreground"
+              onClick={() => { navigator.clipboard.writeText(window.location.href); toast.success("Link copied"); }}>
+              Copy link
+            </Button>
+          )}
         </div>
         <div className="flex flex-wrap gap-3">
           <Card className="min-w-[260px] flex-1">
@@ -185,8 +228,8 @@ export function Project() {
             {cur?.status === "failed"
               ? <FailedRunPanel projectId={id} run={cur} />
               : current
-                ? <iframe title="report" className="min-h-0 flex-1 rounded-xl border bg-card shadow-sm"
-                    src={`/api/projects/${id}/runs/${current}/report/index.html`} />
+                ? <iframe ref={frameRef} title="report" className="min-h-0 flex-1 rounded-xl border bg-card shadow-sm"
+                    src={withReportHash(`/api/projects/${id}/runs/${current}/report/index.html`, initialReportHash.current)} />
                 : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use "Upload & generate" to create the first report.'} />}
           </TabsContent>
           <TabsContent value="runs" className="flex min-h-0 flex-1 flex-col">
