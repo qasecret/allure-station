@@ -36,14 +36,14 @@ gate pull requests, and control access with accounts, RBAC, and SSO — all in o
 | Capability | What you get |
 |---|---|
 | **Embedded Allure 3** | Reports generated in-process via `@allurereport/*` — no CLI shelling, no Java. |
-| **Multi-project hub** | Many projects, each with its own runs, history, trends, and access control. |
+| **Multi-project hub** | Many projects, each with its own runs, history, trends, and access control. Projects carry a display name shown alongside the id. |
 | **Pluggable storage** | Local filesystem (zero-config) or any S3-compatible backend (MinIO, AWS S3). |
 | **SQLite → Postgres** | Zero-config SQLite by default; switch to Postgres for multi-instance — same schema. |
 | **Scales by config** | In-process queue, or BullMQ + Redis with horizontally-scaled worker replicas. |
 | **Live updates** | Server-Sent Events stream run status to the UI in real time — no polling. |
-| **Trends &amp; comparison** | Pass-rate / flakiness / duration trends; diff any two runs (new failures, fixed, flaky). |
+| **Trends &amp; comparison** | Pass-rate / flakiness / duration trends; diff any two runs (new failures, fixed, flaky). The **Runs tab** lists every run with retry/delete actions; each run has a **shareable deep link** (`?run=`) that opens the right report and test directly. |
 | **Per-test history** | Every test's outcome timeline across runs, with a "failing since" regression hint. |
-| **Run metadata** | Branch, commit, environment, and CI build URL attached to every run at upload. |
+| **Run metadata** | Branch, commit, environment, and CI build URL attached at upload — via API fields or the upload dialog's optional **CI context** panel (values are remembered per project). |
 | **CI/CD native** | Reusable GitHub Action, quality gates, PR status checks &amp; comments, status badges. |
 | **Notifications** | Slack &amp; generic-webhook on completion / failure / gate breach / regression. |
 | **Enterprise auth** | Accounts + per-project RBAC, scoped API tokens, **OIDC/SSO**, private projects, and an audit log. |
@@ -342,9 +342,9 @@ All endpoints are under `/api`. Reads are public unless the project is private; 
 
 | Area | Endpoints |
 |---|---|
-| Projects | `GET/POST /projects` · `GET/DELETE /projects/:id` · `PUT /projects/:id/visibility` |
+| Projects | `GET/POST /projects` · `GET/DELETE /projects/:id` · `PATCH /projects/:id` (rename) · `PUT /projects/:id/visibility` |
 | Results | `POST /projects/:id/send-results` (+ `branch`/`commit`/`environment`/`ciUrl` fields) · `POST /projects/:id/generate` |
-| Runs &amp; report | `GET /projects/:id/runs[?status=&limit=&offset=]` · `GET …/runs/:runId` · `GET …/runs/:runId/report/*` · `GET …/runs/:runId/summary` |
+| Runs &amp; report | `GET /projects/:id/runs[?status=&limit=&offset=]` · `GET …/runs/:runId` · `DELETE …/runs/:runId` · `POST …/runs/:runId/retry` · `GET …/runs/:runId/report/*` · `GET …/runs/:runId/summary` |
 | Analytics | `GET /projects/:id/trends` · `GET /projects/:id/compare?base=&target=` · `GET /projects/:id/tests/history[/trace]` · `GET /projects/:id/events` (SSE) · `GET /projects/:id/badge.svg` |
 | Quality gate | `GET/PUT /projects/:id/quality-gate` |
 | Tokens | `GET/POST /projects/:id/tokens` · `DELETE …/tokens/:tokenId` |
