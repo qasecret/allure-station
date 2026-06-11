@@ -54,7 +54,13 @@ export function UploadDialog({ projectId }: { projectId: string }) {
   });
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button><Upload className="size-4" /> Upload &amp; generate</Button></DialogTrigger>
+      <DialogTrigger asChild>
+        <Button>
+          <Upload className="size-4" />
+          <span className="hidden sm:inline">Upload &amp; generate</span>
+          <span className="sm:hidden">Upload</span>
+        </Button>
+      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Upload results</DialogTitle>

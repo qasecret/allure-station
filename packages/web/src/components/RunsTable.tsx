@@ -60,7 +60,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
   useEffect(() => { if (page >= pages) setPage(pages - 1); }, [page, pages]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       <div className="flex gap-1">
         {FILTERS.map((f) => (
           <Button key={f.label} size="sm" variant={status === f.value ? "default" : "outline"}
@@ -68,7 +68,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
             onClick={() => { setStatus(f.value); setPage(0); }}>{f.label}</Button>
         ))}
       </div>
-      <div className="overflow-auto rounded-xl border bg-card shadow-sm">
+      <div className="w-full overflow-x-auto rounded-xl border bg-card shadow-sm">
         <table className="w-full text-sm">
           <thead className="text-left text-muted-foreground">
             <tr className="border-b">
