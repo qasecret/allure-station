@@ -269,16 +269,18 @@ export function Project() {
           </Card>
           <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
         </div>
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "report" | "runs")} className="flex min-h-0 flex-1 flex-col">
+        <Tabs value={tab} onValueChange={(v) => { setTab(v as "report" | "runs"); if (v !== "report") setFocusReport(false); }} className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center justify-between">
             <TabsList>
               <TabsTrigger value="report">Report</TabsTrigger>
               <TabsTrigger value="runs">Runs</TabsTrigger>
             </TabsList>
-            <Button variant="ghost" size="icon" aria-label="Focus report" aria-pressed={focusReport}
-              onClick={() => setFocusReport((v) => !v)}>
-              {focusReport ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-            </Button>
+            {tab === "report" && (
+              <Button variant="ghost" size="icon" aria-label="Focus report" aria-pressed={focusReport}
+                onClick={() => setFocusReport((v) => !v)}>
+                {focusReport ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+              </Button>
+            )}
           </div>
           <TabsContent value="report" className="flex min-h-0 flex-1 flex-col">
             {cur?.status === "failed"

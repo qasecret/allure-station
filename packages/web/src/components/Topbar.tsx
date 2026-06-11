@@ -17,7 +17,7 @@ export function Topbar({ title, actions }: { title: ReactNode; actions?: ReactNo
         </SheetContent>
       </Sheet>
       <div className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight">{title}</div>
-      <div className="flex w-full min-w-0 flex-wrap items-center gap-2 md:w-auto md:flex-nowrap md:shrink-0">{actions}</div>
+      {actions && <div className="flex w-full min-w-0 flex-wrap items-center gap-2 md:w-auto md:flex-nowrap md:shrink-0">{actions}</div>}
     </header>
   );
 }

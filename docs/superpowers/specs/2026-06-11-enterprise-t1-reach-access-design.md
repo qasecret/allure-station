@@ -29,7 +29,8 @@ actually broken on small screens and establishes the accessibility baseline.
   Sheet + `SidebarContent` already provide mobile navigation, theme, and sign-in on every page.
   Tier-1 work here is verification + small polish only: the sheet closes on navigation (the
   page's Topbar unmounts — confirm in the mobile e2e), the trigger keeps a proper `aria-label`,
-  and safe-area top padding (`pt-[env(safe-area-inset-top)]`) is added to the sticky header.
+  and safe-area top padding (`pt-[env(safe-area-inset-top)]`) is added to the sticky header
+  (deferred during execution — requires `viewport-fit=cover`; see design-system/allure-station/pages/app-shell.md).
   No `NavContent.tsx` or `MobileHeader.tsx` components are needed.
 - **Topbar overflow fix (`Topbar.tsx` + `Project.tsx`) — the real mobile bug:** below `md` the
   header becomes two rows: row 1 = hamburger + title (truncating), row 2 = the actions

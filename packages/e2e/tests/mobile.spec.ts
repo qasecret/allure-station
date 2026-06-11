@@ -96,7 +96,9 @@ test("mobile: drawer opens and topbar controls stay tappable", async ({ page }) 
   // The mobile drawer opens and exposes navigation links.
   await page.getByRole("button", { name: "Open menu" }).click();
   await expect(page.getByRole("link", { name: "Projects" })).toBeVisible();
-  await page.keyboard.press("Escape");
-  // After close the nav drawer's Projects link (scoped to the Sheet dialog) is hidden.
-  await expect(page.getByRole("dialog").getByRole("link", { name: "Projects" })).toBeHidden();
+  // Click the Projects link — the navigation should close the drawer.
+  await page.getByRole("dialog").getByRole("link", { name: "Projects" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  // After navigating, the drawer dialog should be hidden.
+  await expect(page.getByRole("dialog")).toBeHidden();
 });

@@ -38,7 +38,7 @@ export function Projects() {
           </div>
 
           {isLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[104px] rounded-xl" />)}
             </div>
           ) : items.length === 0 ? (
@@ -47,7 +47,7 @@ export function Projects() {
               description={q ? "Try a different search." : "Create a project, then push results from CI."}
               action={!q ? <NewProjectDialog /> : undefined} />
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {items.map((p) => <ProjectCard key={p.id} p={p} />)}
             </div>
           )}

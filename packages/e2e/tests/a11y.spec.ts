@@ -6,9 +6,10 @@ import AxeBuilder from "@axe-core/playwright";
 // Users/Audit pages join the scan when an authed e2e fixture exists.
 // KNOWN DEBT (deferred to the polish sub-project): teal-as-TEXT usages (text-primary links,
 // text-status-pass) are ~2.5:1 on light backgrounds and will fail this gate once a scanned
-// page renders them (scans currently cover empty-state pages only). Fix shape: a darker
+// page renders them (e.g. a project page with runs). Fix shape: a darker
 // text-safe teal token for text/links, separate from the brand fill.
 async function expectNoSeriousViolations(page: Page, label: string) {
+  await page.mouse.move(0, 0);
   const results = await new AxeBuilder({ page })
     .exclude('iframe[title="report"]')
     .analyze();
