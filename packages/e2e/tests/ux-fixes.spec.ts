@@ -47,12 +47,15 @@ async function uploadResults(
   await expect(page.getByLabel("Allure result files")).toHaveCount(0, { timeout: 10_000 });
 }
 
-/** Wait for the run table to show a "Ready" status badge (polls the Runs tab). */
+/** Wait for the run table to show a "Ready" status badge (polls the Runs tab).
+ *  Uses visible=true to avoid matching the hidden mobile card list at desktop viewport.
+ */
 async function waitForReady(page: Page) {
   // The Runs tab auto-refreshes every 5 s while generating; we wait up to 60 s.
   // Use the badge inside the TabsContent for "runs" to avoid matching the filter chip or RunSelector.
+  // locator("visible=true") scopes to only DOM-visible copies, skipping sm:hidden mobile cards.
   await expect(
-    page.getByRole("tabpanel").getByText("Ready", { exact: true }).first()
+    page.getByRole("tabpanel").getByText("Ready", { exact: true }).locator("visible=true").first()
   ).toBeVisible({ timeout: 60_000 });
 }
 
@@ -62,14 +65,16 @@ test("ux fix pack: name, metadata, runs tab, deep link, delete, trend hint", asy
 
   await page.goto("/");
 
-  // ① Create project with a display name.
+  // ① Create project with a display name — unique per run to prevent strict-mode
+  //   duplicates on unwiped .e2e-data (re-run isolation).
   const id = `ux-e2e-${Date.now()}`;
-  await createProject(page, id, "UX E2E");
+  const name = `UX E2E ${Date.now()}`;
+  await createProject(page, id, name);
   // The card should show the display name prominently.
-  await expect(page.getByText("UX E2E")).toBeVisible();
+  await expect(page.getByText(name)).toBeVisible();
 
   // Navigate to the project page.
-  await page.getByText("UX E2E").click();
+  await page.getByText(name).click();
 
   // ⑤ Trend empty-state before any runs.
   await expect(
@@ -89,7 +94,8 @@ test("ux fix pack: name, metadata, runs tab, deep link, delete, trend hint", asy
   await expect(page.getByRole("cell", { name: /main@e2e1234/ })).toBeVisible();
 
   // ⑥ Click "Open" — switches to Report tab and sets ?run= in the URL.
-  await page.getByRole("button", { name: "Open" }).first().click();
+  // locator("visible=true") avoids the hidden mobile RowActions buttons.
+  await page.getByRole("button", { name: "Open" }).locator("visible=true").first().click();
   await expect(page).toHaveURL(/run=/);
 
   // ⑦ Deep-link restore: capture the URL, navigate away, then navigate back and verify.
@@ -99,14 +105,15 @@ test("ux fix pack: name, metadata, runs tab, deep link, delete, trend hint", asy
   // The URL should still carry the ?run= param.
   await expect(page).toHaveURL(/run=/);
   // The branch chip for the run we opened should be visible again.
-  await expect(page.getByText(/main@e2e1234/).first()).toBeVisible();
+  await expect(page.getByText(/main@e2e1234/).locator("visible=true").first()).toBeVisible();
 
   // Re-acquire the Runs tab locator after the page reload.
   // ② Delete the run from the Runs tab.
   await page.getByRole("tab", { name: "Runs" }).click();
-  await page.getByRole("button", { name: "Delete" }).first().click();
+  // locator("visible=true") avoids the hidden mobile RowActions buttons.
+  await page.getByRole("button", { name: "Delete" }).locator("visible=true").first().click();
   // Confirm the deletion in the dialog.
   await page.getByRole("button", { name: "Delete run" }).click();
   // The table should now be empty.
-  await expect(page.getByText(/No runs/)).toBeVisible();
+  await expect(page.getByText(/No runs/).locator("visible=true").first()).toBeVisible();
 });

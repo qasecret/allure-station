@@ -27,9 +27,11 @@ async function createProjectWithRun(page: Page, id: string) {
   // Wait for the dialog to close.
   await expect(page.getByLabel("Allure result files")).toHaveCount(0, { timeout: 10_000 });
   // Switch to the Runs tab and wait for the run to reach "Ready".
+  // locator("visible=true") is explicit about matching only visible nodes even though at
+  // 375 px the desktop table is hidden — keeps the assertion honest at any viewport.
   await page.getByRole("tab", { name: "Runs" }).click();
   await expect(
-    page.getByRole("tabpanel").getByText("Ready", { exact: true }).first()
+    page.getByRole("tabpanel").getByText("Ready", { exact: true }).locator("visible=true").first()
   ).toBeVisible({ timeout: 60_000 });
 }
 
@@ -40,7 +42,9 @@ test("mobile: runs tab renders card rows with reachable actions", async ({ page 
   await createProjectWithRun(page, id);
   // createProjectWithRun already clicks the Runs tab and waits for Ready
   await expect(page.getByRole("table")).toBeHidden();           // table hidden below sm
-  const open = page.getByRole("button", { name: "Open" }).first();
+  // locator("visible=true") ensures we get the mobile card's Open button, not the
+  // hidden desktop table's button (which also appears in the DOM at 375 px).
+  const open = page.getByRole("button", { name: "Open" }).locator("visible=true").first();
   await expect(open).toBeVisible();
   const box = await open.boundingBox();
   expect(box!.x + box!.width).toBeLessThanOrEqual(375);          // action on screen, not behind scroll
