@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import type { Run, RunStatus } from "@allure-station/shared";
 import { api } from "@/main";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -13,6 +14,23 @@ const PAGE = 20;
 const FILTERS: Array<{ label: string; value?: RunStatus }> = [
   { label: "all" }, { label: "ready", value: "ready" }, { label: "failed", value: "failed" }, { label: "generating", value: "generating" },
 ];
+
+type SortKey = "createdAt" | "duration" | "status";
+type SortOrder = "asc" | "desc";
+
+// Cycle: desc → asc → default (remove sort)
+function nextSort(current: SortKey | null, order: SortOrder | null, key: SortKey): { sortKey: SortKey | null; order: SortOrder | null } {
+  if (current !== key) return { sortKey: key, order: "desc" };
+  if (order === "desc") return { sortKey: key, order: "asc" };
+  return { sortKey: null, order: null }; // third click: reset
+}
+
+function SortIcon({ active, order }: { active: boolean; order: SortOrder | null }) {
+  if (!active) return <ChevronsUpDown className="ml-1 inline h-3 w-3 opacity-50" aria-hidden />;
+  return order === "asc"
+    ? <ChevronUp className="ml-1 inline h-3 w-3" aria-hidden />
+    : <ChevronDown className="ml-1 inline h-3 w-3" aria-hidden />;
+}
 
 function GateMark({ verdict }: { verdict: { passed: boolean; reasons: string[] } | null }) {
   if (!verdict) return <span aria-hidden className="text-muted-foreground">—</span>;
@@ -47,10 +65,24 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
   const [status, setStatus] = useState<RunStatus | undefined>(undefined);
   const [page, setPage] = useState(0);
   const [confirming, setConfirming] = useState<Run | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder | null>(null);
+
+  const handleSort = (key: SortKey) => {
+    const next = nextSort(sortKey, sortOrder, key);
+    setSortKey(next.sortKey);
+    setSortOrder(next.order);
+    setPage(0);
+  };
 
   const { data } = useQuery({
-    queryKey: ["runs-page", projectId, status ?? "all", page],
-    queryFn: () => api.listRunsWithTotal(projectId, { status, limit: PAGE, offset: page * PAGE }),
+    queryKey: ["runs-page", projectId, status ?? "all", page, sortKey ?? "createdAt", sortOrder ?? "desc"],
+    queryFn: () => api.listRunsWithTotal(projectId, {
+      status,
+      limit: PAGE,
+      offset: page * PAGE,
+      ...(sortKey ? { sort: sortKey, order: sortOrder ?? "desc" } : {}),
+    }),
     placeholderData: keepPreviousData,
   });
   const { data: gate } = useQuery({ queryKey: ["quality-gate", projectId], queryFn: () => api.getQualityGate(projectId), retry: false });
@@ -80,6 +112,27 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
   const pages = Math.max(1, Math.ceil(total / PAGE));
 
   useEffect(() => { if (page >= pages) setPage(pages - 1); }, [page, pages]);
+
+  const SortTh = ({ label, sortable }: { label: string; sortable: SortKey }) => {
+    const active = sortKey === sortable;
+    return (
+      <th
+        scope="col"
+        className="p-2"
+        aria-sort={active ? (sortOrder === "asc" ? "ascending" : "descending") : undefined}
+      >
+        <button
+          type="button"
+          className="flex items-center whitespace-nowrap font-medium hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => handleSort(sortable)}
+          aria-label={`Sort by ${label}`}
+        >
+          {label}
+          <SortIcon active={active} order={active ? sortOrder : null} />
+        </button>
+      </th>
+    );
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -122,9 +175,14 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
         <table className="w-full text-sm">
           <thead className="text-left text-muted-foreground">
             <tr className="border-b">
-              <th scope="col" className="p-2">Status</th><th scope="col" className="p-2">Result</th><th scope="col" className="p-2">Gate</th>
-              <th scope="col" className="p-2">Branch</th><th scope="col" className="p-2">Env</th><th scope="col" className="p-2">Duration</th>
-              <th scope="col" className="p-2">Age</th><th scope="col" className="p-2"><span className="sr-only">Actions</span></th>
+              <th scope="col" className="p-2">Status</th>
+              <th scope="col" className="p-2">Result</th>
+              <th scope="col" className="p-2">Gate</th>
+              <th scope="col" className="p-2">Branch</th>
+              <th scope="col" className="p-2">Env</th>
+              <SortTh label="Duration" sortable="duration" />
+              <SortTh label="Age" sortable="createdAt" />
+              <th scope="col" className="p-2"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>

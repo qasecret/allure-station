@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import type { GlobalRole } from "@allure-station/shared";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
@@ -11,6 +12,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+type UserSortKey = "email" | "role";
+type SortOrder = "asc" | "desc";
+
+function nextSort(current: UserSortKey | null, order: SortOrder | null, key: UserSortKey): { sortKey: UserSortKey | null; order: SortOrder | null } {
+  if (current !== key) return { sortKey: key, order: "asc" };
+  if (order === "asc") return { sortKey: key, order: "desc" };
+  return { sortKey: null, order: null };
+}
+
+function SortIcon({ active, order }: { active: boolean; order: SortOrder | null }) {
+  if (!active) return <ChevronsUpDown className="ml-1 inline h-3 w-3 opacity-50" aria-hidden />;
+  return order === "asc"
+    ? <ChevronUp className="ml-1 inline h-3 w-3" aria-hidden />
+    : <ChevronDown className="ml-1 inline h-3 w-3" aria-hidden />;
+}
+
 export function Users() {
   const { user, isLoading } = useAuth();
   const qc = useQueryClient();
@@ -18,8 +35,27 @@ export function Users() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<GlobalRole>("user");
   const [error, setError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<UserSortKey | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder | null>(null);
 
-  const { data: users = [] } = useQuery({ queryKey: ["users"], queryFn: () => api.listUsers(), enabled: user?.role === "admin" });
+  const { data: rawUsers = [] } = useQuery({ queryKey: ["users"], queryFn: () => api.listUsers(), enabled: user?.role === "admin" });
+
+  const users = useMemo(() => {
+    if (!sortKey) return rawUsers;
+    return [...rawUsers].sort((a, b) => {
+      const av = sortKey === "email" ? a.email : a.role;
+      const bv = sortKey === "email" ? b.email : b.role;
+      const cmp = av.localeCompare(bv);
+      return sortOrder === "desc" ? -cmp : cmp;
+    });
+  }, [rawUsers, sortKey, sortOrder]);
+
+  const handleSort = (key: UserSortKey) => {
+    const next = nextSort(sortKey, sortOrder, key);
+    setSortKey(next.sortKey);
+    setSortOrder(next.order);
+  };
+
   const create = useMutation({
     mutationFn: () => api.createUser(email, password, role),
     onSuccess: () => { setEmail(""); setPassword(""); setError(null); qc.invalidateQueries({ queryKey: ["users"] }); },
@@ -32,6 +68,26 @@ export function Users() {
 
   if (isLoading) return null;
   if (user?.role !== "admin") return (<><Topbar title="Users" /><main className="grid flex-1 place-items-center p-6"><p className="text-sm text-muted-foreground">Admins only.</p></main></>);
+
+  const SortTh = ({ label, sortable, className }: { label: string; sortable: UserSortKey; className?: string }) => {
+    const active = sortKey === sortable;
+    return (
+      <TableHead
+        className={className}
+        aria-sort={active ? (sortOrder === "asc" ? "ascending" : "descending") : undefined}
+      >
+        <button
+          type="button"
+          className="flex items-center whitespace-nowrap font-medium hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => handleSort(sortable)}
+          aria-label={`Sort by ${label}`}
+        >
+          {label}
+          <SortIcon active={active} order={active ? sortOrder : null} />
+        </button>
+      </TableHead>
+    );
+  };
 
   return (
     <>
@@ -69,7 +125,13 @@ export function Users() {
               {/* Desktop table — hidden below sm */}
               <div className="hidden sm:block">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead /></TableRow></TableHeader>
+                  <TableHeader>
+                    <TableRow>
+                      <SortTh label="Email" sortable="email" />
+                      <SortTh label="Role" sortable="role" />
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
                     {users.map((u) => (
                       <TableRow key={u.id}>

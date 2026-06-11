@@ -43,8 +43,8 @@ export interface ApiClient {
   listUsers(): Promise<User[]>;
   createUser(email: string, password: string, role: GlobalRole): Promise<User>;
   deleteUser(id: string): Promise<void>;
-  listAudit(opts?: { limit?: number; offset?: number }): Promise<{ items: AuditEntry[]; total: number }>;
-  listProjectAudit(projectId: string, opts?: { limit?: number; offset?: number }): Promise<{ items: AuditEntry[]; total: number }>;
+  listAudit(opts?: { limit?: number; offset?: number; action?: string; actor?: string; from?: string; to?: string }): Promise<{ items: AuditEntry[]; total: number }>;
+  listProjectAudit(projectId: string, opts?: { limit?: number; offset?: number; action?: string; actor?: string; from?: string; to?: string }): Promise<{ items: AuditEntry[]; total: number }>;
   getQualityGate(projectId: string): Promise<QualityGateConfig>;
   setQualityGate(projectId: string, cfg: QualityGateConfig): Promise<QualityGateConfig>;
   listTokens(projectId: string): Promise<ApiToken[]>;

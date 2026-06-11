@@ -257,4 +257,25 @@ describe("api client", () => {
     const o = await c.getOverview();
     expect(o.runsLast24h).toBe(2);
   });
+
+  it("listAudit passes action/actor/from/to filter params as query string", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, headers: headers({ "X-Total-Count": "1" }), json: async () => [] });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.listAudit({ action: "project_renamed", actor: "admin@", from: "2026-06-01T00:00:00.000Z", to: "2026-06-11T23:59:59.999Z" });
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("action=project_renamed");
+    expect(url).toContain("actor=admin%40");
+    expect(url).toContain("from=");
+    expect(url).toContain("to=");
+  });
+
+  it("listProjectAudit passes filter params as query string", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, headers: headers(), json: async () => [] });
+    const client = createClient("/api", fetchMock as unknown as typeof fetch);
+    await client.listProjectAudit("p", { action: "run_deleted", actor: "bot" });
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("/api/projects/p/audit");
+    expect(url).toContain("action=run_deleted");
+    expect(url).toContain("actor=bot");
+  });
 });

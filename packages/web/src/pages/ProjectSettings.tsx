@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ProjectRole, CreatedToken, NotificationKind, NotificationTrigger } from "@allure-station/shared";
 import { relativeTime } from "@/lib/format";
+import { describeAuditEntry } from "@/lib/audit-format";
+import { AuditFilterBar } from "@/components/AuditFilterBar";
+import type { AuditFilters } from "@/components/AuditFilterBar";
 import { toast } from "sonner";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
@@ -243,21 +246,40 @@ function MembersCard({ projectId, members }: { projectId: string; members: { use
 }
 
 function AuditCard({ projectId, enabled }: { projectId: string; enabled: boolean }) {
+  const [filters, setFilters] = useState<AuditFilters>({});
+
+  const queryOpts = {
+    limit: 50,
+    ...(filters.action ? { action: filters.action } : {}),
+    ...(filters.actor ? { actor: filters.actor } : {}),
+    ...(filters.from ? { from: filters.from } : {}),
+    ...(filters.to ? { to: filters.to } : {}),
+  };
+
   const { data } = useQuery({
-    queryKey: ["project-audit", projectId], queryFn: () => api.listProjectAudit(projectId, { limit: 50 }), retry: false, enabled,
+    queryKey: ["project-audit", projectId, filters.action, filters.actor, filters.from, filters.to],
+    queryFn: () => api.listProjectAudit(projectId, queryOpts),
+    retry: false,
+    enabled,
   });
   if (data === undefined) return null;
   return (
     <Card>
       <CardHeader><CardTitle>Audit ({data.total})</CardTitle></CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
+        <AuditFilterBar filters={filters} onChange={setFilters} />
         {data.items.length === 0 ? <p className="text-sm text-muted-foreground">No events yet.</p> : (
           <ul className="max-h-64 space-y-1 overflow-auto text-sm">
             {data.items.map((e) => (
               <li key={e.id}>
                 <span className="text-muted-foreground">{new Date(e.at).toLocaleString()}</span>{" "}
-                <span className="font-medium">{e.action}</span> by {e.actorLabel}
-                {e.metadata ? <span className="text-muted-foreground"> {JSON.stringify(e.metadata)}</span> : null}
+                <span className="font-medium">{describeAuditEntry(e)}</span>
+                {e.metadata ? (
+                  <details className="inline ml-1">
+                    <summary className="cursor-pointer text-xs text-muted-foreground">Details</summary>
+                    <pre className="mt-1 max-h-20 overflow-auto rounded bg-muted p-1 text-[10px]">{JSON.stringify(e.metadata, null, 2)}</pre>
+                  </details>
+                ) : null}
               </li>
             ))}
           </ul>
