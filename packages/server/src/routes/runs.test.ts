@@ -149,3 +149,44 @@ describe("DELETE run", () => {
     await app.close();
   });
 });
+
+describe("DELETE run — private-project existence-tell fix (A1)", () => {
+  it("anonymous DELETE on a run in a private project returns 404", async () => {
+    const deps = await makeTestDeps();
+    await deps.users.create("admin@x.com", await hashPassword("password123"), "admin", deps.now());
+    const app = buildApp(deps);
+
+    // Log in as admin to set up the project and run
+    const adminLogin = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@x.com", password: "password123" } });
+    const adminCookie = adminLogin.cookies.find((c) => c.name === "as_session")!.value;
+
+    await deps.projects.create("secret", deps.now());
+    await deps.projects.setVisibility("secret", "private");
+    await deps.runs.create("secret", "r1", "R", "2026-06-10T00:00:01.000Z");
+
+    // Anonymous DELETE must return 404 — 401 would reveal the project exists
+    const res = await app.inject({ method: "DELETE", url: "/api/projects/secret/runs/r1" });
+    expect(res.statusCode).toBe(404);
+
+    // Admin can still delete it successfully
+    const adminRes = await app.inject({ method: "DELETE", url: "/api/projects/secret/runs/r1", cookies: { as_session: adminCookie } });
+    expect(adminRes.statusCode).toBe(204);
+
+    await app.close();
+  });
+
+  it("anonymous DELETE on a run in a public project returns 401", async () => {
+    const deps = await makeTestDeps();
+    await deps.users.create("admin@x.com", await hashPassword("password123"), "admin", deps.now());
+    const app = buildApp(deps);
+
+    await deps.projects.create("open", deps.now());
+    // public visibility (default) — unauthorized should get 401
+    await deps.runs.create("open", "r1", "R", "2026-06-10T00:00:01.000Z");
+
+    const res = await app.inject({ method: "DELETE", url: "/api/projects/open/runs/r1" });
+    expect(res.statusCode).toBe(401);
+
+    await app.close();
+  });
+});

@@ -217,17 +217,25 @@ export const projectSchema = z.object({
   latestRunId: z.string().nullable(),
   // public = readable by anyone; private = reads require viewer+ / admin / project token.
   visibility: projectVisibilitySchema.default("public"),
+  // Effective write permission for the caller. Optional — only the single-project GET (/projects/:id)
+  // sets it; list responses leave it absent to avoid N×auth lookups per page.
+  canWrite: z.boolean().optional(),
 });
 
 // Pushed to the UI over SSE on every run lifecycle transition (created/generating/ready/failed).
 // `deleted: true` signals that the run has been hard-deleted so live UIs can remove it rather
 // than upserting a stale row (the SSE handler upserts all other events).
+//
+// .passthrough() is intentional: during a rolling deploy an OLD replica re-validates events
+// published by a NEWER replica. Strip-mode (the zod default) would silently drop unknown fields
+// added in the newer version; passthrough ensures those fields survive the round-trip so the
+// event bus never narrows the schema on the forwarding path.
 export const runEventSchema = z.object({
   type: z.literal("run"),
   projectId: z.string(),
   run: runSchema,
   deleted: z.boolean().optional(),
-});
+}).passthrough();
 
 // API token as shown to clients (never includes the hash or plaintext).
 export const apiTokenSchema = z.object({

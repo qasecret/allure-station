@@ -1,7 +1,21 @@
 import { describe, it, expect } from "vitest";
+import type { FastifyInstance } from "fastify";
 import { buildApp } from "../app.js";
 import { makeTestDeps } from "../test-helpers.js";
+import { hashPassword } from "../password.js";
 import type { AuditEntry } from "@allure-station/shared";
+import type { AppDeps } from "../app.js";
+
+async function seedUsers(deps: AppDeps) {
+  await deps.users.create("admin@x.com", await hashPassword("password123"), "admin", deps.now());
+  await deps.users.create("maintainer@x.com", await hashPassword("password123"), "user", deps.now());
+  await deps.users.create("viewer@x.com", await hashPassword("password123"), "user", deps.now());
+  await deps.users.create("anon@x.com", await hashPassword("password123"), "user", deps.now());
+}
+async function loginAs(app: FastifyInstance, email: string): Promise<string> {
+  const res = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email, password: "password123" } });
+  return res.cookies.find((c) => c.name === "as_session")!.value;
+}
 
 describe("project routes", () => {
   it("creates, lists, gets and deletes a project", async () => {
@@ -84,6 +98,98 @@ describe("project display name", () => {
     expect((await app.inject({ method: "PATCH", url: "/api/projects/nope", payload: { displayName: "x" } })).statusCode).toBe(404);
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
     expect((await app.inject({ method: "PATCH", url: "/api/projects/p", payload: { displayName: "x".repeat(121) } })).statusCode).toBe(400);
+    await app.close();
+  });
+});
+
+describe("PATCH /projects/:id — private-project existence-tell fix (A1)", () => {
+  it("anonymous PATCH on a private project returns 404 (not 401)", async () => {
+    const deps = await makeTestDeps();
+    await seedUsers(deps);
+    const app = buildApp(deps);
+    const adminCookie = await loginAs(app, "admin@x.com");
+
+    // Create and make private (only accessible to admin)
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "secret" }, cookies: { as_session: adminCookie } });
+    await app.inject({ method: "PUT", url: "/api/projects/secret/visibility", payload: { visibility: "private" }, cookies: { as_session: adminCookie } });
+
+    // Anonymous PATCH must return 404 — 401 would reveal the project exists
+    const res = await app.inject({ method: "PATCH", url: "/api/projects/secret", payload: { displayName: "leaked" } });
+    expect(res.statusCode).toBe(404);
+
+    await app.close();
+  });
+
+  it("anonymous PATCH on a public project returns 401 (not 404)", async () => {
+    const deps = await makeTestDeps();
+    await seedUsers(deps);
+    const app = buildApp(deps);
+    const adminCookie = await loginAs(app, "admin@x.com");
+
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "open" }, cookies: { as_session: adminCookie } });
+    // public visibility (default) — unauthorized should get 401
+    const res = await app.inject({ method: "PATCH", url: "/api/projects/open", payload: { displayName: "x" } });
+    expect(res.statusCode).toBe(401);
+
+    await app.close();
+  });
+});
+
+describe("GET /projects/:id — canWrite field (A3)", () => {
+  it("open mode: anonymous gets canWrite=true", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
+
+    const res = await app.inject({ method: "GET", url: "/api/projects/p" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().canWrite).toBe(true);
+    await app.close();
+  });
+
+  it("security on: anonymous on public project gets canWrite=false", async () => {
+    const deps = await makeTestDeps();
+    await seedUsers(deps);
+    const app = buildApp(deps);
+    const adminCookie = await loginAs(app, "admin@x.com");
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" }, cookies: { as_session: adminCookie } });
+
+    const res = await app.inject({ method: "GET", url: "/api/projects/p" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().canWrite).toBe(false);
+    await app.close();
+  });
+
+  it("admin gets canWrite=true", async () => {
+    const deps = await makeTestDeps();
+    await seedUsers(deps);
+    const app = buildApp(deps);
+    const adminCookie = await loginAs(app, "admin@x.com");
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" }, cookies: { as_session: adminCookie } });
+
+    const res = await app.inject({ method: "GET", url: "/api/projects/p", cookies: { as_session: adminCookie } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().canWrite).toBe(true);
+    await app.close();
+  });
+
+  it("viewer member gets canWrite=false; maintainer member gets canWrite=true", async () => {
+    const deps = await makeTestDeps();
+    await seedUsers(deps);
+    const app = buildApp(deps);
+    const adminCookie = await loginAs(app, "admin@x.com");
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" }, cookies: { as_session: adminCookie } });
+    await app.inject({ method: "PUT", url: "/api/projects/p/members", payload: { email: "viewer@x.com", role: "viewer" }, cookies: { as_session: adminCookie } });
+    await app.inject({ method: "PUT", url: "/api/projects/p/members", payload: { email: "maintainer@x.com", role: "maintainer" }, cookies: { as_session: adminCookie } });
+
+    const viewerCookie = await loginAs(app, "viewer@x.com");
+    const viewerRes = await app.inject({ method: "GET", url: "/api/projects/p", cookies: { as_session: viewerCookie } });
+    expect(viewerRes.json().canWrite).toBe(false);
+
+    const maintainerCookie = await loginAs(app, "maintainer@x.com");
+    const maintainerRes = await app.inject({ method: "GET", url: "/api/projects/p", cookies: { as_session: maintainerCookie } });
+    expect(maintainerRes.json().canWrite).toBe(true);
+
     await app.close();
   });
 });

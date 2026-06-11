@@ -43,7 +43,14 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     const id = projectIdSchema.safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.code(400).send({ error: id.error.message });
     if (!(await readGate(deps, req, id.data))) return reply.code(404).send({ error: "not found" });
-    return deps.projects.get(id.data);
+    const project = await deps.projects.get(id.data);
+    // Resolve the caller's effective write permission so the UI can show the correct affordances.
+    // readGate may have already authenticated internally (private projects), but it doesn't surface
+    // the principal — authenticating again is cheap (session cookie / token lookup is cached by
+    // the DB, not re-hashed) and keeps the read-gate contract simple.
+    const principal = await authenticate(deps, req);
+    const canWrite = (await authorizeProjectWrite(deps, principal, id.data)) !== "unauthorized";
+    return { ...project, canWrite };
   });
 
   app.delete("/projects/:id", async (req, reply) => {
@@ -66,12 +73,15 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
   // Rename (presentation-only display name; id is the immutable handle). Maintainer+/token/open.
   app.patch("/projects/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const existing = await deps.projects.get(id);
-    if (!existing) return reply.code(404).send({ error: "not found" });
     const principal = await authenticate(deps, req);
     if ((await authorizeProjectWrite(deps, principal, id)) === "unauthorized") {
-      return reply.code(401).send({ error: "unauthorized" });
+      const vis = await deps.projects.getVisibility(id);
+      // Private project existence must not be disclosed — return 404 so the response
+      // is indistinguishable from "project doesn't exist" for unauthorized callers.
+      return reply.code(vis?.visibility === "private" ? 404 : 401).send({ error: vis?.visibility === "private" ? "not found" : "unauthorized" });
     }
+    const existing = await deps.projects.get(id);
+    if (!existing) return reply.code(404).send({ error: "not found" });
     const parsed = updateProjectRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
     const displayName = parsed.data.displayName || null; // "" → null (clear)
