@@ -78,7 +78,7 @@
   }
 
   * { @apply border-border; }
-  body { @apply bg-background text-foreground; font-family: var(--font-sans); overflow-x: hidden; }
+  body { @apply bg-background text-foreground; font-family: var(--font-sans); }
 
   /* Keyboard focus fallback for links/nav (shadcn controls ring themselves). */
   a:focus-visible {

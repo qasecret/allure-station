@@ -211,7 +211,7 @@ export function Project() {
           {user && <Button variant="outline" size="icon" asChild aria-label="Project settings"><Link to={`/projects/${id}/settings`}><Settings className="size-4" /></Link></Button>}
         </>}
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
         {/* The latest completed run failed but isn't what we're showing (a prior ready report is) —
             surface it, since otherwise the failure + retry would be hidden behind the run selector. */}
         {latestDone?.status === "failed" && current !== latestDone.id && (
@@ -274,7 +274,7 @@ export function Project() {
                     src={withReportHash(`/api/projects/${id}/runs/${current}/report/index.html`, current === initialDeepLink.current?.runId ? initialDeepLink.current.hash : null)} />
                 : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use "Upload & generate" to create the first report.'} />}
           </TabsContent>
-          <TabsContent value="runs" className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <TabsContent value="runs" className="flex min-h-0 flex-1 flex-col">
             <RunsTable projectId={id} canWrite={canWrite} onOpenRun={(runId) => { setSelectedRun(runId); setTab("report"); }} />
           </TabsContent>
         </Tabs>

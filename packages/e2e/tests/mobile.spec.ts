@@ -9,15 +9,15 @@ const FIXTURE = resolve(here, "../fixtures/00000000-0000-0000-0000-000000000001-
 test.use({ viewport: { width: 375, height: 812 } });
 
 /** Create a project, upload fixture, wait for Ready. Mirrors ux-fixes.spec.ts helper style. */
-async function createProjectWithRun(page: Page) {
+async function createProjectWithRun(page: Page, id: string) {
   await page.goto("/");
   await page.getByRole("button", { name: "New project" }).first().click();
-  await page.getByLabel("Project id").fill("mobile-e2e");
+  await page.getByLabel("Project id").fill(id);
   await page.getByRole("button", { name: "Create" }).click();
   // Wait for the dialog to close.
   await expect(page.getByRole("button", { name: "Create" })).toHaveCount(0);
   // Navigate to the newly-created project.
-  await page.getByText("mobile-e2e").first().click();
+  await page.getByText(id).first().click();
   // Open the Upload dialog via the trigger button.
   await page.getByRole("button", { name: /Upload/ }).first().click();
   // Set the fixture file on the labelled file input.
@@ -33,10 +33,11 @@ async function createProjectWithRun(page: Page) {
   ).toBeVisible({ timeout: 60_000 });
 }
 
-test("mobile: drawer navigates and topbar controls stay tappable", async ({ page }) => {
+test("mobile: drawer opens and topbar controls stay tappable", async ({ page }) => {
   test.setTimeout(120_000);
 
-  await createProjectWithRun(page);
+  const id = `mobile-e2e-${Date.now()}`;
+  await createProjectWithRun(page, id);
 
   // Every topbar control must be fully inside the 375 px viewport.
   for (const name of ["Open menu", /Upload/] as const) {
@@ -51,17 +52,20 @@ test("mobile: drawer navigates and topbar controls stay tappable", async ({ page
   const selector = page.getByLabel("Select run to view");
   const sbox = await selector.boundingBox();
   expect(sbox, "run selector should be on screen").not.toBeNull();
+  expect(sbox!.x).toBeGreaterThanOrEqual(0);
   expect(sbox!.x + sbox!.width).toBeLessThanOrEqual(375);
 
-  // No horizontal page overflow — body.scrollWidth is the authoritative measure;
-  // documentElement.scrollWidth can be inflated by overflow:auto scroll containers (Chromium quirk).
-  const overflow = await page.evaluate(
-    () => document.body.scrollWidth - window.innerWidth
-  );
+  // No horizontal page overflow. Strict check across both metrics: with the runs-table scroll
+  // wrapper positioned (relative), absolutely-positioned descendants (e.g. sr-only spans) are
+  // clipped by it, so documentElement.scrollWidth stays honest too.
+  const overflow = await page.evaluate(() =>
+    Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 
   // The mobile drawer opens and exposes navigation links.
   await page.getByRole("button", { name: "Open menu" }).click();
   await expect(page.getByRole("link", { name: "Projects" })).toBeVisible();
   await page.keyboard.press("Escape");
+  // After close the nav drawer's Projects link (scoped to the Sheet dialog) is hidden.
+  await expect(page.getByRole("dialog").getByRole("link", { name: "Projects" })).toBeHidden();
 });
