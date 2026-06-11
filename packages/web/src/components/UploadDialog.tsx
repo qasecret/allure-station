@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { local } from "@/lib/storage";
 
 const META_KEYS = ["branch", "commit", "environment", "ciUrl"] as const;
 type Meta = Record<(typeof META_KEYS)[number], string>;
@@ -17,7 +18,7 @@ const PERSISTED_KEYS = ["branch", "environment"] as const;
 const storageKey = (projectId: string) => `upload-meta:${projectId}`;
 const loadMeta = (projectId: string): Meta => {
   try {
-    const parsed = JSON.parse(localStorage.getItem(storageKey(projectId)) ?? "{}") as Record<string, unknown>;
+    const parsed = JSON.parse(local.get(storageKey(projectId)) ?? "{}") as Record<string, unknown>;
     // Only restore the persisted subset; commit and ciUrl always start blank.
     return Object.fromEntries(
       META_KEYS.map((k) => [k, PERSISTED_KEYS.includes(k as (typeof PERSISTED_KEYS)[number]) && typeof parsed[k] === "string" ? parsed[k] : ""])
@@ -41,10 +42,10 @@ export function UploadDialog({ projectId }: { projectId: string }) {
       await api.generate(projectId);
     },
     onSuccess: () => {
-      try {
+      {
         const persisted = Object.fromEntries(PERSISTED_KEYS.map((k) => [k, meta[k]]));
-        localStorage.setItem(storageKey(projectId), JSON.stringify(persisted));
-      } catch { /* private mode / storage full */ }
+        local.set(storageKey(projectId), JSON.stringify(persisted));
+      }
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["runs", projectId] });
       qc.invalidateQueries({ queryKey: ["trends", projectId] });

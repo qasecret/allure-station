@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { barGeometry, xAxisLabels } from "@/lib/trend-geometry";
 import { formatDurationSec, relativeTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { session } from "@/lib/storage";
 import type { TrendPoint } from "@allure-station/shared";
 
 const WINDOWS = [10, 30, 100] as const;
@@ -15,13 +16,11 @@ function storageKey(projectId: string) {
 }
 
 function readWindow(projectId: string): Window {
-  try {
-    const stored = sessionStorage.getItem(storageKey(projectId));
-    if (stored !== null) {
-      const n = Number(stored);
-      if ((WINDOWS as readonly number[]).includes(n)) return n as Window;
-    }
-  } catch { /* ignore */ }
+  const stored = session.get(storageKey(projectId));
+  if (stored !== null) {
+    const n = Number(stored);
+    if ((WINDOWS as readonly number[]).includes(n)) return n as Window;
+  }
   return 30;
 }
 
@@ -350,9 +349,11 @@ function TrendChartInner({ points, onSelectRun }: TrendChartInnerProps) {
 export interface TrendChartProps {
   projectId: string;
   onSelectRun: (id: string) => void;
+  /** When true the chart polls every 5s so it self-heals once a generating run becomes ready. */
+  pollWhileGenerating?: boolean;
 }
 
-export function TrendChart({ projectId, onSelectRun }: TrendChartProps) {
+export function TrendChart({ projectId, onSelectRun, pollWhileGenerating }: TrendChartProps) {
   const [limit, setLimit] = useState<Window>(() => readWindow(projectId));
 
   // Reset when project changes
@@ -363,11 +364,12 @@ export function TrendChart({ projectId, onSelectRun }: TrendChartProps) {
   const { data: points = [] } = useQuery({
     queryKey: ["trends", projectId, limit],
     queryFn: () => api.listTrends(projectId, limit),
+    refetchInterval: pollWhileGenerating ? 5000 : false,
   });
 
   const handleWindowChange = (w: Window) => {
     setLimit(w);
-    try { sessionStorage.setItem(storageKey(projectId), String(w)); } catch { /* ignore */ }
+    session.set(storageKey(projectId), String(w));
   };
 
   const hasEnoughData = points.length >= 2;

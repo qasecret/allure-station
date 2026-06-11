@@ -13,15 +13,20 @@ import { Badge } from "@/components/ui/badge";
 export function ProjectCard({ p }: { p: ProjectListItem }) {
   const [hovered, setHovered] = useState(false);
 
+  // The last ready run is the source-of-truth for visual health (donut, pass line, gate chip).
+  // Falls back to latestRun only when it's already "ready" so newly-created projects still show.
+  // The status/time line still uses latestRun so freshness ("generating · 1m ago") is honest.
+  const healthRun = p.lastReadyRun ?? (p.latestRun?.status === "ready" ? p.latestRun : null);
+
   const { data: trendPts } = useQuery({
     queryKey: ["trends", p.id],
     queryFn: () => api.listTrends(p.id),
-    enabled: hovered && !!p.latestRun,
+    enabled: hovered && !!p.lastReadyRun,
     staleTime: 60_000,
   });
 
   const lr = p.latestRun;
-  const pct = lr?.stats ? passRate(lr.stats) : null;
+  const pct = healthRun?.stats ? passRate(healthRun.stats) : null;
   const series = trendPts ? trendPts.map((pt) => passRate(pt.stats)) : [];
 
   return (
@@ -37,12 +42,12 @@ export function ProjectCard({ p }: { p: ProjectListItem }) {
             <div className="flex items-center gap-2">
               <span className="truncate font-semibold group-hover:underline">{p.displayName ?? p.id}</span>
               {p.visibility === "private" && <Badge variant="secondary" className="text-xs">private</Badge>}
-              {lr?.gatePassed === false && (
+              {healthRun?.gatePassed === false && (
                 <Badge variant="outline" className="border-status-fail/40 text-status-fail-text text-xs">
                   <span role="img" aria-label="Gate failed" className="mr-0.5">✗</span>gate
                 </Badge>
               )}
-              {lr?.gatePassed === true && (
+              {healthRun?.gatePassed === true && (
                 <Badge variant="outline" className="border-status-pass/40 text-status-pass-text text-xs">
                   <span role="img" aria-label="Gate passed" className="mr-0.5">✓</span>gate
                 </Badge>
@@ -53,7 +58,7 @@ export function ProjectCard({ p }: { p: ProjectListItem }) {
               {!p.latestRunId
                 ? "No runs yet"
                 : lr
-                  ? <>{lr.stats ? `${lr.stats.passed}/${lr.stats.total} passed` : lr.status}{lr.createdAt ? ` · ${relativeTime(lr.createdAt)}` : ""}</>
+                  ? <>{healthRun?.stats ? `${healthRun.stats.passed}/${healthRun.stats.total} passed` : lr.status}{lr.createdAt ? ` · ${relativeTime(lr.createdAt)}` : ""}</>
                   : "No runs yet"}
             </p>
           </div>

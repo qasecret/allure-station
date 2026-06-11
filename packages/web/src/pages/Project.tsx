@@ -25,6 +25,7 @@ import { parseReportFragment, buildReportFragment, withReportHash } from "@/lib/
 import { failedReasons } from "@/lib/quality-gate-verdict";
 import { severityChipClass } from "@/lib/severity";
 import { RunsTable } from "@/components/RunsTable";
+import { session } from "@/lib/storage";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
 const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
@@ -265,7 +266,8 @@ export function Project() {
         <div className={cn("space-y-3", focusReport && tab === "report" && "hidden")}>
           <StatsRow current={cur ?? null} previous={prevReady ?? null} />
           <TrendCard projectId={id} onSelectRun={setSelectedRun}
-            readyRuns={runs.filter((r) => r.status === "ready")} />
+            readyRuns={runs.filter((r) => r.status === "ready")}
+            isGenerating={runs.some((r) => r.status === "generating")} />
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as "report" | "runs")} className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center justify-between">
@@ -394,23 +396,24 @@ function StatsRow({ current, previous }: { current: Run | null; previous: Run | 
 }
 
 /** Full-width trend card wrapping TrendChart + a collapsible Compare disclosure. */
-function TrendCard({ projectId, onSelectRun, readyRuns }: {
+function TrendCard({ projectId, onSelectRun, readyRuns, isGenerating }: {
   projectId: string;
   onSelectRun: (id: string) => void;
   readyRuns: Run[];
+  isGenerating?: boolean;
 }) {
   // Disclosure open state: default open when 2+ ready runs and no stored preference.
   const storageKey = `compare-open:${projectId}`;
   const defaultOpen = readyRuns.length >= 2;
   const [compareOpen, setCompareOpen] = useState<boolean>(() => {
-    const stored = sessionStorage.getItem(storageKey);
+    const stored = session.get(storageKey);
     if (stored !== null) return stored === "true";
     return defaultOpen;
   });
 
   // When the project changes, reset the disclosure to reflect the new project's preference.
   useEffect(() => {
-    const stored = sessionStorage.getItem(storageKey);
+    const stored = session.get(storageKey);
     if (stored !== null) {
       setCompareOpen(stored === "true");
     } else {
@@ -421,7 +424,7 @@ function TrendCard({ projectId, onSelectRun, readyRuns }: {
 
   // When readyRuns changes from <2 to >=2 and there's no stored preference, open by default.
   useEffect(() => {
-    const stored = sessionStorage.getItem(storageKey);
+    const stored = session.get(storageKey);
     if (stored === null && readyRuns.length >= 2) {
       setCompareOpen(true);
     }
@@ -432,7 +435,7 @@ function TrendCard({ projectId, onSelectRun, readyRuns }: {
     // Carry-over fix: early-return on no-op toggles (programmatic/SSR) to avoid polluting storage.
     if (open === compareOpen) return;
     setCompareOpen(open);
-    sessionStorage.setItem(storageKey, String(open));
+    session.set(storageKey, String(open));
   };
 
   return (
@@ -441,7 +444,7 @@ function TrendCard({ projectId, onSelectRun, readyRuns }: {
         <div className="flex items-center gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><TrendingUp className="size-5" /></span>
           <div className="flex-1 min-w-0">
-            <TrendChart projectId={projectId} onSelectRun={onSelectRun} />
+            <TrendChart projectId={projectId} onSelectRun={onSelectRun} pollWhileGenerating={isGenerating} />
           </div>
         </div>
         {readyRuns.length >= 2 && (

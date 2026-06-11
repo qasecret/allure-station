@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { auditActionSchema } from "@allure-station/shared";
 import type { AuditAction } from "@allure-station/shared";
 import { Input } from "@/components/ui/input";
@@ -18,29 +18,52 @@ interface AuditFilterBarProps {
 
 const ACTION_OPTIONS = auditActionSchema.options;
 
+/** Pad a date component to two digits. */
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Round-trip a stored ISO string back to a LOCAL-day "YYYY-MM-DD" value for <input type="date">.
+ *  Using .slice(0,10) would give the UTC date which can differ from the local date. */
+function isoToLocalDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** Reusable filter bar for global and per-project audit logs. */
 export function AuditFilterBar({ filters, onChange }: AuditFilterBarProps) {
   const actorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Latest filters captured at debounce-fire time — avoids stale closure over the actor callback.
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
+
+  // Local controlled state for the actor input (debounced upward).
+  const [actorLocal, setActorLocal] = useState(filters.actor ?? "");
+
+  // Sync the local actor state when the external filter value changes (e.g. parent reset).
+  useEffect(() => {
+    setActorLocal(filters.actor ?? "");
+  }, [filters.actor]);
+
+  // Clear the actor debounce timer on unmount to prevent calling onChange after the component is gone.
+  useEffect(() => () => clearTimeout(actorTimer.current ?? undefined), []);
 
   const setAction = useCallback(
     (val: string) => onChange({ ...filters, action: val === "__all__" ? "" : (val as AuditAction) }),
     [filters, onChange]
   );
 
-  const setActor = useCallback(
+  const handleActorChange = useCallback(
     (val: string) => {
+      setActorLocal(val);
       if (actorTimer.current) clearTimeout(actorTimer.current);
       actorTimer.current = setTimeout(() => {
+        // Read latest filters at fire time, not the stale captured closure.
         onChange({ ...filtersRef.current, actor: val || undefined });
       }, 300);
     },
     [onChange]
   );
-
-  // Clear the actor debounce timer on unmount to prevent calling onChange after the component is gone
-  useEffect(() => () => clearTimeout(actorTimer.current ?? undefined), []);
 
   const setFrom = useCallback(
     (val: string) => {
@@ -76,21 +99,21 @@ export function AuditFilterBar({ filters, onChange }: AuditFilterBarProps) {
       <Input
         aria-label="Filter by actor (email substring)"
         placeholder="Actor email…"
-        defaultValue={filters.actor ?? ""}
-        onChange={(e) => setActor(e.target.value)}
+        value={actorLocal}
+        onChange={(e) => handleActorChange(e.target.value)}
         className="w-[200px]"
       />
       <Input
         type="date"
         aria-label="From date"
-        defaultValue={filters.from ? filters.from.slice(0, 10) : ""}
+        value={filters.from ? isoToLocalDate(filters.from) : ""}
         onChange={(e) => setFrom(e.target.value)}
         className="w-[160px]"
       />
       <Input
         type="date"
         aria-label="To date"
-        defaultValue={filters.to ? filters.to.slice(0, 10) : ""}
+        value={filters.to ? isoToLocalDate(filters.to) : ""}
         onChange={(e) => setTo(e.target.value)}
         className="w-[160px]"
       />

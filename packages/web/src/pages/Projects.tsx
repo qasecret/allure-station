@@ -17,19 +17,24 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
 
+// Tile is hoisted to module scope so 30s polls can't remount it and drop keyboard focus
+// (same class as SortTh — stable identity = stable DOM node = preserved focus ring).
+function Tile({ label, value, accent, onClick }: { label: string; value: number; accent?: string; onClick?: () => void }) {
+  return (
+    <button type="button" disabled={!onClick} onClick={onClick}
+      className={cn("rounded-xl border bg-card p-3 text-left shadow-sm", onClick && "cursor-pointer hover:shadow-md")}>
+      <div className={cn("text-2xl font-semibold tabular-nums", accent)}>{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </button>
+  );
+}
+
 function OverviewStrip({ onTriage }: { onTriage: () => void }) {
   const { data } = useQuery({ queryKey: ["overview"], queryFn: () => api.getOverview(), refetchInterval: 30_000 });
   if (!data) return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[72px] rounded-xl" />)}
     </div>
-  );
-  const Tile = ({ label, value, accent, onClick }: { label: string; value: number; accent?: string; onClick?: () => void }) => (
-    <button type="button" disabled={!onClick} onClick={onClick}
-      className={cn("rounded-xl border bg-card p-3 text-left shadow-sm", onClick && "cursor-pointer hover:shadow-md")}>
-      <div className={cn("text-2xl font-semibold tabular-nums", accent)}>{value}</div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-    </button>
   );
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" role="group" aria-label="Instance status">
@@ -78,6 +83,7 @@ export function Projects() {
     queryKey: ["projects", q, page, sort],
     queryFn: () => api.listProjects({ q, sort, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
     placeholderData: keepPreviousData,
+    refetchInterval: 30_000, // match the overview strip so the two surfaces can't contradict
   });
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
