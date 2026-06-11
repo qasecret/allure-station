@@ -4,6 +4,7 @@ dist
 data/
 .turbo
 packages/e2e/.e2e-data
+packages/e2e/.e2e-data-authed
 packages/e2e/test-results
 packages/e2e/playwright-report
 

@@ -1,25 +1,14 @@
-import { test, expect, type Page } from "@playwright/test";
-import AxeBuilder from "@axe-core/playwright";
-import { createProjectWithRun, uploadResults, waitForReady } from "./helpers.js";
+import { test, expect } from "@playwright/test";
+import { createProjectWithRun, expectNoSeriousViolations, uploadResults, waitForReadyCount } from "./helpers.js";
 
-// Fails the build on serious/critical violations; logs everything else.
-// The embedded Allure report iframe is third-party content — excluded.
-// Users/Audit pages join the scan when an authed e2e fixture exists.
+// Fails the build on serious/critical violations (expectNoSeriousViolations in helpers.ts);
+// the embedded Allure report iframe is third-party content — excluded.
+// Users/Audit pages are scanned by authed.spec.ts (the "authed" Playwright project, which
+// runs against a secure-mode server with a seeded admin).
 // Status-as-text debt resolved: all three status-*-text tokens (pass/fail/broken) were
 // darkened to meet WCAG AA (≥4.5:1) in both themes (2026-06-11, axe scan on a populated
 // project page). The gate now scans a project page with two real runs — trend chart, status
 // badges, and run rows are all present. No known remaining a11y debt.
-async function expectNoSeriousViolations(page: Page, label: string) {
-  await page.mouse.move(0, 0);
-  const results = await new AxeBuilder({ page })
-    .exclude('iframe[title="report"]')
-    .analyze();
-  const blocking = results.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
-  const minor = results.violations.filter((v) => v.impact !== "serious" && v.impact !== "critical");
-  if (minor.length) console.log(`[a11y:${label}] non-blocking:`, minor.map((v) => `${v.id}(${v.impact}) ×${v.nodes.length}`).join(", "));
-  expect(blocking.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.map((n) => n.target).slice(0, 3) })),
-    `${label}: serious/critical a11y violations`).toEqual([]);
-}
 
 test("a11y: core pages have no serious violations", async ({ page }) => {
   await page.goto("/login");
@@ -33,8 +22,9 @@ test("a11y: core pages have no serious violations", async ({ page }) => {
   await createProjectWithRun(page, id);
 
   // Upload and wait for a second run so the trend chart is visible.
+  // waitForReadyCount is deterministic: waitForReady would match run 1's badge and return early.
   await uploadResults(page);
-  await waitForReady(page);
+  await waitForReadyCount(page, 2);
 
   // Navigate to the project Report tab — trend chart now renders with ≥2 runs.
   await page.getByRole("tab", { name: "Report" }).click();

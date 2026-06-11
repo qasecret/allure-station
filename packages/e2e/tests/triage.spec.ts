@@ -10,10 +10,11 @@
  * renderable audit table to assert against without an authenticated session.
  * The humanized audit sentence (describeAuditEntry) and filter/CSV logic are
  * fully covered by the audit-format unit tests in packages/web/src/lib.
- * Once an authed e2e fixture exists, add the audit leg back here.
+ * The audit leg lives in authed.spec.ts (the "authed" Playwright project, which runs
+ * against a secure-mode server with a seeded admin): humanized sentences + action filter.
  */
 import { test, expect } from "@playwright/test";
-import { createProjectWithRun, uploadResults, waitForReady, visible } from "./helpers.js";
+import { createProjectWithRun, uploadResults, waitForReadyCount, visible } from "./helpers.js";
 
 test.setTimeout(120_000);
 
@@ -22,8 +23,9 @@ test("triage: strip → worst-first sort → stats tiles → trend chart → sor
   const idA = `triage-a-${Date.now()}`;
   await createProjectWithRun(page, idA);
   // Upload a second result so the trend chart renders (needs ≥2 ready runs).
+  // waitForReadyCount is deterministic: waitForReady would match run 1's badge and return early.
   await uploadResults(page);
-  await waitForReady(page);
+  await waitForReadyCount(page, 2);
 
   // --- Project B: separate project (also passing fixture — sort is structural not failure-based) ---
   const idB = `triage-b-${Date.now()}`;
