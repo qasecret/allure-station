@@ -15,6 +15,7 @@ import {
   userSchema, createUserRequestSchema,
   membershipSchema, membershipWithUserSchema, setMembershipRequestSchema,
   auditEntrySchema,
+  overviewSchema,
 } from "@allure-station/shared";
 
 type OpenApiDocument = ReturnType<OpenApiGeneratorV31["generateDocument"]>;
@@ -90,6 +91,7 @@ const SESSION_ONLY: Array<"bearerToken" | "sessionCookie"> = ["sessionCookie"];
 const metaRoutes: RouteDecl[] = [
   { method: "get", path: "/api/version", tag: "meta", summary: "Server and embedded Allure versions", ok: { status: 200, schema: versionResponse } },
   { method: "get", path: "/api/config", tag: "meta", summary: "Public runtime configuration", ok: { status: 200, schema: configResponse } },
+  { method: "get", path: "/api/overview", tag: "meta", summary: "Instance triage counts", ok: { status: 200, schema: overviewSchema } },
 ];
 
 const projectRoutes: RouteDecl[] = [

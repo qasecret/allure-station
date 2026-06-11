@@ -367,3 +367,12 @@ export type SetMembershipRequest = z.infer<typeof setMembershipRequestSchema>;
 export type AuditAction = z.infer<typeof auditActionSchema>;
 export type AuditActorType = z.infer<typeof auditActorTypeSchema>;
 export type AuditEntry = z.infer<typeof auditEntrySchema>;
+
+export const overviewSchema = z.object({
+  projects: z.number().int(),
+  failing: z.number().int(),
+  gateBreached: z.number().int(),
+  runsLast24h: z.number().int(),
+  generating: z.number().int(),
+});
+export type Overview = z.infer<typeof overviewSchema>;

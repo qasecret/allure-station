@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { Project, ProjectListItem, ProjectSort, ProjectVisibility, QualityGateConfig, Run, RunMetadata, RunStats, RunStatus } from "@allure-station/shared";
 import { evaluateGate } from "@allure-station/shared";
@@ -316,6 +316,17 @@ export class RunRepository {
   async remove(id: string): Promise<boolean> {
     const res = await this.db.delete(runs).where(and(eq(runs.id, id), ne(runs.status, "generating"))).returning({ id: runs.id });
     return res.length > 0;
+  }
+
+  /** Triage counts for the overview: runs created in the window + currently generating, limited to
+   *  the given (visibility-scoped) projects. */
+  async countTriage(projectIds: string[], since: string): Promise<{ last24h: number; generating: number }> {
+    if (projectIds.length === 0) return { last24h: 0, generating: 0 };
+    const [a] = await this.db.select({ c: count() }).from(runs)
+      .where(and(inArray(runs.projectId, projectIds), gte(runs.createdAt, since)));
+    const [b] = await this.db.select({ c: count() }).from(runs)
+      .where(and(inArray(runs.projectId, projectIds), eq(runs.status, "generating")));
+    return { last24h: Number(a?.c ?? 0), generating: Number(b?.c ?? 0) };
   }
 
   #toRun = (r: typeof runs.$inferSelect): Run => ({
