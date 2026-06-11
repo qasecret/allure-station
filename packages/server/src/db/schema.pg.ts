@@ -26,6 +26,7 @@ export const runs = pgTable("runs", {
   byProject: index("idx_runs_project").on(t.projectId),
   byProjectStatusCreated: index("idx_runs_project_status_created").on(t.projectId, t.status, t.createdAt),
   byProjectBranch: index("idx_runs_project_branch").on(t.projectId, t.branch),
+  byProjectCreated: index("idx_runs_project_created").on(t.projectId, t.createdAt),
 }));
 
 export const apiTokens = pgTable("api_tokens", {

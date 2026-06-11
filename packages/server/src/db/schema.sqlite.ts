@@ -25,6 +25,7 @@ export const runs = sqliteTable("runs", {
 }, (t) => ({
   byProjectStatusCreated: index("idx_runs_project_status_created").on(t.projectId, t.status, t.createdAt),
   byProjectBranch: index("idx_runs_project_branch").on(t.projectId, t.branch),
+  byProjectCreated: index("idx_runs_project_created").on(t.projectId, t.createdAt),
 }));
 
 export const apiTokens = sqliteTable("api_tokens", {

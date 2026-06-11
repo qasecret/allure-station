@@ -41,23 +41,6 @@ export class ProjectRepository {
     return clauses.length === 0 ? undefined : clauses.length === 1 ? clauses[0] : and(...clauses);
   }
 
-  async list(opts: { q?: string; limit?: number; offset?: number; scope?: VisibilityScope } = {}): Promise<Project[]> {
-    let query = this.db.select().from(projects).where(this.#where(opts.q, opts.scope)).orderBy(projects.id).$dynamic();
-    // SQLite/libsql rejects OFFSET without LIMIT (syntax error), and LIMIT -1 isn't valid on pg —
-    // so offset only applies alongside a limit (which is how pagination is actually used).
-    if (opts.limit !== undefined) {
-      query = query.limit(opts.limit);
-      if (opts.offset !== undefined) query = query.offset(opts.offset);
-    }
-    const rows = await query;
-    return Promise.all(rows.map((r) => this.#withLatest(r.id, r.createdAt, r.visibility as ProjectVisibility, r.displayName ?? null)));
-  }
-
-  async count(opts: { q?: string; scope?: VisibilityScope } = {}): Promise<number> {
-    const [row] = await this.db.select({ c: count() }).from(projects).where(this.#where(opts.q, opts.scope));
-    return Number(row?.c ?? 0);
-  }
-
   async get(id: string): Promise<Project | null> {
     const [row] = await this.db.select().from(projects).where(eq(projects.id, id));
     return row ? this.#withLatest(row.id, row.createdAt, row.visibility as ProjectVisibility, row.displayName ?? null) : null;
@@ -135,7 +118,8 @@ export class ProjectRepository {
       const lr = latestByProject.get(p.id);
       const stats = lr?.statsJson ? (JSON.parse(lr.statsJson) as RunStats) : null;
       const gateCfg = p.qualityGate ? (JSON.parse(p.qualityGate) as QualityGateConfig) : null;
-      const gatePassed = gateCfg && stats ? evaluateGate(stats, gateCfg).passed : null;
+      const verdict = gateCfg && stats ? evaluateGate(stats, gateCfg) : null;
+      const gatePassed = verdict?.configured ? verdict.passed : null;
       return {
         id: p.id,
         displayName: p.displayName ?? null,
@@ -183,7 +167,7 @@ export class ProjectRepository {
       .select({ id: runs.id })
       .from(runs)
       .where(eq(runs.projectId, id))
-      .orderBy(desc(runs.createdAt))
+      .orderBy(desc(runs.createdAt), desc(runs.id))
       .limit(1);
     return { id, displayName, createdAt, latestRunId: latest?.id ?? null, visibility };
   }
