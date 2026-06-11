@@ -189,4 +189,16 @@ describe("DELETE run — private-project existence-tell fix (A1)", () => {
 
     await app.close();
   });
+
+  it("anonymous DELETE on a missing project returns 404 — indistinguishable from private", async () => {
+    const deps = await makeTestDeps();
+    await deps.users.create("admin@x.com", await hashPassword("password123"), "admin", deps.now()); // security on
+    const app = buildApp(deps);
+
+    // No project created — does-not-exist must return 404, same as a private project
+    const res = await app.inject({ method: "DELETE", url: "/api/projects/does-not-exist/runs/x" });
+    expect(res.statusCode).toBe(404);
+
+    await app.close();
+  });
 });

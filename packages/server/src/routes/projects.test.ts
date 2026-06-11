@@ -133,6 +133,18 @@ describe("PATCH /projects/:id — private-project existence-tell fix (A1)", () =
 
     await app.close();
   });
+
+  it("anonymous PATCH on a missing project returns 404 — indistinguishable from private", async () => {
+    const deps = await makeTestDeps();
+    await seedUsers(deps); // security on — ensures auth check runs before existence check
+    const app = buildApp(deps);
+
+    // No project created — does-not-exist must return 404, same as a private project
+    const res = await app.inject({ method: "PATCH", url: "/api/projects/does-not-exist", payload: { displayName: "x" } });
+    expect(res.statusCode).toBe(404);
+
+    await app.close();
+  });
 });
 
 describe("GET /projects/:id — canWrite field (A3)", () => {

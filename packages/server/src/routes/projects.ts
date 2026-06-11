@@ -76,9 +76,11 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     const principal = await authenticate(deps, req);
     if ((await authorizeProjectWrite(deps, principal, id)) === "unauthorized") {
       const vis = await deps.projects.getVisibility(id);
-      // Private project existence must not be disclosed — return 404 so the response
-      // is indistinguishable from "project doesn't exist" for unauthorized callers.
-      return reply.code(vis?.visibility === "private" ? 404 : 401).send({ error: vis?.visibility === "private" ? "not found" : "unauthorized" });
+      // Missing project (null) must be treated the same as private — both respond 404
+      // so the response is indistinguishable and a missing project can't be fingerprinted
+      // as "definitely doesn't exist" by the absence of a 404.
+      const hide = !vis || vis.visibility === "private";
+      return reply.code(hide ? 404 : 401).send({ error: hide ? "not found" : "unauthorized" });
     }
     const existing = await deps.projects.get(id);
     if (!existing) return reply.code(404).send({ error: "not found" });
