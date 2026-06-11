@@ -221,7 +221,7 @@ export class RunRepository {
 
   async markReady(id: string, stats: RunStats, finishedAt: string): Promise<void> {
     await this.db.update(runs)
-      .set({ status: "ready", statsJson: JSON.stringify(stats), finishedAt, error: null }) // clear any prior failure (e.g. a retried run)
+      .set({ status: "ready", statsJson: JSON.stringify(stats), durationMs: stats.durationMs ?? null, finishedAt, error: null }) // clear any prior failure (e.g. a retried run)
       .where(eq(runs.id, id));
   }
 
@@ -258,14 +258,30 @@ export class RunRepository {
     return reset.length;
   }
 
-  async #selectRuns(opts: { projectId: string; readyOnly?: boolean; status?: RunStatus; branch?: string; order: "asc" | "desc"; limit?: number; offset?: number }): Promise<Run[]> {
+  async #selectRuns(opts: { projectId: string; readyOnly?: boolean; status?: RunStatus; branch?: string; sort?: "createdAt" | "duration" | "status"; order: "asc" | "desc"; limit?: number; offset?: number }): Promise<Run[]> {
     const conds = [eq(runs.projectId, opts.projectId)];
     if (opts.readyOnly) conds.push(eq(runs.status, "ready"));
     if (opts.status) conds.push(eq(runs.status, opts.status));
     if (opts.branch) conds.push(eq(runs.branch, opts.branch));
-    const ord = opts.order === "asc"
-      ? [asc(runs.createdAt), asc(runs.id)]
-      : [desc(runs.createdAt), desc(runs.id)];
+
+    let ord: ReturnType<typeof asc>[];
+    if (opts.sort === "duration") {
+      // Nulls-last: `(duration_ms IS NULL)` evaluates to 0 for non-null, 1 for null — always sorted
+      // ascending (nulls go last), regardless of the requested direction for the value column.
+      // Works identically on SQLite and Postgres.
+      const nullLast = sql<number>`(${runs.durationMs} IS NULL)`;
+      const durCol = opts.order === "asc" ? asc(runs.durationMs) : desc(runs.durationMs);
+      ord = [asc(nullLast), durCol, desc(runs.createdAt), desc(runs.id)];
+    } else if (opts.sort === "status") {
+      const statusCol = opts.order === "asc" ? asc(runs.status) : desc(runs.status);
+      ord = [statusCol, desc(runs.createdAt), desc(runs.id)];
+    } else {
+      // default: createdAt
+      ord = opts.order === "asc"
+        ? [asc(runs.createdAt), asc(runs.id)]
+        : [desc(runs.createdAt), desc(runs.id)];
+    }
+
     let query = this.db.select().from(runs).where(and(...conds)).orderBy(...ord).$dynamic();
     // offset only with limit — SQLite rejects OFFSET without LIMIT (see ProjectRepository.list).
     if (opts.limit !== undefined) {
@@ -284,8 +300,8 @@ export class RunRepository {
     return this.#selectRuns({ projectId, readyOnly: true, order: "asc" });
   }
 
-  async listByProject(projectId: string, opts: { status?: RunStatus; branch?: string; limit?: number; offset?: number } = {}): Promise<Run[]> {
-    return this.#selectRuns({ projectId, order: "desc", ...opts });
+  async listByProject(projectId: string, opts: { status?: RunStatus; branch?: string; sort?: "createdAt" | "duration" | "status"; order?: "asc" | "desc"; limit?: number; offset?: number } = {}): Promise<Run[]> {
+    return this.#selectRuns({ projectId, order: opts.order ?? "desc", ...opts });
   }
 
   /** The newest ready run created strictly before `createdAt` (the run immediately prior). */

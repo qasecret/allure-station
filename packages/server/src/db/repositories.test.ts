@@ -383,6 +383,29 @@ for (const backend of backends) {
         expect((await runs.listByProject("f", { limit: 1, offset: 1 })).map((r) => r.id)).toEqual(["f2"]);
       });
 
+      it("markReady writes durationMs column; sort=duration puts nulls last on both dialects", async () => {
+        await projects.create("ds", "2026-06-11T00:00:00.000Z");
+        await runs.create("ds", "slow", "R", "2026-06-11T01:00:00.000Z");
+        await runs.claimPending("slow", "x");
+        await runs.markReady("slow", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0, durationMs: 9000 }, "x");
+        await runs.create("ds", "fast", "R", "2026-06-11T02:00:00.000Z");
+        await runs.claimPending("fast", "x");
+        await runs.markReady("fast", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0, durationMs: 1000 }, "x");
+        await runs.create("ds", "nodur", "R", "2026-06-11T03:00:00.000Z"); // never markReady → null durationMs
+
+        // duration DESC: slow first, fast second, nodur (null) last
+        const descList = await runs.listByProject("ds", { sort: "duration", order: "desc" });
+        expect(descList.map((r) => r.id)).toEqual(["slow", "fast", "nodur"]);
+
+        // duration ASC: fast first, slow second, nodur (null) still last (nulls-last semantics)
+        const ascList = await runs.listByProject("ds", { sort: "duration", order: "asc" });
+        expect(ascList.map((r) => r.id)).toEqual(["fast", "slow", "nodur"]);
+
+        // verify the denormalized column was written by markReady
+        const slowRun = await runs.get("slow");
+        expect(slowRun?.stats?.durationMs).toBe(9000);
+      });
+
       it("failStaleGenerating fails only generating runs older than the cutoff, leaving others untouched", async () => {
         await projects.create("stale-p", "2026-06-06T00:00:00.000Z");
 

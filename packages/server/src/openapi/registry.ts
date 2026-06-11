@@ -6,7 +6,7 @@ import {
 import { z, type ZodTypeAny } from "zod";
 import {
   projectSchema, projectListItemSchema, projectSortSchema, createProjectSchema, setVisibilityRequestSchema, updateProjectRequestSchema,
-  runSchema, trendPointSchema, compareResultSchema,
+  runSchema, runSortSchema, sortOrderSchema, trendPointSchema, compareResultSchema,
   qualityGateConfigSchema, runSummarySchema,
   testHistorySchema, testTraceSchema,
   apiTokenSchema, createdTokenSchema, createTokenRequestSchema,
@@ -110,8 +110,8 @@ const resultsRoutes: RouteDecl[] = [
 ];
 
 const runRoutes: RouteDecl[] = [
-  { method: "get", path: "/api/projects/{projectId}/trends", tag: "runs", summary: "Run trend points", ok: { status: 200, schema: z.array(trendPointSchema) } },
-  { method: "get", path: "/api/projects/{projectId}/runs", tag: "runs", summary: "List runs", query: pageQuery.extend({ status: z.string().optional(), branch: z.string().optional() }), ok: { status: 200, schema: z.array(runSchema) } },
+  { method: "get", path: "/api/projects/{projectId}/trends", tag: "runs", summary: "Run trend points (up to ?limit runs, 10–100, default 30)", query: z.object({ limit: z.coerce.number().int().min(10).max(100).optional() }), ok: { status: 200, schema: z.array(trendPointSchema) } },
+  { method: "get", path: "/api/projects/{projectId}/runs", tag: "runs", summary: "List runs", query: pageQuery.extend({ status: z.string().optional(), branch: z.string().optional(), sort: runSortSchema.optional(), order: sortOrderSchema.optional() }), ok: { status: 200, schema: z.array(runSchema) } },
   { method: "get", path: "/api/projects/{projectId}/runs/{runId}", tag: "runs", summary: "Get a run", ok: { status: 200, schema: runSchema } },
   { method: "delete", path: "/api/projects/{projectId}/runs/{runId}", tag: "runs", summary: "Delete a run and its artifacts", security: WRITE_AUTH, ok: { status: 204 } },
 ];

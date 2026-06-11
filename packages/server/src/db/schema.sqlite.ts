@@ -1,4 +1,4 @@
-import { index, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
@@ -17,6 +17,7 @@ export const runs = sqliteTable("runs", {
   startedAt: text("started_at"), // set when claimed into 'generating'; powers age-bounded stale reconciliation
   finishedAt: text("finished_at"),
   statsJson: text("stats_json"), // JSON RunStats | null
+  durationMs: integer("duration_ms"), // denormalized from statsJson.durationMs; backfilled; null until markReady
   branch: text("branch"),         // CI metadata — all nullable
   commit: text("commit"),
   environment: text("environment"),

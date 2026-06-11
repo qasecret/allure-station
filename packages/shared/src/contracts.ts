@@ -376,3 +376,8 @@ export const overviewSchema = z.object({
   generating: z.number().int(),
 });
 export type Overview = z.infer<typeof overviewSchema>;
+
+export const runSortSchema = z.enum(["createdAt", "duration", "status"]);
+export const sortOrderSchema = z.enum(["asc", "desc"]);
+export type RunSort = z.infer<typeof runSortSchema>;
+export type SortOrder = z.infer<typeof sortOrderSchema>;
