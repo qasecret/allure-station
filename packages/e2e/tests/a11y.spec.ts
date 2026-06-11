@@ -1,15 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { createProject, createProjectWithRun, uploadResults, waitForReady } from "./helpers.js";
+import { createProjectWithRun, uploadResults, waitForReady } from "./helpers.js";
 
 // Fails the build on serious/critical violations; logs everything else.
 // The embedded Allure report iframe is third-party content — excluded.
 // Users/Audit pages join the scan when an authed e2e fixture exists.
-// KNOWN DEBT (deferred to the polish sub-project): teal links/text now use the text-safe
-// `text-primary-text` token (≥4.5:1 in both modes). Remaining debt is the status swatches
-// used as TEXT — `text-status-pass`/`text-status-fail` glyphs and small status text are
-// still ~3:1 on light backgrounds and will fail this gate once a scanned page renders them
-// (e.g. a project page with failing runs). Fix shape: text-safe status tokens, same as teal.
+// Status-as-text debt resolved: all three status-*-text tokens (pass/fail/broken) were
+// darkened to meet WCAG AA (≥4.5:1) in both themes (2026-06-11, axe scan on a populated
+// project page). The gate now scans a project page with two real runs — trend chart, status
+// badges, and run rows are all present. No known remaining a11y debt.
 async function expectNoSeriousViolations(page: Page, label: string) {
   await page.mouse.move(0, 0);
   const results = await new AxeBuilder({ page })
@@ -39,6 +38,8 @@ test("a11y: core pages have no serious violations", async ({ page }) => {
 
   // Navigate to the project Report tab — trend chart now renders with ≥2 runs.
   await page.getByRole("tab", { name: "Report" }).click();
+  // Assert the chart is present before scanning, not race-dependent.
+  await expect(page.locator('svg[role="group"]')).toBeVisible();
   await expectNoSeriousViolations(page, "project:report");
 
   // Projects list scan

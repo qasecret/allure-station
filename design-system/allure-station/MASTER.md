@@ -56,6 +56,16 @@ Teal-emerald accent on cool-slate neutrals. Values below are the canonical roles
 | Fail (<60%) | `status.fail` / `destructive` | `#EF4444` |
 | Skipped / muted | `status.skip` | `#94A3B8` |
 
+**Text-safe status tokens** (`--status-*-text` CSS variables, added 2026-06-11 by the populated axe scan): fills, bars, and badge backgrounds keep the bright hex swatches above; only text rendered *as* status (labels, count strings, inline status glyphs) should use the darkened tokens below. Both meet WCAG AA (≥4.5:1) in their respective themes.
+
+| Token | Light value (HSL) | Light ratio vs white | Dark value (HSL) | Dark ratio vs slate-950 |
+|---|---|---|---|---|
+| `--status-pass-text` | `158 75% 26%` | 5.77:1 | `159 64% 50%` | 9.64:1 |
+| `--status-fail-text` | `0 72% 38%` | 7.47:1 | `0 85% 65%` | 5.74:1 |
+| `--status-broken-text` | `32 95% 33%` | 5.21:1 | `43 96% 56%` | 11.19:1 |
+
+> Use `text-[hsl(var(--status-pass-text))]` (or equivalent Tailwind utility if mapped) for status labels. Never use `text-status-pass` (the bright swatch) for body text — it is only ~3:1 on light backgrounds.
+
 **Color notes:** Code-dark + run-green heritage; the teal reads as "passing/healthy" and doubles as the brand. Pass-rate donut thresholds: **≥90 teal, ≥60 amber, else red**.
 
 ---

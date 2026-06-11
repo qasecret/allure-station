@@ -85,6 +85,9 @@ function TrendChartInner({ points, onSelectRun }: TrendChartInnerProps) {
   // Adjust bar x to account for left padding
   const barX = (i: number) => bars[i].x + SVG_PADDING_LEFT;
 
+  // Clamp roving index so a shrinking window/dataset can't strand focus with zero tab stops
+  const roving = Math.min(activeIndex, points.length - 1);
+
   const activeIdx = focusIndex ?? hoveredIndex;
 
   // Compute tooltip position from the bar's actual screen rect
@@ -108,13 +111,16 @@ function TrendChartInner({ points, onSelectRun }: TrendChartInnerProps) {
         onSelectRun(points[i].runId);
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        const next = Math.min(points.length - 1, i + 1);
+        // Use clamped base so stale activeIndex can't reference out-of-bounds bars
+        const base = Math.min(i, points.length - 1);
+        const next = Math.min(points.length - 1, base + 1);
         barRefs.current[next]?.focus();
         setActiveIndex(next);
         setFocusIndex(next);
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        const prev = Math.max(0, i - 1);
+        const base = Math.min(i, points.length - 1);
+        const prev = Math.max(0, base - 1);
         barRefs.current[prev]?.focus();
         setActiveIndex(prev);
         setFocusIndex(prev);
@@ -200,7 +206,7 @@ function TrendChartInner({ points, onSelectRun }: TrendChartInnerProps) {
               <g
                 key={p.runId}
                 role="button"
-                tabIndex={i === activeIndex ? 0 : -1}
+                tabIndex={i === roving ? 0 : -1}
                 aria-label={buildAriaLabel(p)}
                 focusable="true"
                 ref={(el) => { barRefs.current[i] = el; }}
