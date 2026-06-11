@@ -11,6 +11,12 @@ describe("report deep-link helpers", () => {
     expect(parseReportFragment("")).toBeNull();
     expect(parseReportFragment("#other=1")).toBeNull();
   });
+  it("parse returns null for malformed percent-encoding", () => {
+    expect(parseReportFragment("#report=%")).toBeNull();
+  });
+  it("parse returns null when decoded value has no leading #", () => {
+    expect(parseReportFragment("#report=abc")).toBeNull();
+  });
   it("withReportHash appends the hash to the iframe src", () => {
     expect(withReportHash("/api/projects/p/runs/r/report/index.html", "#/testresult/42"))
       .toBe("/api/projects/p/runs/r/report/index.html#/testresult/42");

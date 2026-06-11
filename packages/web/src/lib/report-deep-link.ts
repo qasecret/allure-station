@@ -6,7 +6,13 @@ export function buildReportFragment(allureHash: string): string {
 
 export function parseReportFragment(fragment: string): string | null {
   const m = /^#report=(.+)$/.exec(fragment);
-  return m ? decodeURIComponent(m[1]) : null;
+  if (!m) return null;
+  try {
+    const decoded = decodeURIComponent(m[1]);
+    return decoded.startsWith("#") ? decoded : null;
+  } catch {
+    return null; // malformed percent-encoding in a hand-edited URL must never crash the page
+  }
 }
 
 export function withReportHash(src: string, allureHash: string | null): string {

@@ -116,11 +116,15 @@ export function Project() {
 
   // Ref to the report iframe; used to mirror the Allure SPA's internal hash into the parent URL.
   const frameRef = useRef<HTMLIFrameElement | null>(null);
-  // Capture the initial #report= once; the iframe src restores it, then the poll takes over mirroring.
-  const initialReportHash = useRef(parseReportFragment(window.location.hash));
+  // Capture the initial #report= once (lazy so parsing runs exactly once, not on every render).
+  // runId is set to the first run that consumed the hash; subsequent run switches must not re-apply it.
+  const initialDeepLink = useRef<{ hash: string | null; runId: string | null } | null>(null);
+  if (initialDeepLink.current === null) initialDeepLink.current = { hash: parseReportFragment(window.location.hash), runId: null };
+  if (current && initialDeepLink.current.runId === null) initialDeepLink.current.runId = current;
 
   // Poll the iframe's location hash and mirror it to the parent URL fragment.
   // When the inner hash is empty or just "#" (fresh load / run switch), clean up the parent fragment.
+  // Note: history.replaceState writes bypass react-router, so useLocation().hash is stale by design here.
   useEffect(() => {
     const t = setInterval(() => {
       const frame = frameRef.current;
@@ -205,7 +209,16 @@ export function Project() {
           {cur?.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">CI build ↗</a>}
           {current && (
             <Button variant="ghost" size="sm" className="text-muted-foreground"
-              onClick={() => { navigator.clipboard.writeText(window.location.href); toast.success("Link copied"); }}>
+              onClick={async () => {
+                try {
+                  const u = new URL(window.location.href);
+                  if (current) u.searchParams.set("run", current);
+                  await navigator.clipboard.writeText(u.toString());
+                  toast.success("Link copied");
+                } catch {
+                  toast.error("Couldn't copy — copy the URL from the address bar");
+                }
+              }}>
               Copy link
             </Button>
           )}
@@ -229,7 +242,7 @@ export function Project() {
               ? <FailedRunPanel projectId={id} run={cur} />
               : current
                 ? <iframe ref={frameRef} title="report" className="min-h-0 flex-1 rounded-xl border bg-card shadow-sm"
-                    src={withReportHash(`/api/projects/${id}/runs/${current}/report/index.html`, initialReportHash.current)} />
+                    src={withReportHash(`/api/projects/${id}/runs/${current}/report/index.html`, current === initialDeepLink.current?.runId ? initialDeepLink.current.hash : null)} />
                 : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use "Upload & generate" to create the first report.'} />}
           </TabsContent>
           <TabsContent value="runs" className="flex min-h-0 flex-1 flex-col">
