@@ -58,9 +58,9 @@ test("mobile: report focus mode hides the header cards", async ({ page }) => {
   // Switch back to the Report tab (createProjectWithRun ends on Runs tab).
   await page.getByRole("tab", { name: "Report" }).click();
   await expect(page.getByText(/Trends appear/).locator("visible=true").first()).toBeVisible();
-  await page.getByRole("button", { name: "Expand report" }).click();
+  await page.getByRole("button", { name: "Focus report" }).click();
   await expect(page.getByText(/Trends appear/)).toBeHidden();
-  await page.getByRole("button", { name: "Collapse report" }).click();
+  await page.getByRole("button", { name: "Focus report" }).click();
   await expect(page.getByText(/Trends appear/).locator("visible=true").first()).toBeVisible();
 });
 

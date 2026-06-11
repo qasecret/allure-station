@@ -42,6 +42,7 @@ export function Project() {
   const [branchFilter, setBranchFilter] = useState("");
   const [tab, setTab] = useState<"report" | "runs">("report");
   const [focusReport, setFocusReport] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
   const { user } = useAuth();
 
   useEffect(() => {
@@ -106,6 +107,9 @@ export function Project() {
         qc.invalidateQueries({ queryKey: ["trends", id] });
         // A newly-ready run adds a point to every open test timeline — refresh them too.
         qc.invalidateQueries({ queryKey: ["test-history", id] });
+        setAnnouncement(event.run.status === "ready"
+          ? `Run from ${relativeTime(event.run.createdAt)} is ready`
+          : `Run from ${relativeTime(event.run.createdAt)} failed to generate`);
       }
     });
     return unsub;
@@ -215,6 +219,7 @@ export function Project() {
         </>}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+        <p aria-live="polite" role="status" className="sr-only">{announcement}</p>
         {/* The latest completed run failed but isn't what we're showing (a prior ready report is) —
             surface it, since otherwise the failure + retry would be hidden behind the run selector. */}
         {latestDone?.status === "failed" && current !== latestDone.id && (
@@ -266,11 +271,11 @@ export function Project() {
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as "report" | "runs")} className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center justify-between">
-            <TabsList className="self-start">
+            <TabsList>
               <TabsTrigger value="report">Report</TabsTrigger>
               <TabsTrigger value="runs">Runs</TabsTrigger>
             </TabsList>
-            <Button variant="ghost" size="icon" aria-label={focusReport ? "Collapse report" : "Expand report"}
+            <Button variant="ghost" size="icon" aria-label="Focus report" aria-pressed={focusReport}
               onClick={() => setFocusReport((v) => !v)}>
               {focusReport ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
             </Button>
@@ -362,7 +367,7 @@ function TrendBar({ points }: { points: TrendPoint[] }) {
   const durLine = points.map((p, i) => `${i * 14 + 5},${42 - Math.round(((p.stats.durationMs ?? 0) / maxDur) * 36) - 2}`).join(" ");
   return (
     <div className="flex items-end gap-3">
-      <svg width={w} height={44} role="img" aria-label="pass-rate, flakiness and duration trend by run">
+      <svg width={w} height={44} role="img" aria-label={`Pass-rate and duration trend across ${points.length} runs; latest ${points[points.length - 1].stats.passed}/${points[points.length - 1].stats.total} passed`}>
         {points.map((p, i) => {
           const rate = p.stats.total ? p.stats.passed / p.stats.total : 0;
           const h = Math.round(rate * 38) + 2;

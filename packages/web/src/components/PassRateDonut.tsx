@@ -14,7 +14,7 @@ export function PassRateDonut({ pct, size = 88, className }: { pct: number; size
   const color = safePct >= 90 ? "#1DB980" : safePct >= 60 ? "#F59E0B" : "#EF4444";
   return (
     <div className={cn("relative inline-grid place-items-center", className)} style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90" role="img" aria-label={`${safePct}% passed`}>
+      <svg width={size} height={size} className="-rotate-90" role="img" aria-label={`Pass rate ${safePct}%`}>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={8} className="stroke-border" />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={8} stroke={color}
           strokeLinecap="round" strokeDasharray={`${dash} ${circ - dash}`} />
