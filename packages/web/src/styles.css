@@ -30,14 +30,14 @@
        Verified contrast ratios on white (#fff) background:
          status-pass (158 75% 26%) → same hue as primary-text, 5.77:1 ✓
          status-fail (0 72% 38%)   → darker red, 7.47:1 ✓
-         status-broken (32 95% 33%) → dark amber, 5.21:1 ✓  (was 36% → 4.51:1; tightened for
-           the amber/15 badge and app-background contexts — 33% is the minimum that clears 4.5:1
-           on the app canvas (210 33% 97%): 4.87:1)
+         status-broken (32 95% 31%) → dark amber, 5.76:1 on white ✓
+           vs app-background (210 33% 97%): 5.37:1 ✓
+           vs amber badge at 15% alpha: 5.28:1 ✓
        The bright swatch values (#1DB980, #EF4444, #F59E0B) remain for bg-status-*
        and border-status-* — only text-status-* tokens change. */
     --status-pass-text: 158 75% 26%;
     --status-fail-text: 0 72% 38%;
-    --status-broken-text: 32 95% 33%;
+    --status-broken-text: 32 95% 31%;
 
     --secondary: 210 40% 96%;
     --secondary-foreground: 215 25% 27%;
