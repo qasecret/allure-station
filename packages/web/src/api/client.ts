@@ -2,6 +2,7 @@ import type {
   Project, Run, TrendPoint, RunEvent, CompareResult, TestHistory, TestTrace,
   SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry, ProjectVisibility,
   ApiToken, CreatedToken, QualityGateConfig, RunSummary, Notification, NotificationKind, NotificationTrigger,
+  RunMetadata,
 } from "@allure-station/shared";
 
 export interface AppConfigInfo {
@@ -23,7 +24,7 @@ export interface ApiClient {
   deleteRun(projectId: string, runId: string): Promise<void>;
   getRunSummary(projectId: string, runId: string): Promise<RunSummary>;
   retryRun(projectId: string, runId: string): Promise<Run>;
-  sendResults(projectId: string, files: File[], meta?: { branch?: string; commit?: string; environment?: string; ciUrl?: string }): Promise<{ runId: string }>;
+  sendResults(projectId: string, files: File[], meta?: RunMetadata): Promise<{ runId: string }>;
   generate(projectId: string): Promise<Run>;
   listTrends(projectId: string): Promise<TrendPoint[]>;
   compareRuns(projectId: string, base: string, target: string): Promise<CompareResult>;

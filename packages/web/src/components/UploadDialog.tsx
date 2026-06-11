@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { api } from "@/main";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 const META_KEYS = ["branch", "commit", "environment", "ciUrl"] as const;
@@ -12,8 +13,10 @@ type Meta = Record<(typeof META_KEYS)[number], string>;
 const emptyMeta: Meta = { branch: "", commit: "", environment: "", ciUrl: "" };
 const storageKey = (projectId: string) => `upload-meta:${projectId}`;
 const loadMeta = (projectId: string): Meta => {
-  try { return { ...emptyMeta, ...JSON.parse(localStorage.getItem(storageKey(projectId)) ?? "{}") }; }
-  catch { return emptyMeta; }
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey(projectId)) ?? "{}") as Record<string, unknown>;
+    return Object.fromEntries(META_KEYS.map((k) => [k, typeof parsed[k] === "string" ? parsed[k] : ""])) as Meta;
+  } catch { return emptyMeta; }
 };
 
 export function UploadDialog({ projectId }: { projectId: string }) {
@@ -53,11 +56,11 @@ export function UploadDialog({ projectId }: { projectId: string }) {
           <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Add CI context (optional)</summary>
           <div className="mt-2 grid grid-cols-2 gap-2">
             {META_KEYS.map((k) => (
-              <label key={k} className="flex flex-col gap-1 text-xs text-muted-foreground">
-                {k === "ciUrl" ? "CI build URL" : k[0].toUpperCase() + k.slice(1)}
-                <Input aria-label={k} value={meta[k]} onChange={(e) => setMeta((m) => ({ ...m, [k]: e.target.value }))}
+              <div key={k} className="flex flex-col gap-1">
+                <Label htmlFor={`upload-${k}`} className="text-xs text-muted-foreground">{k === "ciUrl" ? "CI build URL" : k[0].toUpperCase() + k.slice(1)}</Label>
+                <Input id={`upload-${k}`} value={meta[k]} onChange={(e) => setMeta((m) => ({ ...m, [k]: e.target.value }))}
                   placeholder={k === "branch" ? "main" : k === "commit" ? "a1b2c3d" : k === "environment" ? "staging" : "https://ci.example.com/build/42"} />
-              </label>
+              </div>
             ))}
           </div>
         </details>
