@@ -41,13 +41,16 @@ gate pull requests, and control access with accounts, RBAC, and SSO — all in o
 | **SQLite → Postgres** | Zero-config SQLite by default; switch to Postgres for multi-instance — same schema. |
 | **Scales by config** | In-process queue, or BullMQ + Redis with horizontally-scaled worker replicas. |
 | **Live updates** | Server-Sent Events stream run status to the UI in real time — no polling. |
-| **Trends &amp; comparison** | Pass-rate / flakiness / duration trends; diff any two runs (new failures, fixed, flaky). The **Runs tab** lists every run with retry/delete actions; each run has a **shareable deep link** (`?run=`) that opens the right report and test directly. |
+| **Instance status overview** | Home page **status strip** shows failing-project count, gate-breach count, runs in the last 24 h, and actively-generating runs at a glance — tiles are live-refreshed and clickable to jump straight to triage. |
+| **Worst-first sort** | Sort the project grid by **Worst first** (gate-breached → lowest pass-rate → no runs) or **Recently active** to surface problems immediately; sort selection is URL-persistent (`?sort=worst`). |
+| **Trends &amp; comparison** | Pass-rate / flakiness / duration **trend chart** per project with configurable look-back window (10 / 30 / 100 runs), keyboard-navigable bars, and a run-click-to-select shortcut. Diff any two runs (new failures, fixed, flaky) in a collapsible Compare panel. The project page **stats row** shows pass rate, failures, duration, and flaky count with deltas versus the previous run. |
 | **Per-test history** | Every test's outcome timeline across runs, with a "failing since" regression hint. |
+| **Sortable runs table** | The **Runs tab** lists every run with retry/delete actions and a **shareable deep link** (`?run=`). Column headers for Status, Duration, and Age are sortable (click to cycle desc → asc → default). |
 | **Run metadata** | Branch, commit, environment, and CI build URL attached at upload — via API fields or the upload dialog's optional **CI context** panel (values are remembered per project). |
 | **CI/CD native** | Reusable GitHub Action, quality gates, PR status checks &amp; comments, status badges. |
 | **Notifications** | Slack &amp; generic-webhook on completion / failure / gate breach / regression. |
-| **Enterprise auth** | Accounts + per-project RBAC, scoped API tokens, **OIDC/SSO**, private projects, and an audit log. |
-| **Responsive &amp; accessible** | Full mobile support (drawer nav, adaptive tables, report focus mode) with an axe-core accessibility gate in CI. |
+| **Enterprise auth** | Accounts + per-project RBAC, scoped API tokens, **OIDC/SSO**, private projects. **Filterable audit log** (by action, actor, time window) with CSV export and humanized event descriptions. |
+| **Responsive &amp; accessible** | Full mobile support (drawer nav, adaptive tables, report focus mode) with an axe-core accessibility gate in CI. All charts meet WCAG AA contrast and support keyboard navigation. |
 
 ## Screenshots
 
