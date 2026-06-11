@@ -301,7 +301,7 @@ export class RunRepository {
   }
 
   async listByProject(projectId: string, opts: { status?: RunStatus; branch?: string; sort?: "createdAt" | "duration" | "status"; order?: "asc" | "desc"; limit?: number; offset?: number } = {}): Promise<Run[]> {
-    return this.#selectRuns({ projectId, order: opts.order ?? "desc", ...opts });
+    return this.#selectRuns({ ...opts, projectId, order: opts.order ?? "desc" });
   }
 
   /** The newest ready run created strictly before `createdAt` (the run immediately prior). */

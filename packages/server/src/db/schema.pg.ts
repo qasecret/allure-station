@@ -1,4 +1,4 @@
-import { index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { bigint, index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const projects = pgTable("projects", {
   id: text("id").primaryKey(),
@@ -17,7 +17,7 @@ export const runs = pgTable("runs", {
   startedAt: text("started_at"), // set when claimed into 'generating'; powers age-bounded stale reconciliation
   finishedAt: text("finished_at"),
   statsJson: text("stats_json"),
-  durationMs: integer("duration_ms"), // denormalized from statsJson.durationMs; backfilled; null until markReady
+  durationMs: bigint("duration_ms", { mode: "number" }), // denormalized from statsJson.durationMs; backfilled; null until markReady
   branch: text("branch"),         // CI metadata — all nullable
   commit: text("commit"),
   environment: text("environment"),
