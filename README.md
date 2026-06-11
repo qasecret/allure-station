@@ -47,6 +47,7 @@ gate pull requests, and control access with accounts, RBAC, and SSO — all in o
 | **CI/CD native** | Reusable GitHub Action, quality gates, PR status checks &amp; comments, status badges. |
 | **Notifications** | Slack &amp; generic-webhook on completion / failure / gate breach / regression. |
 | **Enterprise auth** | Accounts + per-project RBAC, scoped API tokens, **OIDC/SSO**, private projects, and an audit log. |
+| **Responsive &amp; accessible** | Full mobile support (drawer nav, adaptive tables, report focus mode) with an axe-core accessibility gate in CI. |
 
 ## Screenshots
 
