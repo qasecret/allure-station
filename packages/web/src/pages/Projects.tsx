@@ -33,8 +33,8 @@ function OverviewStrip({ onTriage }: { onTriage: () => void }) {
   );
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" role="group" aria-label="Instance status">
-      <Tile label="Failing projects" value={data.failing} accent={data.failing > 0 ? "text-status-fail" : undefined} onClick={data.failing > 0 ? onTriage : undefined} />
-      <Tile label="Gate breaches" value={data.gateBreached} accent={data.gateBreached > 0 ? "text-status-broken" : undefined} onClick={data.gateBreached > 0 ? onTriage : undefined} />
+      <Tile label="Failing projects" value={data.failing} accent={data.failing > 0 ? "text-status-fail-text" : undefined} onClick={data.failing > 0 ? onTriage : undefined} />
+      <Tile label="Gate breaches" value={data.gateBreached} accent={data.gateBreached > 0 ? "text-status-broken-text" : undefined} onClick={data.gateBreached > 0 ? onTriage : undefined} />
       <Tile label="Runs (24h)" value={data.runsLast24h} />
       <Tile label="Generating" value={data.generating} accent={data.generating > 0 ? "animate-pulse text-primary-text" : undefined} />
     </div>

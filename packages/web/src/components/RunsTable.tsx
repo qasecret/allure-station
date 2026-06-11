@@ -18,8 +18,8 @@ function GateMark({ verdict }: { verdict: { passed: boolean; reasons: string[] }
   if (!verdict) return <span aria-hidden className="text-muted-foreground">—</span>;
   const reasons = verdict.reasons.join(", ");
   return verdict.passed
-    ? <span role="img" aria-label="Gate passed" className="text-status-pass">✓</span>
-    : <span role="img" aria-label={`Gate failed: ${reasons}`} title={reasons} className="text-status-fail">✗</span>;
+    ? <span role="img" aria-label="Gate passed" className="text-status-pass-text">✓</span>
+    : <span role="img" aria-label={`Gate failed: ${reasons}`} title={reasons} className="text-status-fail-text">✗</span>;
 }
 
 function RowActions({ r, canWrite, onOpenRun, retry, setConfirming }: {
@@ -31,7 +31,7 @@ function RowActions({ r, canWrite, onOpenRun, retry, setConfirming }: {
     <span className="flex justify-end gap-1">
       <Button size="sm" variant="outline" onClick={() => onOpenRun(r.id)}>Open</Button>
       {r.status === "failed" && canWrite && <Button size="sm" variant="outline" disabled={retry.isPending} onClick={() => retry.mutate(r.id)}>Retry</Button>}
-      {canWrite && <Button size="sm" variant="outline" className="text-status-fail" disabled={r.status === "generating"} onClick={() => setConfirming(r)}>Delete</Button>}
+      {canWrite && <Button size="sm" variant="outline" className="text-status-fail-text" disabled={r.status === "generating"} onClick={() => setConfirming(r)}>Delete</Button>}
     </span>
   );
 }
@@ -99,7 +99,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2">
                   <StatusBadge status={r.status} />
-                  {r.stats && <span className="text-sm">{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail"> · {r.stats.failed} failed</span> : null}</span>}
+                  {r.stats && <span className="text-sm">{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail-text"> · {r.stats.failed} failed</span> : null}</span>}
                   <GateMark verdict={verdict} />
                 </span>
                 <span title={r.createdAt} className="text-xs text-muted-foreground">{relativeTime(r.createdAt)}</span>
@@ -133,7 +133,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
               return (
                 <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40">
                   <td className="p-2"><StatusBadge status={r.status} /></td>
-                  <td className="p-2">{r.stats ? <>{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail"> · {r.stats.failed} failed</span> : null}</> : "—"}</td>
+                  <td className="p-2">{r.stats ? <>{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail-text"> · {r.stats.failed} failed</span> : null}</> : "—"}</td>
                   <td className="p-2"><GateMark verdict={verdict} /></td>
                   <td className="p-2">{r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : "—"}</td>
                   <td className="p-2">{r.environment ?? "—"}</td>

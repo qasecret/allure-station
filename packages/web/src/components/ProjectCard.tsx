@@ -38,12 +38,12 @@ export function ProjectCard({ p }: { p: ProjectListItem }) {
               <span className="truncate font-semibold group-hover:underline">{p.displayName ?? p.id}</span>
               {p.visibility === "private" && <Badge variant="secondary" className="text-xs">private</Badge>}
               {lr?.gatePassed === false && (
-                <Badge variant="outline" className="border-status-fail/40 text-status-fail text-xs">
+                <Badge variant="outline" className="border-status-fail/40 text-status-fail-text text-xs">
                   <span role="img" aria-label="Gate failed" className="mr-0.5">✗</span>gate
                 </Badge>
               )}
               {lr?.gatePassed === true && (
-                <Badge variant="outline" className="border-status-pass/40 text-status-pass text-xs">
+                <Badge variant="outline" className="border-status-pass/40 text-status-pass-text text-xs">
                   <span role="img" aria-label="Gate passed" className="mr-0.5">✓</span>gate
                 </Badge>
               )}

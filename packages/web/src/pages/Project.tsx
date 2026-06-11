@@ -226,7 +226,7 @@ export function Project() {
             surface it, since otherwise the failure + retry would be hidden behind the run selector. */}
         {latestDone?.status === "failed" && current !== latestDone.id && (
           <button type="button" onClick={() => setSelectedRun(latestDone.id)}
-            className="flex items-center gap-2 rounded-lg border border-status-fail/40 bg-status-fail/5 px-3 py-2 text-left text-sm text-status-fail hover:bg-status-fail/10">
+            className="flex items-center gap-2 rounded-lg border border-status-fail/40 bg-status-fail/5 px-3 py-2 text-left text-sm text-status-fail-text hover:bg-status-fail/10">
             <AlertTriangle className="size-4 shrink-0" />
             <span>The latest run failed to generate. <span className="underline">View &amp; retry</span></span>
           </button>
@@ -236,9 +236,9 @@ export function Project() {
           {cur?.stats && (
             <span className="text-sm text-muted-foreground">
               <span className="font-medium text-foreground">{cur.stats.passed}/{cur.stats.total}</span> passed
-              {cur.stats.failed ? <> · <span className="text-status-fail">{cur.stats.failed} failed</span></> : null}
-              {cur.stats.broken ? <> · <span className="text-status-broken">{cur.stats.broken} broken</span></> : null}
-              {cur.stats.flaky ? <> · <span className="text-status-broken">{cur.stats.flaky} flaky</span></> : null}
+              {cur.stats.failed ? <> · <span className="text-status-fail-text">{cur.stats.failed} failed</span></> : null}
+              {cur.stats.broken ? <> · <span className="text-status-broken-text">{cur.stats.broken} broken</span></> : null}
+              {cur.stats.flaky ? <> · <span className="text-status-broken-text">{cur.stats.flaky} flaky</span></> : null}
               {cur.stats.durationMs ? <> · {formatDurationSec(cur.stats.durationMs)}</> : null}
             </span>
           )}
@@ -309,7 +309,7 @@ function FailedRunPanel({ projectId, run }: { projectId: string; run: Run }) {
   return (
     <div className="grid min-h-0 flex-1 place-items-center rounded-xl border bg-card p-6 shadow-sm">
       <div className="max-w-lg text-center">
-        <AlertTriangle className="mx-auto size-8 text-status-fail" />
+        <AlertTriangle className="mx-auto size-8 text-status-fail-text" />
         <h2 className="mt-3 text-lg font-semibold">Generation failed</h2>
         {run.error
           ? <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-2 text-left text-xs text-muted-foreground">{run.error}</pre>
@@ -334,14 +334,14 @@ function GateBadge({ projectId, runId }: { projectId: string; runId: string }) {
   if (!gate?.configured) return null;
   if (gate.passed) {
     return (
-      <Badge variant="outline" className="gap-1 border-status-pass/40 text-status-pass">
+      <Badge variant="outline" className="gap-1 border-status-pass/40 text-status-pass-text">
         <ShieldCheck className="size-3.5" /> Quality gate passed
       </Badge>
     );
   }
   const reasons = failedReasons(gate);
   return (
-    <Badge variant="outline" className="gap-1 border-status-fail/40 text-status-fail">
+    <Badge variant="outline" className="gap-1 border-status-fail/40 text-status-fail-text">
       <ShieldAlert className="size-3.5" /> Quality gate failed
       {reasons.length ? <span className="font-normal text-muted-foreground">({reasons.join(", ")})</span> : null}
     </Badge>
@@ -370,9 +370,9 @@ function StatsRow({ current, previous }: { current: Run | null; previous: Run | 
       <div className="rounded-xl border bg-card p-3 shadow-sm">
         <div className="text-xs text-muted-foreground">Failures</div>
         <div className="flex items-baseline gap-1">
-          <span className={cn("text-2xl font-semibold tabular-nums", failures > 0 ? "text-status-fail" : undefined)}>{failures}</span>
+          <span className={cn("text-2xl font-semibold tabular-nums", failures > 0 ? "text-status-fail-text" : undefined)}>{failures}</span>
           {failDelta && (
-            <span className={cn("text-xs font-medium", failDelta.startsWith("+") ? "text-status-fail" : "text-status-pass")}>{failDelta}</span>
+            <span className={cn("text-xs font-medium", failDelta.startsWith("+") ? "text-status-fail-text" : "text-status-pass-text")}>{failDelta}</span>
           )}
         </div>
       </div>
@@ -381,13 +381,13 @@ function StatsRow({ current, previous }: { current: Run | null; previous: Run | 
         <div className="flex items-baseline gap-1">
           <span className="text-2xl font-semibold tabular-nums">{s.durationMs ? formatDurationSec(s.durationMs) : "—"}</span>
           {durDelta && (
-            <span className={cn("text-xs font-medium", durDelta.startsWith("+") ? "text-status-fail" : "text-status-pass")}>{durDelta}s</span>
+            <span className={cn("text-xs font-medium", durDelta.startsWith("+") ? "text-status-fail-text" : "text-status-pass-text")}>{durDelta}s</span>
           )}
         </div>
       </div>
       <div className="rounded-xl border bg-card p-3 shadow-sm">
         <div className="text-xs text-muted-foreground">Flaky</div>
-        <div className={cn("text-2xl font-semibold tabular-nums", (s.flaky ?? 0) > 0 ? "text-status-broken" : undefined)}>{s.flaky ?? 0}</div>
+        <div className={cn("text-2xl font-semibold tabular-nums", (s.flaky ?? 0) > 0 ? "text-status-broken-text" : undefined)}>{s.flaky ?? 0}</div>
       </div>
     </div>
   );
@@ -500,10 +500,10 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
         : !diff ? <p className="text-sm text-muted-foreground">Loading comparison…</p>
         : (
           <div className="flex flex-wrap gap-4">
-            <Bucket label="Newly failing" color="text-status-fail" tests={diff.newlyFailing} onOpen={setSelected} />
-            <Bucket label="Fixed" color="text-status-pass" tests={diff.fixed} onOpen={setSelected} />
-            <Bucket label="Flaky" color="text-status-broken" tests={diff.flaky} onOpen={setSelected} />
-            <Bucket label="Still failing" color="text-status-fail" tests={diff.stillFailing} onOpen={setSelected} />
+            <Bucket label="Newly failing" color="text-status-fail-text" tests={diff.newlyFailing} onOpen={setSelected} />
+            <Bucket label="Fixed" color="text-status-pass-text" tests={diff.fixed} onOpen={setSelected} />
+            <Bucket label="Flaky" color="text-status-broken-text" tests={diff.flaky} onOpen={setSelected} />
+            <Bucket label="Still failing" color="text-status-fail-text" tests={diff.stillFailing} onOpen={setSelected} />
             <Bucket label="Added" color="text-primary-text" tests={diff.added} onOpen={setSelected} />
             <Bucket label="Removed" color="text-muted-foreground" tests={diff.removed} onOpen={setSelected} />
           </div>
@@ -550,7 +550,7 @@ function Bucket({ label, color, tests, onOpen }: { label: string; color: string;
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  passed: "text-status-pass", failed: "text-status-fail", broken: "text-status-broken",
+  passed: "text-status-pass-text", failed: "text-status-fail-text", broken: "text-status-broken-text",
   skipped: "text-muted-foreground", unknown: "text-muted-foreground",
 };
 
@@ -575,7 +575,7 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
                 <li key={e.runId} className="rounded-lg border p-2 text-sm">
                   <div className="flex items-center gap-2">
                     <span className={`font-semibold ${STATUS_COLOR[e.status]}`}>{e.status}</span>
-                    {e.flaky ? <span className="text-status-broken">flaky</span> : null}
+                    {e.flaky ? <span className="text-status-broken-text">flaky</span> : null}
                     <span className="text-muted-foreground" title={e.createdAt}>{relativeTime(e.createdAt)}</span>
                     {e.commit ? <span className="text-muted-foreground">· {e.commit.slice(0, 7)}</span> : null}
                     {e.ciUrl ? <a href={e.ciUrl} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">CI</a> : null}
@@ -603,13 +603,13 @@ function RegressionHint({ regression, entries }: { regression: Regression; entri
   };
   if (regression.windowLimited) {
     return (
-      <p className="text-sm text-status-fail">
+      <p className="text-sm text-status-fail-text">
         Failing for at least the last {regression.failingRunCount} run{regression.failingRunCount === 1 ? "" : "s"} — no passing run in view.
       </p>
     );
   }
   return (
-    <p className="text-sm text-status-fail">
+    <p className="text-sm text-status-fail-text">
       Failing since {link(regression.firstFailed)}
       {regression.firstFailed.commit ? <span className="text-muted-foreground"> · {regression.firstFailed.commit.slice(0, 7)}</span> : null}
       {regression.lastPassed ? <> — last passed {link(regression.lastPassed)}</> : null}

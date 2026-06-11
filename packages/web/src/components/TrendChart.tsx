@@ -63,26 +63,18 @@ interface TrendChartInnerProps {
 function TrendChartInner({ points, onSelectRun }: TrendChartInnerProps) {
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  // Roving tabindex: which bar is the single tab stop (default first bar)
+  const [activeIndex, setActiveIndex] = useState<number>(0);
   const barRefs = useRef<(SVGGElement | null)[]>([]);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [containerWidth, setContainerWidth] = useState(600);
+  const scrollWrapperRef = useRef<HTMLDivElement | null>(null);
 
-  // Measure container width responsively
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w) setContainerWidth(w);
-    });
-    obs.observe(el);
-    setContainerWidth(el.clientWidth || 600);
-    return () => obs.disconnect();
-  }, []);
+  // Tooltip anchor: positioned via getBoundingClientRect relative to the card container
+  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
 
   const plotWidth = Math.max(
     points.length * 10,
-    containerWidth - SVG_PADDING_LEFT - SVG_PADDING_RIGHT
+    600 - SVG_PADDING_LEFT - SVG_PADDING_RIGHT
   );
   const svgWidth = plotWidth + SVG_PADDING_LEFT + SVG_PADDING_RIGHT;
   const svgHeight = PLOT_HEIGHT + SVG_PADDING_TOP + SVG_PADDING_BOTTOM;
@@ -95,6 +87,20 @@ function TrendChartInner({ points, onSelectRun }: TrendChartInnerProps) {
 
   const activeIdx = focusIndex ?? hoveredIndex;
 
+  // Compute tooltip position from the bar's actual screen rect
+  const updateTooltipPos = useCallback((i: number) => {
+    const barEl = barRefs.current[i];
+    const container = containerRef.current;
+    if (!barEl || !container) { setTooltipPos(null); return; }
+    const barRect = barEl.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const rawLeft = barRect.left + barRect.width / 2 - containerRect.left;
+    // Clamp: not less than 80px from left, not so far right the tooltip clips
+    const clampedLeft = Math.max(80, Math.min(rawLeft, containerRect.width - 80));
+    const top = barRect.top - containerRect.top;
+    setTooltipPos({ left: clampedLeft, top });
+  }, []);
+
   const handleBarKeyDown = useCallback(
     (e: React.KeyboardEvent<SVGGElement>, i: number) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -104,11 +110,13 @@ function TrendChartInner({ points, onSelectRun }: TrendChartInnerProps) {
         e.preventDefault();
         const next = Math.min(points.length - 1, i + 1);
         barRefs.current[next]?.focus();
+        setActiveIndex(next);
         setFocusIndex(next);
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         const prev = Math.max(0, i - 1);
         barRefs.current[prev]?.focus();
+        setActiveIndex(prev);
         setFocusIndex(prev);
       }
     },
@@ -128,6 +136,9 @@ function TrendChartInner({ points, onSelectRun }: TrendChartInnerProps) {
         .join(" ")
     : null;
 
+  // Does any visible point have flaky tests?
+  const anyFlaky = points.some((p) => (p.stats.flaky ?? 0) > 0);
+
   // Summary for screen readers
   const lastPt = points[points.length - 1];
   const summaryLabel = lastPt
@@ -135,159 +146,160 @@ function TrendChartInner({ points, onSelectRun }: TrendChartInnerProps) {
     : `Pass-rate trend — ${points.length} runs`;
 
   return (
+    // containerRef is on the outer relative div used for tooltip anchoring
     <div ref={containerRef} className="relative w-full">
-      {/* SVG chart */}
-      <svg
-        role="img"
-        aria-label={summaryLabel}
-        width={svgWidth}
-        height={svgHeight}
-        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-        className="w-full overflow-visible"
-        style={{ maxHeight: svgHeight }}
-      >
-        <title>{summaryLabel}</title>
+      {/* Overflow-x scroll wrapper: natural SVG width, inner scroll allowed */}
+      <div ref={scrollWrapperRef} className="relative overflow-x-auto">
+        {/* SVG chart — rendered at natural width; scroll wrapper clips it */}
+        <svg
+          role="group"
+          aria-label={summaryLabel}
+          width={svgWidth}
+          height={svgHeight}
+          style={{ display: "block" }}
+        >
+          <title>{summaryLabel}</title>
 
-        {/* Grid lines at 25%, 50%, 75% */}
-        {gridY.map((gy, gi) => {
-          const y = gy + SVG_PADDING_TOP;
-          const labelPct = gi === 0 ? "25%" : gi === 1 ? "50%" : "75%";
-          return (
-            <g key={gy}>
-              <line
-                x1={SVG_PADDING_LEFT}
-                y1={y}
-                x2={svgWidth - SVG_PADDING_RIGHT}
-                y2={y}
-                stroke="hsl(var(--border))"
-                strokeWidth={1}
-              />
-              <text
-                x={SVG_PADDING_LEFT - 4}
-                y={y + 4}
-                textAnchor="end"
-                className="fill-muted-foreground font-mono"
-                fontSize={10}
-                aria-hidden="true"
-              >
-                {labelPct}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Bars */}
-        {points.map((p, i) => {
-          const bar = bars[i];
-          const bx = barX(i);
-          const by = bar.y + SVG_PADDING_TOP;
-          const isFocused = focusIndex === i;
-          const isActive = activeIdx === i;
-
-          return (
-            <g
-              key={p.runId}
-              role="button"
-              tabIndex={0}
-              aria-label={buildAriaLabel(p)}
-              aria-pressed="false"
-              focusable="true"
-              ref={(el) => { barRefs.current[i] = el; }}
-              onClick={() => onSelectRun(p.runId)}
-              onKeyDown={(e) => handleBarKeyDown(e, i)}
-              onMouseEnter={() => setHoveredIndex(i)}
-              onMouseLeave={() => setHoveredIndex(null)}
-              onFocus={() => setFocusIndex(i)}
-              onBlur={() => setFocusIndex(null)}
-              style={{ cursor: "pointer", outline: "none" }}
-            >
-              {/* Focus/hover ring behind bar */}
-              {isActive && (
-                <rect
-                  x={bx - 2}
-                  y={SVG_PADDING_TOP}
-                  width={bar.w + 4}
-                  height={PLOT_HEIGHT}
-                  rx={2}
-                  fill="hsl(var(--accent))"
-                  opacity={0.3}
-                  aria-hidden="true"
+          {/* Grid lines at 25%, 50%, 75% */}
+          {gridY.map((gy, gi) => {
+            const y = gy + SVG_PADDING_TOP;
+            const labelPct = gi === 0 ? "25%" : gi === 1 ? "50%" : "75%";
+            return (
+              <g key={gy}>
+                <line
+                  x1={SVG_PADDING_LEFT}
+                  y1={y}
+                  x2={svgWidth - SVG_PADDING_RIGHT}
+                  y2={y}
+                  stroke="hsl(var(--border))"
+                  strokeWidth={1}
                 />
-              )}
-              {/* Main bar */}
-              <rect
-                x={bx}
-                y={by}
-                width={bar.w}
-                height={bar.h}
-                fill={bar.failed ? "#EF4444" : "#1DB980"}
-                rx={2}
-                aria-hidden="true"
-              />
-              {/* Flaky amber topper */}
-              {bar.flaky && (
+                <text
+                  x={SVG_PADDING_LEFT - 4}
+                  y={y + 4}
+                  textAnchor="end"
+                  className="fill-muted-foreground font-mono"
+                  fontSize={10}
+                  aria-hidden="true"
+                >
+                  {labelPct}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Bars */}
+          {points.map((p, i) => {
+            const bar = bars[i];
+            const bx = barX(i);
+            const by = bar.y + SVG_PADDING_TOP;
+            const isFocused = focusIndex === i;
+            const isActive = activeIdx === i;
+
+            return (
+              <g
+                key={p.runId}
+                role="button"
+                tabIndex={i === activeIndex ? 0 : -1}
+                aria-label={buildAriaLabel(p)}
+                focusable="true"
+                ref={(el) => { barRefs.current[i] = el; }}
+                onClick={() => onSelectRun(p.runId)}
+                onKeyDown={(e) => handleBarKeyDown(e, i)}
+                onMouseEnter={() => { setHoveredIndex(i); updateTooltipPos(i); }}
+                onMouseLeave={() => { setHoveredIndex(null); setTooltipPos(null); }}
+                onFocus={() => { setFocusIndex(i); updateTooltipPos(i); }}
+                onBlur={() => { setFocusIndex(null); setTooltipPos(null); }}
+                style={{ cursor: "pointer", outline: "none" }}
+              >
+                {/* Focus/hover ring behind bar */}
+                {isActive && (
+                  <rect
+                    x={bx - 2}
+                    y={SVG_PADDING_TOP}
+                    width={bar.w + 4}
+                    height={PLOT_HEIGHT}
+                    rx={2}
+                    fill="hsl(var(--accent))"
+                    opacity={0.3}
+                    aria-hidden="true"
+                  />
+                )}
+                {/* Main bar */}
                 <rect
                   x={bx}
-                  y={Math.max(SVG_PADDING_TOP, by - 3)}
+                  y={by}
                   width={bar.w}
-                  height={3}
-                  fill="#F59E0B"
-                  aria-hidden="true"
-                />
-              )}
-              {/* Focus indicator ring */}
-              {isFocused && (
-                <rect
-                  x={bx - 1}
-                  y={by - 1}
-                  width={bar.w + 2}
-                  height={bar.h + 2}
-                  fill="none"
-                  stroke="hsl(var(--ring))"
-                  strokeWidth={2}
+                  height={bar.h}
+                  fill={bar.failed ? "#EF4444" : "#1DB980"}
                   rx={2}
                   aria-hidden="true"
                 />
-              )}
-            </g>
-          );
-        })}
+                {/* Flaky amber topper */}
+                {bar.flaky && (
+                  <rect
+                    x={bx}
+                    y={Math.max(SVG_PADDING_TOP, by - 3)}
+                    width={bar.w}
+                    height={3}
+                    fill="#F59E0B"
+                    aria-hidden="true"
+                  />
+                )}
+                {/* Focus indicator ring */}
+                {isFocused && (
+                  <rect
+                    x={bx - 1}
+                    y={by - 1}
+                    width={bar.w + 2}
+                    height={bar.h + 2}
+                    fill="none"
+                    stroke="hsl(var(--ring))"
+                    strokeWidth={2}
+                    rx={2}
+                    aria-hidden="true"
+                  />
+                )}
+              </g>
+            );
+          })}
 
-        {/* Duration polyline */}
-        {durPoints && (
-          <polyline
-            points={durPoints}
-            fill="none"
-            stroke="hsl(var(--primary-text))"
-            strokeWidth={1.5}
-            opacity={0.8}
-            pointerEvents="none"
-            aria-hidden="true"
-          />
-        )}
-
-        {/* X-axis labels */}
-        {labels.map((lbl) => {
-          const bar = bars[lbl.index];
-          const bx = barX(lbl.index);
-          return (
-            <text
-              key={lbl.index}
-              x={bx + bar.w / 2}
-              y={svgHeight - 4}
-              textAnchor="middle"
-              fontSize={10}
-              className="fill-muted-foreground font-mono"
+          {/* Duration polyline */}
+          {durPoints && (
+            <polyline
+              points={durPoints}
+              fill="none"
+              stroke="hsl(var(--primary-text))"
+              strokeWidth={1.5}
+              opacity={0.8}
+              pointerEvents="none"
               aria-hidden="true"
-            >
-              {lbl.text}
-            </text>
-          );
-        })}
-      </svg>
+            />
+          )}
 
-      {/* HTML tooltip: positioned over hovered/focused bar */}
-      {activeIdx !== null && activeIdx < points.length && bars[activeIdx] && (
+          {/* X-axis labels */}
+          {labels.map((lbl) => {
+            const bar = bars[lbl.index];
+            const bx = barX(lbl.index);
+            return (
+              <text
+                key={lbl.index}
+                x={bx + bar.w / 2}
+                y={svgHeight - 4}
+                textAnchor="middle"
+                fontSize={10}
+                className="fill-muted-foreground font-mono"
+                aria-hidden="true"
+              >
+                {lbl.text}
+              </text>
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* HTML tooltip: anchored via getBoundingClientRect to the active bar */}
+      {activeIdx !== null && activeIdx < points.length && bars[activeIdx] && tooltipPos && (
         <div
           role="tooltip"
           id={`trend-tooltip-${activeIdx}`}
@@ -296,11 +308,8 @@ function TrendChartInner({ points, onSelectRun }: TrendChartInnerProps) {
             "min-w-[140px]"
           )}
           style={{
-            left: Math.min(
-              barX(activeIdx) + bars[activeIdx].w / 2,
-              containerWidth - 160
-            ),
-            top: bars[activeIdx].y + SVG_PADDING_TOP - 8,
+            left: tooltipPos.left,
+            top: tooltipPos.top - 8,
             transform: "translate(-50%, -100%)",
           }}
         >
@@ -315,6 +324,12 @@ function TrendChartInner({ points, onSelectRun }: TrendChartInnerProps) {
           <span className="mr-1 inline-block size-2.5 rounded-sm bg-[#EF4444] align-middle" aria-hidden="true" />
           pass-rate bar
         </span>
+        {anyFlaky && (
+          <span>
+            <span className="mr-1 inline-block size-2.5 rounded-sm bg-[#F59E0B] align-middle" aria-hidden="true" />
+            flaky
+          </span>
+        )}
         {anyDur && (
           <span>
             <span className="mr-1" aria-hidden="true">╱</span>

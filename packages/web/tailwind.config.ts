@@ -30,7 +30,18 @@ export default {
           "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
         },
         brand: { DEFAULT: "#1DB980", light: "#34D3A0", dark: "#15966A" },
-        status: { pass: "#1DB980", fail: "#EF4444", broken: "#F59E0B", skip: "#94A3B8" },
+        status: {
+          pass: "#1DB980",
+          fail: "#EF4444",
+          broken: "#F59E0B",
+          skip: "#94A3B8",
+          // Text-safe variants: meet WCAG AA (≥4.5:1) on both light and dark backgrounds.
+          // Use text-status-pass-text / text-status-fail-text / text-status-broken-text
+          // wherever status color appears as foreground text (not as a swatch/background).
+          "pass-text": "hsl(var(--status-pass-text))",
+          "fail-text": "hsl(var(--status-fail-text))",
+          "broken-text": "hsl(var(--status-broken-text))",
+        },
       },
       fontFamily: {
         sans: ["Geist", "system-ui", "-apple-system", "sans-serif"],

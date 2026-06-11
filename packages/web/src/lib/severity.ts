@@ -6,9 +6,9 @@ import type { SeverityLevel } from "@allure-station/shared";
 // don't leak a bogus class. Keyed by `SeverityLevel` from shared, so adding a level there without a
 // color here is a compile error (keeps the chip from silently dropping a new severity).
 const SEVERITY_CHIP: Record<SeverityLevel, string> = {
-  blocker: "bg-status-fail/15 text-status-fail",
-  critical: "bg-status-fail/15 text-status-fail",
-  normal: "bg-status-broken/15 text-status-broken",
+  blocker: "bg-status-fail/15 text-status-fail-text",
+  critical: "bg-status-fail/15 text-status-fail-text",
+  normal: "bg-status-broken/15 text-status-broken-text",
   minor: "bg-muted text-muted-foreground",
   trivial: "bg-muted text-muted-foreground",
 };

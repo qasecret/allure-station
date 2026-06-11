@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { createProject } from "./helpers.js";
+import { createProject, createProjectWithRun, uploadResults, waitForReady } from "./helpers.js";
 
 // Fails the build on serious/critical violations; logs everything else.
 // The embedded Allure report iframe is third-party content — excluded.
@@ -28,11 +28,25 @@ test("a11y: core pages have no serious violations", async ({ page }) => {
 
   await page.goto("/");
   const id = `a11y-e2e-${Date.now()}`;
-  await createProject(page, id);
+
+  // Create project with TWO runs so the TrendChart renders (requires ≥2 runs).
+  // createProjectWithRun ends on the Runs tab with one Ready run.
+  await createProjectWithRun(page, id);
+
+  // Upload and wait for a second run so the trend chart is visible.
+  await uploadResults(page);
+  await waitForReady(page);
+
+  // Navigate to the project Report tab — trend chart now renders with ≥2 runs.
+  await page.getByRole("tab", { name: "Report" }).click();
+  await expectNoSeriousViolations(page, "project:report");
+
+  // Projects list scan
+  await page.goto("/");
   await expectNoSeriousViolations(page, "projects");
 
+  // Runs tab scan
   await page.getByText(id).first().click();
-  await expectNoSeriousViolations(page, "project:report");
   await page.getByRole("tab", { name: "Runs" }).click();
   await expectNoSeriousViolations(page, "project:runs");
 
