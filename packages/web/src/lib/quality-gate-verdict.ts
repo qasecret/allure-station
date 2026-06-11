@@ -1,4 +1,5 @@
 import type { QualityGateCheck, QualityGateConfig, QualityGateVerdict, RunStats } from "@allure-station/shared";
+import { evaluateGate as sharedEvaluateGate } from "@allure-station/shared";
 import { formatPercent, formatDurationSec } from "./format.js";
 
 type Dir = "near" | "up" | "down";
@@ -29,15 +30,10 @@ export function failedReasons(verdict: QualityGateVerdict): string[] {
   return verdict.checks.filter((c) => !c.ok).map(formatGateCheck);
 }
 
-/** Evaluate a gate config directly against run stats (client-side; mirrors the server's rules).
+/** Evaluate a gate config directly against run stats (client-side; delegates rule logic to shared).
  *  Returns null when no rule is configured (nothing to evaluate). */
 export function evaluateGate(cfg: QualityGateConfig, stats: RunStats): { passed: boolean; reasons: string[] } | null {
-  const checks: QualityGateCheck[] = [];
-  const failures = stats.failed + stats.broken;
-  if (cfg.maxFailures !== undefined) checks.push({ rule: "maxFailures", actual: failures, threshold: cfg.maxFailures, ok: failures <= cfg.maxFailures });
-  if (cfg.minTests !== undefined) checks.push({ rule: "minTests", actual: stats.total, threshold: cfg.minTests, ok: stats.total >= cfg.minTests });
-  if (cfg.minPassRate !== undefined) { const rate = stats.total ? stats.passed / stats.total : 0; checks.push({ rule: "minPassRate", actual: rate, threshold: cfg.minPassRate, ok: rate >= cfg.minPassRate }); }
-  if (cfg.maxDurationMs !== undefined) { const dur = stats.durationMs ?? 0; checks.push({ rule: "maxDurationMs", actual: dur, threshold: cfg.maxDurationMs, ok: dur <= cfg.maxDurationMs }); }
-  if (checks.length === 0) return null;
-  return { passed: checks.every((c) => c.ok), reasons: checks.filter((c) => !c.ok).map(formatGateCheck) };
+  const verdict = sharedEvaluateGate(stats, cfg);
+  if (!verdict.configured) return null;
+  return { passed: verdict.passed, reasons: failedReasons(verdict) };
 }
