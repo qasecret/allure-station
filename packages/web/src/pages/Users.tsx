@@ -54,18 +54,33 @@ export function Users() {
           </Card>
           <Card>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader><TableRow><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead /></TableRow></TableHeader>
-                <TableBody>
-                  {users.map((u) => (
-                    <TableRow key={u.id}>
-                      <TableCell>{u.email}</TableCell>
-                      <TableCell><Badge variant="secondary">{u.role}</Badge></TableCell>
-                      <TableCell className="text-right">{u.id !== user.id && <Button variant="ghost" size="sm" disabled={remove.isPending && remove.variables === u.id} onClick={() => remove.mutate(u.id)}>Remove</Button>}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              {/* Mobile list — visible below sm */}
+              <ul role="list" className="divide-y sm:hidden">
+                {users.map((u) => (
+                  <li key={u.id} className="flex items-center justify-between gap-2 p-3">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm">{u.email}</span>
+                      <Badge variant="secondary" className="mt-0.5">{u.role}</Badge>
+                    </span>
+                    {u.id !== user.id && <Button variant="ghost" size="sm" disabled={remove.isPending && remove.variables === u.id} onClick={() => remove.mutate(u.id)}>Remove</Button>}
+                  </li>
+                ))}
+              </ul>
+              {/* Desktop table — hidden below sm */}
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader><TableRow><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead /></TableRow></TableHeader>
+                  <TableBody>
+                    {users.map((u) => (
+                      <TableRow key={u.id}>
+                        <TableCell>{u.email}</TableCell>
+                        <TableCell><Badge variant="secondary">{u.role}</Badge></TableCell>
+                        <TableCell className="text-right">{u.id !== user.id && <Button variant="ghost" size="sm" disabled={remove.isPending && remove.variables === u.id} onClick={() => remove.mutate(u.id)}>Remove</Button>}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </div>

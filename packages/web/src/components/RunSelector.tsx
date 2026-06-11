@@ -7,7 +7,7 @@ const DOT: Record<string, string> = { ready: "bg-status-pass", failed: "bg-statu
 export function RunSelector({ runs, value, onChange }: { runs: Run[]; value: string; onChange: (id: string) => void }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label="Select run to view" className="w-[320px] max-w-full"><SelectValue /></SelectTrigger>
+      <SelectTrigger aria-label="Select run to view" className="w-full max-w-full md:w-[320px]"><SelectValue /></SelectTrigger>
       <SelectContent>
         {runs.map((r) => (
           <SelectItem key={r.id} value={r.id}>

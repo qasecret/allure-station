@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { Run, RunStatus, TestDiff, TestHistoryEntry, Regression, RunRef, TrendPoint } from "@allure-station/shared";
-import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History, ShieldCheck, ShieldAlert, AlertTriangle } from "lucide-react";
+import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History, ShieldCheck, ShieldAlert, AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
 import { Topbar } from "@/components/Topbar";
@@ -17,6 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import { relativeTime, runLabel, formatDurationSec } from "@/lib/format";
 import { parseReportFragment, buildReportFragment, withReportHash } from "@/lib/report-deep-link";
 import { failedReasons } from "@/lib/quality-gate-verdict";
@@ -40,11 +41,15 @@ export function Project() {
   };
   const [branchFilter, setBranchFilter] = useState("");
   const [tab, setTab] = useState<"report" | "runs">("report");
+  const [focusReport, setFocusReport] = useState(false);
+  const [announcement, setAnnouncement] = useState<{ id: number; text: string }>({ id: 0, text: "" });
+  const announceSeq = useRef(0);
   const { user } = useAuth();
 
   useEffect(() => {
     setBranchFilter(""); // don't carry a previous project's branch filter (could hide all its runs)
     setTab("report"); // reset to report tab when navigating to a new project
+    setFocusReport(false); // exit focus mode when switching projects
   }, [id]);
 
   // A read-gated project 404s for anonymous/non-members — surface that as a clear message
@@ -103,6 +108,9 @@ export function Project() {
         qc.invalidateQueries({ queryKey: ["trends", id] });
         // A newly-ready run adds a point to every open test timeline — refresh them too.
         qc.invalidateQueries({ queryKey: ["test-history", id] });
+        setAnnouncement({ id: ++announceSeq.current, text: event.run.status === "ready"
+          ? `Run from ${relativeTime(event.run.createdAt)} is ready`
+          : `Run from ${relativeTime(event.run.createdAt)} failed to generate` });
       }
     });
     return unsub;
@@ -184,7 +192,7 @@ export function Project() {
           <div className="max-w-sm text-center">
             <h1 className="text-lg font-semibold">Project unavailable</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              This project is private or doesn't exist. If it's private, <Link to="/login" className="text-primary underline">sign in</Link> with an account that has access.
+              This project is private or doesn't exist. If it's private, <Link to="/login" className="text-primary-text underline">sign in</Link> with an account that has access.
             </p>
           </div>
         </main>
@@ -212,6 +220,7 @@ export function Project() {
         </>}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+        <p key={announcement.id} aria-live="polite" role="status" className="sr-only">{announcement.text}</p>
         {/* The latest completed run failed but isn't what we're showing (a prior ready report is) —
             surface it, since otherwise the failure + retry would be hidden behind the run selector. */}
         {latestDone?.status === "failed" && current !== latestDone.id && (
@@ -221,7 +230,7 @@ export function Project() {
             <span>The latest run failed to generate. <span className="underline">View &amp; retry</span></span>
           </button>
         )}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className={cn("flex flex-wrap items-center gap-3", focusReport && tab === "report" && "hidden")}>
           {cur && <StatusBadge status={cur.status} />}
           {cur?.stats && (
             <span className="text-sm text-muted-foreground">
@@ -235,7 +244,7 @@ export function Project() {
           {cur?.status === "ready" && current && <GateBadge projectId={id} runId={current} />}
           {cur?.branch && <Badge variant="secondary">branch {cur.branch}{cur.commit ? `@${cur.commit.slice(0, 7)}` : ""}</Badge>}
           {cur?.environment && <Badge variant="secondary">env {cur.environment}</Badge>}
-          {cur?.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">CI build ↗</a>}
+          {cur?.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer" className="text-sm text-primary-text underline">CI build ↗</a>}
           {current && (
             <Button variant="ghost" size="sm" className="text-muted-foreground"
               onClick={async () => {
@@ -252,7 +261,7 @@ export function Project() {
             </Button>
           )}
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className={cn("flex flex-wrap gap-3", focusReport && tab === "report" && "hidden")}>
           <Card className="min-w-[260px] flex-1">
             <CardContent className="flex items-center gap-3 p-4">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><TrendingUp className="size-5" /></span>
@@ -262,10 +271,18 @@ export function Project() {
           <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as "report" | "runs")} className="flex min-h-0 flex-1 flex-col">
-          <TabsList className="self-start">
-            <TabsTrigger value="report">Report</TabsTrigger>
-            <TabsTrigger value="runs">Runs</TabsTrigger>
-          </TabsList>
+          <div className="flex items-center justify-between">
+            <TabsList>
+              <TabsTrigger value="report">Report</TabsTrigger>
+              <TabsTrigger value="runs">Runs</TabsTrigger>
+            </TabsList>
+            {tab === "report" && (
+              <Button variant="ghost" size="icon" aria-label="Focus report" aria-pressed={focusReport}
+                onClick={() => setFocusReport((v) => !v)}>
+                {focusReport ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+              </Button>
+            )}
+          </div>
           <TabsContent value="report" className="flex min-h-0 flex-1 flex-col">
             {cur?.status === "failed"
               ? <FailedRunPanel projectId={id} run={cur} />
@@ -353,7 +370,7 @@ function TrendBar({ points }: { points: TrendPoint[] }) {
   const durLine = points.map((p, i) => `${i * 14 + 5},${42 - Math.round(((p.stats.durationMs ?? 0) / maxDur) * 36) - 2}`).join(" ");
   return (
     <div className="flex items-end gap-3">
-      <svg width={w} height={44} role="img" aria-label="pass-rate, flakiness and duration trend by run">
+      <svg width={w} height={44} role="img" aria-label={`Pass-rate and duration trend across ${points.length} runs; latest ${points[points.length - 1].stats.passed}/${points[points.length - 1].stats.total} passed`}>
         {points.map((p, i) => {
           const rate = p.stats.total ? p.stats.passed / p.stats.total : 0;
           const h = Math.round(rate * 38) + 2;
@@ -373,7 +390,7 @@ function TrendBar({ points }: { points: TrendPoint[] }) {
       <div className="flex flex-col gap-0.5 text-[11px] text-muted-foreground">
         <span className="font-medium text-foreground">Trend</span>
         {anyFlaky && <span className="text-status-broken">▮ flaky</span>}
-        {anyDur && <span className="text-primary">╱ duration</span>}
+        {anyDur && <span className="text-primary-text">╱ duration</span>}
       </div>
     </div>
   );
@@ -422,7 +439,7 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
               <Bucket label="Fixed" color="text-status-pass" tests={diff.fixed} onOpen={setSelected} />
               <Bucket label="Flaky" color="text-status-broken" tests={diff.flaky} onOpen={setSelected} />
               <Bucket label="Still failing" color="text-status-fail" tests={diff.stillFailing} onOpen={setSelected} />
-              <Bucket label="Added" color="text-primary" tests={diff.added} onOpen={setSelected} />
+              <Bucket label="Added" color="text-primary-text" tests={diff.added} onOpen={setSelected} />
               <Bucket label="Removed" color="text-muted-foreground" tests={diff.removed} onOpen={setSelected} />
             </div>
           )}
@@ -497,7 +514,7 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
                     {e.flaky ? <span className="text-status-broken">flaky</span> : null}
                     <span className="text-muted-foreground" title={e.createdAt}>{relativeTime(e.createdAt)}</span>
                     {e.commit ? <span className="text-muted-foreground">· {e.commit.slice(0, 7)}</span> : null}
-                    {e.ciUrl ? <a href={e.ciUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">CI</a> : null}
+                    {e.ciUrl ? <a href={e.ciUrl} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">CI</a> : null}
                   </div>
                   {e.message ? <pre className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">{e.message}</pre> : null}
                   {e.hasTrace && test ? <TraceDetails projectId={projectId} test={test} runId={e.runId} /> : null}
@@ -517,7 +534,7 @@ function RegressionHint({ regression, entries }: { regression: Regression; entri
     const ciUrl = entries.find((e) => e.runId === ref.runId)?.ciUrl ?? null;
     const label = relativeTime(ref.createdAt);
     return ciUrl
-      ? <a href={ciUrl} target="_blank" rel="noreferrer" title={ref.createdAt} className="text-primary hover:underline">{label}</a>
+      ? <a href={ciUrl} target="_blank" rel="noreferrer" title={ref.createdAt} className="text-primary-text hover:underline">{label}</a>
       : <span title={ref.createdAt}>{label}</span>;
   };
   if (regression.windowLimited) {

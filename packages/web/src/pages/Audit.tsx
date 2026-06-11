@@ -34,21 +34,37 @@ export function Audit() {
         <div className="mx-auto max-w-5xl space-y-4">
           <Card>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Actor</TableHead><TableHead>Action</TableHead><TableHead>Target</TableHead><TableHead>Project</TableHead><TableHead>Details</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {items.map((e) => (
-                    <TableRow key={e.id}>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">{new Date(e.at).toLocaleString()}</TableCell>
-                      <TableCell>{e.actorLabel}</TableCell>
-                      <TableCell><span className="font-medium">{e.action}</span></TableCell>
-                      <TableCell className="text-muted-foreground">{target(e)}</TableCell>
-                      <TableCell>{e.projectId ?? ""}</TableCell>
-                      <TableCell className="max-w-[280px] truncate text-muted-foreground">{e.metadata ? JSON.stringify(e.metadata) : ""}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              {/* Mobile list — visible below sm */}
+              <ul role="list" className="divide-y sm:hidden">
+                {items.map((e) => (
+                  <li key={e.id} className="space-y-0.5 p-3 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium">{e.action}</span>
+                      <span className="whitespace-nowrap text-xs text-muted-foreground">{new Date(e.at).toLocaleString()}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">{e.actorLabel}{e.projectId ? ` · ${e.projectId}` : ""}{target(e) ? ` · ${target(e)}` : ""}</div>
+                    {e.metadata ? <div className="truncate text-xs text-muted-foreground">{JSON.stringify(e.metadata)}</div> : null}
+                  </li>
+                ))}
+              </ul>
+              {/* Desktop table — hidden below sm */}
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Actor</TableHead><TableHead>Action</TableHead><TableHead>Target</TableHead><TableHead>Project</TableHead><TableHead>Details</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {items.map((e) => (
+                      <TableRow key={e.id}>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">{new Date(e.at).toLocaleString()}</TableCell>
+                        <TableCell>{e.actorLabel}</TableCell>
+                        <TableCell><span className="font-medium">{e.action}</span></TableCell>
+                        <TableCell className="text-muted-foreground">{target(e)}</TableCell>
+                        <TableCell>{e.projectId ?? ""}</TableCell>
+                        <TableCell className="max-w-[280px] truncate text-muted-foreground">{e.metadata ? JSON.stringify(e.metadata) : ""}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
           {items.length === 0 && <p className="text-sm text-muted-foreground">No audit events yet.</p>}

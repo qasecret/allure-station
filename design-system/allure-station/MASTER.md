@@ -33,16 +33,19 @@ Teal-emerald accent on cool-slate neutrals. Values below are the canonical roles
 
 | Role | Token (class) | Light | Dark | Notes |
 |------|---------------|-------|------|-------|
-| Primary / CTA | `primary` | `#1DB980` (`158 73% 42%`) | brighter teal (`159 64% 50%`) | buttons, active nav, links, focus ring |
-| On primary | `primary-foreground` | `#FFFFFF` | near-bg slate | text on teal |
+| Primary / CTA | `primary` | `#1DB980` (`158 73% 42%`) | brighter teal (`159 64% 50%`) | buttons, active nav, fills/tiles — NOT text/links |
+| Primary as text | `primary-text` | darker teal (`158 75% 26%`, 5.77:1 on white — same value as the sidebar active tokens) | reuses dark primary (`159 64% 50%`, 9.60:1 on slate-950) | teal-as-TEXT: links, text labels (light `--primary` is only ~2.5:1 on white) |
+| On primary | `primary-foreground` | dark slate (`222 47% 11%`) | dark slate (`222 47% 9%`) | text on teal in BOTH modes — AA 7:1; flipped 2026-06-11 by the axe gate work |
 | Background (canvas) | `background` | cool slate `#f3f6fa` (`210 33% 97%`) | slate-950 (`222 47% 8%`) | app canvas / topbar |
 | Foreground | `foreground` | slate-900 `#0F172A` | slate-100 | primary text |
 | Card surface | `card` | `#FFFFFF` | slate-900 (`222 47% 11%`) | cards, report frame |
 | Sidebar | `sidebar` | light-blue `#e8f1fa` (`208 60% 95%`) | slate-900 | left rail |
-| Muted text | `muted-foreground` | slate-500 `#64748B` | slate-400 | secondary text |
+| Muted text | `muted-foreground` | slate-500 `#64748B` (45% lightness — slightly darker than stock slate-500 for AA) | slate-400 | secondary text |
 | Border | `border` | slate-200 `#E2E8F0` | slate-800 | hairlines, dividers |
 | Input border | `input` | slate-300 | slate-700 | form fields (stronger than card border) |
-| Ring (focus) | `ring` | teal `#1DB980` | brighter teal | keyboard focus |
+| Ring (focus) | `ring` | `158 73% 30%` (darker than primary — 3:1 non-text contrast vs canvas; 42% is ~2.4:1) | brighter teal (`159 64% 50%`) | keyboard focus |
+
+**Sidebar active token:** `--sidebar-accent-foreground` and `--sidebar-primary` are darkened to 26% lightness (from 30–33%) so active nav text reaches ≥4.5:1 against the light sidebar-accent background (#d8f3e9).
 
 **Fixed status swatches** (in `tailwind.config.ts`, used by donut/badges/trend — semantic, not theme-swapped):
 

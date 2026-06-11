@@ -14,6 +14,28 @@ const FILTERS: Array<{ label: string; value?: RunStatus }> = [
   { label: "all" }, { label: "ready", value: "ready" }, { label: "failed", value: "failed" }, { label: "generating", value: "generating" },
 ];
 
+function GateMark({ verdict }: { verdict: { passed: boolean; reasons: string[] } | null }) {
+  if (!verdict) return <span aria-hidden className="text-muted-foreground">—</span>;
+  const reasons = verdict.reasons.join(", ");
+  return verdict.passed
+    ? <span role="img" aria-label="Gate passed" className="text-status-pass">✓</span>
+    : <span role="img" aria-label={`Gate failed: ${reasons}`} title={reasons} className="text-status-fail">✗</span>;
+}
+
+function RowActions({ r, canWrite, onOpenRun, retry, setConfirming }: {
+  r: Run; canWrite: boolean; onOpenRun: (id: string) => void;
+  retry: { isPending: boolean; mutate: (id: string) => void };
+  setConfirming: (r: Run) => void;
+}) {
+  return (
+    <span className="flex justify-end gap-1">
+      <Button size="sm" variant="outline" onClick={() => onOpenRun(r.id)}>Open</Button>
+      {r.status === "failed" && canWrite && <Button size="sm" variant="outline" disabled={retry.isPending} onClick={() => retry.mutate(r.id)}>Retry</Button>}
+      {canWrite && <Button size="sm" variant="outline" className="text-status-fail" disabled={r.status === "generating"} onClick={() => setConfirming(r)}>Delete</Button>}
+    </span>
+  );
+}
+
 export function RunsTable({ projectId, canWrite, onOpenRun }: {
   projectId: string;
   /** Hides destructive actions in secure mode when not signed in; true in open mode and for signed-in users. */
@@ -68,7 +90,35 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
             onClick={() => { setStatus(f.value); setPage(0); }}>{f.label}</Button>
         ))}
       </div>
-      <div className="overflow-auto rounded-xl border bg-card shadow-sm">
+      {/* Mobile card list — visible below sm */}
+      <ul role="list" className="space-y-2 sm:hidden">
+        {items.map((r) => {
+          const verdict = gate && r.stats ? evaluateGate(gate, r.stats) : null;
+          return (
+            <li key={r.id} className="rounded-xl border bg-card p-3 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <StatusBadge status={r.status} />
+                  {r.stats && <span className="text-sm">{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail"> · {r.stats.failed} failed</span> : null}</span>}
+                  <GateMark verdict={verdict} />
+                </span>
+                <span title={r.createdAt} className="text-xs text-muted-foreground">{relativeTime(r.createdAt)}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="truncate text-xs text-muted-foreground">
+                  {r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : "—"}
+                  {r.environment ? ` · ${r.environment}` : ""}
+                  {r.stats?.durationMs ? ` · ${formatDurationSec(r.stats.durationMs)}` : ""}
+                </span>
+                <RowActions r={r} canWrite={canWrite} onOpenRun={onOpenRun} retry={retry} setConfirming={setConfirming} />
+              </div>
+            </li>
+          );
+        })}
+        {items.length === 0 && <li className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">No runs{status ? ` with status ${status}` : ""}.</li>}
+      </ul>
+      {/* Desktop table — hidden below sm */}
+      <div className="relative hidden overflow-x-auto rounded-xl border bg-card shadow-sm sm:block">
         <table className="w-full text-sm">
           <thead className="text-left text-muted-foreground">
             <tr className="border-b">
@@ -84,17 +134,13 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
                 <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40">
                   <td className="p-2"><StatusBadge status={r.status} /></td>
                   <td className="p-2">{r.stats ? <>{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail"> · {r.stats.failed} failed</span> : null}</> : "—"}</td>
-                  <td className="p-2" title={verdict?.reasons.join(", ") || undefined}>{verdict === null ? "—" : verdict.passed ? <span className="text-status-pass" aria-label="Gate passed">✓</span> : <span className="text-status-fail" aria-label={`Gate failed: ${verdict.reasons.join(", ")}`}>✗</span>}</td>
+                  <td className="p-2"><GateMark verdict={verdict} /></td>
                   <td className="p-2">{r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : "—"}</td>
                   <td className="p-2">{r.environment ?? "—"}</td>
                   <td className="p-2">{r.stats?.durationMs ? formatDurationSec(r.stats.durationMs) : "—"}</td>
                   <td className="p-2"><span title={r.createdAt}>{relativeTime(r.createdAt)}</span></td>
                   <td className="p-2 text-right">
-                    <span className="flex justify-end gap-1">
-                      <Button size="sm" variant="outline" onClick={() => onOpenRun(r.id)}>Open</Button>
-                      {r.status === "failed" && canWrite && <Button size="sm" variant="outline" disabled={retry.isPending} onClick={() => retry.mutate(r.id)}>Retry</Button>}
-                      {canWrite && <Button size="sm" variant="outline" className="text-status-fail" disabled={r.status === "generating"} onClick={() => setConfirming(r)}>Delete</Button>}
-                    </span>
+                    <RowActions r={r} canWrite={canWrite} onOpenRun={onOpenRun} retry={retry} setConfirming={setConfirming} />
                   </td>
                 </tr>
               );
