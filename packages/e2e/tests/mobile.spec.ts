@@ -50,6 +50,20 @@ test("mobile: runs tab renders card rows with reachable actions", async ({ page 
   expect(box!.x + box!.width).toBeLessThanOrEqual(375);          // action on screen, not behind scroll
 });
 
+test("mobile: report focus mode hides the header cards", async ({ page }) => {
+  test.setTimeout(120_000);
+
+  const id = `mobile-focus-${Date.now()}`;
+  await createProjectWithRun(page, id);
+  // Switch back to the Report tab (createProjectWithRun ends on Runs tab).
+  await page.getByRole("tab", { name: "Report" }).click();
+  await expect(page.getByText(/Trends appear/).locator("visible=true").first()).toBeVisible();
+  await page.getByRole("button", { name: "Expand report" }).click();
+  await expect(page.getByText(/Trends appear/)).toBeHidden();
+  await page.getByRole("button", { name: "Collapse report" }).click();
+  await expect(page.getByText(/Trends appear/).locator("visible=true").first()).toBeVisible();
+});
+
 test("mobile: drawer opens and topbar controls stay tappable", async ({ page }) => {
   test.setTimeout(120_000);
 

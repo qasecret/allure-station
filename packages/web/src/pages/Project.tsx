@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { Run, RunStatus, TestDiff, TestHistoryEntry, Regression, RunRef, TrendPoint } from "@allure-station/shared";
-import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History, ShieldCheck, ShieldAlert, AlertTriangle } from "lucide-react";
+import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History, ShieldCheck, ShieldAlert, AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
 import { Topbar } from "@/components/Topbar";
@@ -17,6 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import { relativeTime, runLabel, formatDurationSec } from "@/lib/format";
 import { parseReportFragment, buildReportFragment, withReportHash } from "@/lib/report-deep-link";
 import { failedReasons } from "@/lib/quality-gate-verdict";
@@ -40,11 +41,13 @@ export function Project() {
   };
   const [branchFilter, setBranchFilter] = useState("");
   const [tab, setTab] = useState<"report" | "runs">("report");
+  const [focusReport, setFocusReport] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
     setBranchFilter(""); // don't carry a previous project's branch filter (could hide all its runs)
     setTab("report"); // reset to report tab when navigating to a new project
+    setFocusReport(false); // exit focus mode when switching projects
   }, [id]);
 
   // A read-gated project 404s for anonymous/non-members — surface that as a clear message
@@ -221,7 +224,7 @@ export function Project() {
             <span>The latest run failed to generate. <span className="underline">View &amp; retry</span></span>
           </button>
         )}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className={cn("flex flex-wrap items-center gap-3", focusReport && "hidden")}>
           {cur && <StatusBadge status={cur.status} />}
           {cur?.stats && (
             <span className="text-sm text-muted-foreground">
@@ -252,7 +255,7 @@ export function Project() {
             </Button>
           )}
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className={cn("flex flex-wrap gap-3", focusReport && "hidden")}>
           <Card className="min-w-[260px] flex-1">
             <CardContent className="flex items-center gap-3 p-4">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><TrendingUp className="size-5" /></span>
@@ -262,10 +265,16 @@ export function Project() {
           <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as "report" | "runs")} className="flex min-h-0 flex-1 flex-col">
-          <TabsList className="self-start">
-            <TabsTrigger value="report">Report</TabsTrigger>
-            <TabsTrigger value="runs">Runs</TabsTrigger>
-          </TabsList>
+          <div className="flex items-center justify-between">
+            <TabsList className="self-start">
+              <TabsTrigger value="report">Report</TabsTrigger>
+              <TabsTrigger value="runs">Runs</TabsTrigger>
+            </TabsList>
+            <Button variant="ghost" size="icon" aria-label={focusReport ? "Collapse report" : "Expand report"}
+              onClick={() => setFocusReport((v) => !v)}>
+              {focusReport ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            </Button>
+          </div>
           <TabsContent value="report" className="flex min-h-0 flex-1 flex-col">
             {cur?.status === "failed"
               ? <FailedRunPanel projectId={id} run={cur} />
