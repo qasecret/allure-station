@@ -250,7 +250,17 @@ function GateBadge({ projectId, runId }: { projectId: string; runId: string }) {
 }
 
 function TrendBar({ points }: { points: TrendPoint[] }) {
-  if (points.length < 2) return <span className="text-xs text-muted-foreground">Trends appear after 2+ runs.</span>;
+  if (points.length < 2) {
+    return (
+      <div className="flex flex-1 items-center gap-2 text-sm text-muted-foreground">
+        <span>
+          {points.length === 1
+            ? "Trends appear after 2 runs — 1 more to go."
+            : "Trends appear after 2 runs. Push results to start the series."}
+        </span>
+      </div>
+    );
+  }
   const w = points.length * 14;
   const anyFlaky = points.some((p) => (p.stats.flaky ?? 0) > 0);
   const maxDur = Math.max(1, ...points.map((p) => p.stats.durationMs ?? 0));
