@@ -29,11 +29,11 @@ export function UserMenu() {
   const chooseTheme = (t: Theme) => { setThemeState(t); setTheme(t); };
 
   const themeRow = (
-    <div className="flex gap-1 px-2 py-1.5" role="radiogroup" aria-label="Color theme">
+    <div className="flex gap-1 px-2 py-1.5" role="group" aria-label="Color theme">
       {THEMES.map(({ key, label, icon: Icon }) => (
         <Button key={key} variant={theme === key ? "secondary" : "ghost"} size="sm"
           className="flex-1 h-7" aria-label={label} title={label}
-          role="radio" aria-checked={theme === key}
+          aria-pressed={theme === key}
           onClick={() => chooseTheme(key)}>
           <Icon className="size-3.5" />
         </Button>

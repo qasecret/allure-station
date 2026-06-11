@@ -42,7 +42,8 @@ export function Project() {
   const [branchFilter, setBranchFilter] = useState("");
   const [tab, setTab] = useState<"report" | "runs">("report");
   const [focusReport, setFocusReport] = useState(false);
-  const [announcement, setAnnouncement] = useState("");
+  const [announcement, setAnnouncement] = useState<{ id: number; text: string }>({ id: 0, text: "" });
+  const announceSeq = useRef(0);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -107,9 +108,9 @@ export function Project() {
         qc.invalidateQueries({ queryKey: ["trends", id] });
         // A newly-ready run adds a point to every open test timeline — refresh them too.
         qc.invalidateQueries({ queryKey: ["test-history", id] });
-        setAnnouncement(event.run.status === "ready"
+        setAnnouncement({ id: ++announceSeq.current, text: event.run.status === "ready"
           ? `Run from ${relativeTime(event.run.createdAt)} is ready`
-          : `Run from ${relativeTime(event.run.createdAt)} failed to generate`);
+          : `Run from ${relativeTime(event.run.createdAt)} failed to generate` });
       }
     });
     return unsub;
@@ -219,7 +220,7 @@ export function Project() {
         </>}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
-        <p aria-live="polite" role="status" className="sr-only">{announcement}</p>
+        <p key={announcement.id} aria-live="polite" role="status" className="sr-only">{announcement.text}</p>
         {/* The latest completed run failed but isn't what we're showing (a prior ready report is) —
             surface it, since otherwise the failure + retry would be hidden behind the run selector. */}
         {latestDone?.status === "failed" && current !== latestDone.id && (

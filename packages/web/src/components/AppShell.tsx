@@ -7,14 +7,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const mainRef = useRef<HTMLDivElement>(null);
   const firstRender = useRef(true);
+  const focusMain = () => {
+    mainRef.current?.focus({ preventScroll: true });
+    mainRef.current?.querySelector("main")?.scrollTo({ top: 0 });
+  };
   // Move focus to the content region on route change so screen-reader users land on the new page.
   useEffect(() => {
     if (firstRender.current) { firstRender.current = false; return; }
-    mainRef.current?.focus();
+    focusMain();
   }, [pathname]);
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow"
+        onClick={(e) => { e.preventDefault(); focusMain(); }}>
         Skip to main content
       </a>
       <Sidebar />

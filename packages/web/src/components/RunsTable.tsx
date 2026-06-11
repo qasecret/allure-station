@@ -15,7 +15,7 @@ const FILTERS: Array<{ label: string; value?: RunStatus }> = [
 ];
 
 function GateMark({ verdict }: { verdict: { passed: boolean; reasons: string[] } | null }) {
-  if (!verdict) return null;
+  if (!verdict) return <span aria-hidden className="text-muted-foreground">—</span>;
   const reasons = verdict.reasons.join(", ");
   return verdict.passed
     ? <span role="img" aria-label="Gate passed" className="text-status-pass">✓</span>
@@ -134,7 +134,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
                 <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40">
                   <td className="p-2"><StatusBadge status={r.status} /></td>
                   <td className="p-2">{r.stats ? <>{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail"> · {r.stats.failed} failed</span> : null}</> : "—"}</td>
-                  <td className="p-2">{verdict === null ? "—" : <GateMark verdict={verdict} />}</td>
+                  <td className="p-2"><GateMark verdict={verdict} /></td>
                   <td className="p-2">{r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : "—"}</td>
                   <td className="p-2">{r.environment ?? "—"}</td>
                   <td className="p-2">{r.stats?.durationMs ? formatDurationSec(r.stats.durationMs) : "—"}</td>
