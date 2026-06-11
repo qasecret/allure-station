@@ -18,7 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { relativeTime, runLabel, formatDurationSec } from "@/lib/format";
+import { relativeTime, runLabel, formatDurationSec, formatDelta, passRate } from "@/lib/format";
+import { PassRateDonut } from "@/components/PassRateDonut";
 import { parseReportFragment, buildReportFragment, withReportHash } from "@/lib/report-deep-link";
 import { failedReasons } from "@/lib/quality-gate-verdict";
 import { severityChipClass } from "@/lib/severity";
@@ -124,6 +125,10 @@ export function Project() {
   const selectedVisible = selectedRun && visibleRuns.some((r) => r.id === selectedRun) ? selectedRun : null;
   const current = selectedVisible ?? visibleRuns.find((r) => r.status === "ready")?.id ?? visibleRuns[0]?.id ?? null;
   const cur = runs.find((r) => r.id === current);
+  // The most-recent ready run strictly older than the current one — used for delta tiles in StatsRow.
+  const prevReady = runs
+    .filter((r) => r.status === "ready" && r.createdAt < (cur?.createdAt ?? ""))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0] ?? null;
   // The most recent COMPLETED run (ready/failed). If it failed and isn't what we're showing, surface a
   // banner — so a failure isn't hidden behind an older report, even when a newer run is still generating.
   const latestDone = visibleRuns.find((r) => r.status === "ready" || r.status === "failed");
@@ -261,14 +266,10 @@ export function Project() {
             </Button>
           )}
         </div>
-        <div className={cn("flex flex-wrap gap-3", focusReport && tab === "report" && "hidden")}>
-          <Card className="min-w-[260px] flex-1">
-            <CardContent className="flex items-center gap-3 p-4">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><TrendingUp className="size-5" /></span>
-              <TrendBar points={trends} />
-            </CardContent>
-          </Card>
-          <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
+        <div className={cn("space-y-3", focusReport && tab === "report" && "hidden")}>
+          <StatsRow current={cur ?? null} previous={prevReady ?? null} />
+          <TrendCard projectId={id} points={trends} onSelectRun={setSelectedRun}
+            readyRuns={runs.filter((r) => r.status === "ready")} />
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as "report" | "runs")} className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center justify-between">
@@ -351,6 +352,117 @@ function GateBadge({ projectId, runId }: { projectId: string; runId: string }) {
   );
 }
 
+/** Four-tile stats row: pass rate donut, failures delta, duration delta, flaky count. */
+function StatsRow({ current, previous }: { current: Run | null; previous: Run | null }) {
+  if (!current?.stats) return null;
+  const s = current.stats;
+  const p = previous?.stats ?? null;
+  const failures = (s.failed ?? 0) + (s.broken ?? 0);
+  const prevFailures = p ? (p.failed ?? 0) + (p.broken ?? 0) : null;
+  const failDelta = prevFailures !== null ? formatDelta(failures - prevFailures) : null;
+  const durDelta = (s.durationMs && p?.durationMs) ? formatDelta(Math.round((s.durationMs - p.durationMs) / 1000)) : null;
+  const pct = passRate(s);
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm">
+        <PassRateDonut pct={pct} size={40} />
+        <div>
+          <div className="text-xs text-muted-foreground">Pass rate</div>
+          <div className="text-lg font-semibold tabular-nums">{pct}%</div>
+        </div>
+      </div>
+      <div className="rounded-xl border bg-card p-3 shadow-sm">
+        <div className="text-xs text-muted-foreground">Failures</div>
+        <div className="flex items-baseline gap-1">
+          <span className={cn("text-2xl font-semibold tabular-nums", failures > 0 ? "text-status-fail" : undefined)}>{failures}</span>
+          {failDelta && (
+            <span className={cn("text-xs font-medium", failDelta.startsWith("+") ? "text-status-fail" : "text-status-pass")}>{failDelta}</span>
+          )}
+        </div>
+      </div>
+      <div className="rounded-xl border bg-card p-3 shadow-sm">
+        <div className="text-xs text-muted-foreground">Duration</div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-2xl font-semibold tabular-nums">{s.durationMs ? formatDurationSec(s.durationMs) : "—"}</span>
+          {durDelta && (
+            <span className={cn("text-xs font-medium", durDelta.startsWith("+") ? "text-status-fail" : "text-status-pass")}>{durDelta}s</span>
+          )}
+        </div>
+      </div>
+      <div className="rounded-xl border bg-card p-3 shadow-sm">
+        <div className="text-xs text-muted-foreground">Flaky</div>
+        <div className={cn("text-2xl font-semibold tabular-nums", (s.flaky ?? 0) > 0 ? "text-status-broken" : undefined)}>{s.flaky ?? 0}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Full-width trend card wrapping the TrendBar + a collapsible Compare disclosure. */
+function TrendCard({ projectId, points, onSelectRun, readyRuns }: {
+  projectId: string;
+  points: TrendPoint[];
+  onSelectRun: (id: string) => void;
+  readyRuns: Run[];
+}) {
+  // Disclosure open state: default open when 2+ ready runs and no stored preference.
+  const storageKey = `compare-open:${projectId}`;
+  const defaultOpen = readyRuns.length >= 2;
+  const [compareOpen, setCompareOpen] = useState<boolean>(() => {
+    const stored = sessionStorage.getItem(storageKey);
+    if (stored !== null) return stored === "true";
+    return defaultOpen;
+  });
+
+  // When the project changes, reset the disclosure to reflect the new project's preference.
+  useEffect(() => {
+    const stored = sessionStorage.getItem(storageKey);
+    if (stored !== null) {
+      setCompareOpen(stored === "true");
+    } else {
+      setCompareOpen(readyRuns.length >= 2);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  // When readyRuns changes from <2 to >=2 and there's no stored preference, open by default.
+  useEffect(() => {
+    const stored = sessionStorage.getItem(storageKey);
+    if (stored === null && readyRuns.length >= 2) {
+      setCompareOpen(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readyRuns.length >= 2]);
+
+  const handleToggle = (open: boolean) => {
+    setCompareOpen(open);
+    sessionStorage.setItem(storageKey, String(open));
+  };
+
+  return (
+    <Card className="w-full">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><TrendingUp className="size-5" /></span>
+          <TrendBar points={points} />
+        </div>
+        {readyRuns.length >= 2 && (
+          <details open={compareOpen} onToggle={(e) => handleToggle((e.currentTarget as HTMLDetailsElement).open)}>
+            <summary className="cursor-pointer select-none list-none text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-1">
+                <GitCompareArrows className="size-3.5" />
+                Compare runs…
+              </span>
+            </summary>
+            <div className="mt-3">
+              <ComparePanel projectId={projectId} readyRuns={readyRuns} />
+            </div>
+          </details>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function TrendBar({ points }: { points: TrendPoint[] }) {
   if (points.length < 2) {
     return (
@@ -422,30 +534,27 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
     <SelectItem key={r.id} value={r.id}><span title={r.createdAt}>{runLabel(r)}</span></SelectItem>
   ));
   return (
-    <Card className="min-w-[300px] flex-1">
-      <CardContent className="space-y-3 p-4">
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><GitCompareArrows className="size-5" /></span>
-          <span className="mr-1 font-semibold">Compare</span>
-          <Select value={base} onValueChange={pick(setBase)}><SelectTrigger className="h-8 w-[180px]" aria-label="Base run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
-          <span className="text-muted-foreground">→</span>
-          <Select value={target} onValueChange={pick(setTarget)}><SelectTrigger className="h-8 w-[180px]" aria-label="Target run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
-        </div>
-        {base === target ? <p className="text-sm text-muted-foreground">Pick two different runs.</p>
-          : !diff ? <p className="text-sm text-muted-foreground">Loading comparison…</p>
-          : (
-            <div className="flex flex-wrap gap-4">
-              <Bucket label="Newly failing" color="text-status-fail" tests={diff.newlyFailing} onOpen={setSelected} />
-              <Bucket label="Fixed" color="text-status-pass" tests={diff.fixed} onOpen={setSelected} />
-              <Bucket label="Flaky" color="text-status-broken" tests={diff.flaky} onOpen={setSelected} />
-              <Bucket label="Still failing" color="text-status-fail" tests={diff.stillFailing} onOpen={setSelected} />
-              <Bucket label="Added" color="text-primary-text" tests={diff.added} onOpen={setSelected} />
-              <Bucket label="Removed" color="text-muted-foreground" tests={diff.removed} onOpen={setSelected} />
-            </div>
-          )}
-        <TestHistorySheet projectId={projectId} test={selected} onClose={() => setSelected(null)} />
-      </CardContent>
-    </Card>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="mr-1 font-semibold">Compare</span>
+        <Select value={base} onValueChange={pick(setBase)}><SelectTrigger className="h-8 w-[180px]" aria-label="Base run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
+        <span className="text-muted-foreground">→</span>
+        <Select value={target} onValueChange={pick(setTarget)}><SelectTrigger className="h-8 w-[180px]" aria-label="Target run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
+      </div>
+      {base === target ? <p className="text-sm text-muted-foreground">Pick two different runs.</p>
+        : !diff ? <p className="text-sm text-muted-foreground">Loading comparison…</p>
+        : (
+          <div className="flex flex-wrap gap-4">
+            <Bucket label="Newly failing" color="text-status-fail" tests={diff.newlyFailing} onOpen={setSelected} />
+            <Bucket label="Fixed" color="text-status-pass" tests={diff.fixed} onOpen={setSelected} />
+            <Bucket label="Flaky" color="text-status-broken" tests={diff.flaky} onOpen={setSelected} />
+            <Bucket label="Still failing" color="text-status-fail" tests={diff.stillFailing} onOpen={setSelected} />
+            <Bucket label="Added" color="text-primary-text" tests={diff.added} onOpen={setSelected} />
+            <Bucket label="Removed" color="text-muted-foreground" tests={diff.removed} onOpen={setSelected} />
+          </div>
+        )}
+      <TestHistorySheet projectId={projectId} test={selected} onClose={() => setSelected(null)} />
+    </div>
   );
 }
 
