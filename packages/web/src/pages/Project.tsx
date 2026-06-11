@@ -79,6 +79,7 @@ export function Project() {
         qc.setQueryData<Run[]>(["runs", id], (prev = []) => prev.filter((r) => r.id !== event.run.id));
         qc.invalidateQueries({ queryKey: ["runs-page", id] });
         qc.invalidateQueries({ queryKey: ["trends", id] });
+        if (searchParams.get("run") === event.run.id) setSelectedRun(null);
         return;
       }
       qc.setQueryData<Run[]>(["runs", id], (prev = []) => {

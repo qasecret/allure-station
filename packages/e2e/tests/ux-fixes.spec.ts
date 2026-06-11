@@ -92,6 +92,16 @@ test("ux fix pack: name, metadata, runs tab, deep link, delete, trend hint", asy
   await page.getByRole("button", { name: "Open" }).first().click();
   await expect(page).toHaveURL(/run=/);
 
+  // ⑦ Deep-link restore: capture the URL, navigate away, then navigate back and verify.
+  const deepLink = page.url();
+  await page.goto("/");
+  await page.goto(deepLink);
+  // The URL should still carry the ?run= param.
+  await expect(page).toHaveURL(/run=/);
+  // The branch chip for the run we opened should be visible again.
+  await expect(page.getByText(/main@e2e1234/).first()).toBeVisible();
+
+  // Re-acquire the Runs tab locator after the page reload.
   // ② Delete the run from the Runs tab.
   await page.getByRole("tab", { name: "Runs" }).click();
   await page.getByRole("button", { name: "Delete" }).first().click();

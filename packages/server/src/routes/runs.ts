@@ -7,6 +7,7 @@ import { authenticate, authorizeProjectWrite } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 
 const TREND_LIMIT = 30;
+const ERR_RUN_GENERATING = "run is generating; wait or let the reconciler fail it first";
 
 export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.get("/projects/:projectId/trends", async (req, reply): Promise<TrendPoint[] | undefined> => {
@@ -58,15 +59,15 @@ export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
     const run = await deps.runs.get(runId);
     if (!run || run.projectId !== projectId) return reply.code(404).send({ error: "not found" });
     if (run.status === "generating") {
-      return reply.code(409).send({ error: "run is generating; wait or let the reconciler fail it first" });
+      return reply.code(409).send({ error: ERR_RUN_GENERATING });
     }
     if (!(await deps.runs.remove(runId))) {
-      return reply.code(409).send({ error: "run is generating; wait or let the reconciler fail it first" });
+      return reply.code(409).send({ error: ERR_RUN_GENERATING });
     }
     try {
       await deps.storage.remove(`${projectId}/runs/${runId}`); // best-effort; orphans are reapable later
     } catch {
-      req.log?.warn?.({ projectId, runId }, "run artifact cleanup failed");
+      req.log.warn({ projectId, runId }, "run artifact cleanup failed");
     }
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "run_deleted", targetType: "run", targetId: runId, projectId, metadata: { status: run.status, stats: run.stats, branch: run.branch, commit: run.commit } });
     deps.bus.publish({ type: "run", projectId, run, deleted: true });

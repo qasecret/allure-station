@@ -2,7 +2,7 @@ import type {
   Project, Run, TrendPoint, RunEvent, CompareResult, TestHistory, TestTrace,
   SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry, ProjectVisibility,
   ApiToken, CreatedToken, QualityGateConfig, RunSummary, Notification, NotificationKind, NotificationTrigger,
-  RunMetadata,
+  RunMetadata, UpdateProjectRequest,
 } from "@allure-station/shared";
 
 export interface AppConfigInfo {
@@ -15,7 +15,7 @@ export interface ApiClient {
   getConfig(): Promise<AppConfigInfo>;
   listProjects(opts?: { q?: string; limit?: number; offset?: number }): Promise<{ items: Project[]; total: number }>;
   createProject(id: string, displayName?: string): Promise<Project>;
-  updateProject(id: string, body: { displayName: string | null }): Promise<Project>;
+  updateProject(id: string, body: UpdateProjectRequest): Promise<Project>;
   getProject(id: string): Promise<Project>;
   deleteProject(id: string): Promise<void>;
   setVisibility(id: string, visibility: ProjectVisibility): Promise<Project>;
@@ -87,7 +87,7 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     listProjects: (opts = {}) => listWithTotal<Project>(`/projects${qs(opts)}`),
     createProject: (id, displayName) =>
       json<Project>("/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(displayName ? { id, displayName } : { id }) }),
-    updateProject: (id, body) =>
+    updateProject: (id: string, body: UpdateProjectRequest) =>
       json<Project>(`/projects/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
     getProject: (id) => json<Project>(`/projects/${id}`, { method: "GET" }),
     deleteProject: (id) => noContent(`/projects/${id}`, { method: "DELETE" }),
