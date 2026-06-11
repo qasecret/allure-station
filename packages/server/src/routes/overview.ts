@@ -13,7 +13,7 @@ export function registerOverviewRoutes(app: FastifyInstance, deps: AppDeps): voi
     let failing = 0, gateBreached = 0;
     for (const p of items) {
       const lr = p.latestRun;
-      if (lr && (lr.stats != null && lr.stats.failed + lr.stats.broken > 0)) failing += 1;
+      if (lr && (lr.status === "failed" || (lr.stats != null && lr.stats.failed + lr.stats.broken > 0))) failing += 1;
       if (lr?.gatePassed === false) gateBreached += 1;
     }
     // run-level counts respect the same project set
