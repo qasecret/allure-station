@@ -41,7 +41,7 @@ export function ProjectSettings() {
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : state === "signin" ? (
             <p className="text-sm text-muted-foreground">
-              <Link to="/login" className="text-primary hover:underline">Sign in</Link> to manage this project's settings.
+              <Link to="/login" className="text-primary-text hover:underline">Sign in</Link> to manage this project's settings.
             </p>
           ) : (
             <>

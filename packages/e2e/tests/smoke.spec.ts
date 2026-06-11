@@ -1,15 +1,5 @@
 import { test, expect } from "@playwright/test";
-
-/** Open the New Project dialog, fill in the id, and submit. Waits for the dialog to close. */
-async function createProject(page: import("@playwright/test").Page, id: string) {
-  // When the project list is empty an EmptyState also renders a "New project" button.
-  // Always use .first() to target the topbar trigger reliably.
-  await page.getByRole("button", { name: "New project" }).first().click();
-  await page.getByLabel("Project id").fill(id);
-  await page.getByRole("button", { name: "Create" }).click();
-  // Wait for the dialog to close (the Create button disappears)
-  await expect(page.getByRole("button", { name: "Create" })).toHaveCount(0);
-}
+import { createProject } from "./helpers.js";
 
 test("create a project and open its (empty) page", async ({ page }) => {
   await page.goto("/");

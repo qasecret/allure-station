@@ -1,63 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
-import type { Page } from "@playwright/test";
-
-const here = dirname(fileURLToPath(import.meta.url));
-// Minimal allure-result fixture — one passing test, used to generate a real report.
-const FIXTURE = resolve(here, "../fixtures/00000000-0000-0000-0000-000000000001-result.json");
-
-/** Open the New Project dialog, fill in the id (and optional display name), then submit. */
-async function createProject(page: Page, id: string, displayName?: string) {
-  // When the project list is empty, there are two "New project" buttons (topbar + EmptyState).
-  // Use .first() to reliably target the topbar trigger.
-  await page.getByRole("button", { name: "New project" }).first().click();
-  await page.getByLabel("Project id").fill(id);
-  if (displayName) {
-    await page.getByLabel("Display name").fill(displayName);
-  }
-  // Click the "Create" button inside the dialog.
-  await page.getByRole("button", { name: "Create" }).click();
-  // Wait for the dialog to close.
-  await expect(page.getByRole("button", { name: "Create" })).toHaveCount(0);
-}
-
-/** Upload the fixture file and submit via the UploadDialog, filling optional CI metadata. */
-async function uploadResults(
-  page: Page,
-  opts: { branch?: string; commit?: string } = {}
-) {
-  // Click the trigger button to open the Upload dialog.
-  await page.getByRole("button", { name: "Upload & generate" }).click();
-
-  // Set the fixture file on the file input.
-  await page.getByLabel("Allure result files").setInputFiles(FIXTURE);
-
-  // Open the CI context section and fill in metadata if provided.
-  if (opts.branch || opts.commit) {
-    await page.getByText("Add CI context (optional)").click();
-    if (opts.branch) await page.getByLabel("Branch").fill(opts.branch);
-    if (opts.commit) await page.getByLabel("Commit").fill(opts.commit);
-  }
-
-  // Click the submit button inside the dialog (same text as the trigger, but inside the dialog overlay).
-  // The dialog is open so the DialogContent is mounted — use the button inside the dialog footer.
-  await page.getByRole("button", { name: "Upload & generate" }).last().click();
-  // Wait for the dialog to close — the file input disappears when the dialog unmounts.
-  await expect(page.getByLabel("Allure result files")).toHaveCount(0, { timeout: 10_000 });
-}
-
-/** Wait for the run table to show a "Ready" status badge (polls the Runs tab).
- *  Uses visible=true to avoid matching the hidden mobile card list at desktop viewport.
- */
-async function waitForReady(page: Page) {
-  // The Runs tab auto-refreshes every 5 s while generating; we wait up to 60 s.
-  // Use the badge inside the TabsContent for "runs" to avoid matching the filter chip or RunSelector.
-  // locator("visible=true") scopes to only DOM-visible copies, skipping sm:hidden mobile cards.
-  await expect(
-    page.getByRole("tabpanel").getByText("Ready", { exact: true }).locator("visible=true").first()
-  ).toBeVisible({ timeout: 60_000 });
-}
+import { createProject, uploadResults, waitForReady, visible } from "./helpers.js";
 
 test("ux fix pack: name, metadata, runs tab, deep link, delete, trend hint", async ({ page }) => {
   // Give this test plenty of room — generation + Allure embed takes a few seconds.
@@ -94,8 +36,7 @@ test("ux fix pack: name, metadata, runs tab, deep link, delete, trend hint", asy
   await expect(page.getByRole("cell", { name: /main@e2e1234/ })).toBeVisible();
 
   // ⑥ Click "Open" — switches to Report tab and sets ?run= in the URL.
-  // locator("visible=true") avoids the hidden mobile RowActions buttons.
-  await page.getByRole("button", { name: "Open" }).locator("visible=true").first().click();
+  await visible(page.getByRole("button", { name: "Open" })).click();
   await expect(page).toHaveURL(/run=/);
 
   // ⑦ Deep-link restore: capture the URL, navigate away, then navigate back and verify.
@@ -105,15 +46,14 @@ test("ux fix pack: name, metadata, runs tab, deep link, delete, trend hint", asy
   // The URL should still carry the ?run= param.
   await expect(page).toHaveURL(/run=/);
   // The branch chip for the run we opened should be visible again.
-  await expect(page.getByText(/main@e2e1234/).locator("visible=true").first()).toBeVisible();
+  await expect(visible(page.getByText(/main@e2e1234/))).toBeVisible();
 
   // Re-acquire the Runs tab locator after the page reload.
   // ② Delete the run from the Runs tab.
   await page.getByRole("tab", { name: "Runs" }).click();
-  // locator("visible=true") avoids the hidden mobile RowActions buttons.
-  await page.getByRole("button", { name: "Delete" }).locator("visible=true").first().click();
+  await visible(page.getByRole("button", { name: "Delete" })).click();
   // Confirm the deletion in the dialog.
   await page.getByRole("button", { name: "Delete run" }).click();
   // The table should now be empty.
-  await expect(page.getByText(/No runs/).locator("visible=true").first()).toBeVisible();
+  await expect(visible(page.getByText(/No runs/))).toBeVisible();
 });

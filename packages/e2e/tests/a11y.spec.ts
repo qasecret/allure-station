@@ -1,13 +1,15 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { createProject } from "./helpers.js";
 
 // Fails the build on serious/critical violations; logs everything else.
 // The embedded Allure report iframe is third-party content — excluded.
 // Users/Audit pages join the scan when an authed e2e fixture exists.
-// KNOWN DEBT (deferred to the polish sub-project): teal-as-TEXT usages (text-primary links,
-// text-status-pass) are ~2.5:1 on light backgrounds and will fail this gate once a scanned
-// page renders them (e.g. a project page with runs). Fix shape: a darker
-// text-safe teal token for text/links, separate from the brand fill.
+// KNOWN DEBT (deferred to the polish sub-project): teal links/text now use the text-safe
+// `text-primary-text` token (≥4.5:1 in both modes). Remaining debt is the status swatches
+// used as TEXT — `text-status-pass`/`text-status-fail` glyphs and small status text are
+// still ~3:1 on light backgrounds and will fail this gate once a scanned page renders them
+// (e.g. a project page with failing runs). Fix shape: text-safe status tokens, same as teal.
 async function expectNoSeriousViolations(page: Page, label: string) {
   await page.mouse.move(0, 0);
   const results = await new AxeBuilder({ page })
@@ -26,11 +28,7 @@ test("a11y: core pages have no serious violations", async ({ page }) => {
 
   await page.goto("/");
   const id = `a11y-e2e-${Date.now()}`;
-  await page.getByRole("button", { name: "New project" }).first().click();
-  await page.getByLabel("Project id").fill(id);
-  await page.getByRole("button", { name: "Create" }).click();
-  // Wait for the dialog to close (the Create button disappears)
-  await expect(page.getByRole("button", { name: "Create" })).toHaveCount(0);
+  await createProject(page, id);
   await expectNoSeriousViolations(page, "projects");
 
   await page.getByText(id).first().click();

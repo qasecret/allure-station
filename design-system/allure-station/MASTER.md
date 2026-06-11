@@ -33,7 +33,8 @@ Teal-emerald accent on cool-slate neutrals. Values below are the canonical roles
 
 | Role | Token (class) | Light | Dark | Notes |
 |------|---------------|-------|------|-------|
-| Primary / CTA | `primary` | `#1DB980` (`158 73% 42%`) | brighter teal (`159 64% 50%`) | buttons, active nav, links |
+| Primary / CTA | `primary` | `#1DB980` (`158 73% 42%`) | brighter teal (`159 64% 50%`) | buttons, active nav, fills/tiles — NOT text/links |
+| Primary as text | `primary-text` | darker teal (`158 75% 26%`, 5.77:1 on white — same value as the sidebar active tokens) | reuses dark primary (`159 64% 50%`, 9.60:1 on slate-950) | teal-as-TEXT: links, text labels (light `--primary` is only ~2.5:1 on white) |
 | On primary | `primary-foreground` | dark slate (`222 47% 11%`) | dark slate (`222 47% 9%`) | text on teal in BOTH modes — AA 7:1; flipped 2026-06-11 by the axe gate work |
 | Background (canvas) | `background` | cool slate `#f3f6fa` (`210 33% 97%`) | slate-950 (`222 47% 8%`) | app canvas / topbar |
 | Foreground | `foreground` | slate-900 `#0F172A` | slate-100 | primary text |

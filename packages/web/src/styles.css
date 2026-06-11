@@ -22,6 +22,9 @@
        Ring stays at 30% lightness (3:1 non-text contrast vs canvas; 42% is ~2.4:1). */
     --primary: 158 73% 42%;
     --primary-foreground: 222 47% 11%;
+    /* Text-safe teal for links/teal-as-text: --primary (42%) is only ~2.5:1 on white.
+       26% lightness — the same value the sidebar active tokens use — is 5.77:1 on white. */
+    --primary-text: 158 75% 26%;
 
     --secondary: 210 40% 96%;
     --secondary-foreground: 215 25% 27%;
@@ -59,6 +62,8 @@
 
     --primary: 159 64% 50%;
     --primary-foreground: 222 47% 9%;
+    /* Dark primary is already text-safe: 9.60:1 on slate-950 (222 47% 8%). */
+    --primary-text: 159 64% 50%;
 
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 96%;
@@ -92,18 +97,30 @@
   }
 }
 
-/* Sonner rich-colors WCAG-AA contrast fix (light mode).
-   Sonner's built-in token values fail 4.5:1 for normal text; we override
-   them to darker shades while keeping the background colours unchanged.
-   !important is required because Sonner injects its own <style> tag at
-   runtime (after our static stylesheet), giving it source-order priority
-   over identical-specificity rules.
-   NOTE: dark-mode toast contrast is unaudited — the axe gate scans light mode only. */
+/* Sonner rich-colors WCAG-AA contrast overrides.
+   Verified against sonner 2.0.7 (node_modules/sonner/dist/styles.css) — re-audit
+   this block on every sonner upgrade.
+   Why CSS and not the Toaster API: sonner injects its own <style> tag at runtime
+   (after our static stylesheet, so it wins source-order ties — hence !important),
+   and the rich-color text rules read CSS variables scoped to the
+   `data-sonner-theme` attribute that sonner itself manages. The public API can't
+   express this fix: `toastOptions.classNames` loses to the (0,3,0)-specificity
+   `[data-rich-colors][data-sonner-toast][data-type=…]` rules and can't vary with
+   sonner's theme attribute, and the Toaster `style` prop sets variables
+   unconditionally on the toaster — it would clobber both themes with one value. */
 [data-sonner-toaster][data-sonner-theme=light] {
-  --success-text: hsl(140, 100%, 26%) !important; /* was 27% → 4.53:1 on success-bg */
-  --info-text:    hsl(210, 92%, 44%) !important;  /* was 45% → 4.54:1 on info-bg */
-  --warning-text: hsl(31, 92%, 36%) !important;   /* was 45% → 4.56:1 on warning-bg */
-  --error-text:   hsl(360, 100%, 44%) !important; /* was 45% → 4.55:1 on error-bg */
+  --success-text: hsl(140, 100%, 26%) !important; /* was 27% → 4.53:1 on success-bg hsl(143,85%,96%) */
+  --info-text:    hsl(210, 92%, 44%) !important;  /* was 45% → 4.54:1 on info-bg hsl(208,100%,97%) */
+  --warning-text: hsl(31, 92%, 36%) !important;   /* was 45% → 4.56:1 on warning-bg hsl(49,100%,97%) */
+  --error-text:   hsl(360, 100%, 44%) !important; /* was 45% → 4.55:1 on error-bg hsl(359,100%,97%) */
+}
+/* Dark theme audited (sonner 2.0.7 defaults already meet AA; pinned here so an
+   upstream change can't silently regress below 4.5:1). Computed ratios: */
+[data-sonner-toaster][data-sonner-theme=dark] {
+  --success-text: hsl(150, 86%, 65%) !important;  /* 12.30:1 on success-bg hsl(150,100%,6%) */
+  --info-text:    hsl(216, 87%, 65%) !important;  /*  6.56:1 on info-bg hsl(215,100%,6%) */
+  --warning-text: hsl(46, 87%, 65%) !important;   /* 11.12:1 on warning-bg hsl(64,100%,6%) */
+  --error-text:   hsl(358, 100%, 81%) !important; /*  9.34:1 on error-bg hsl(358,76%,10%) */
 }
 
 /* Honor reduced-motion: neutralize transitions/animations app-wide. */

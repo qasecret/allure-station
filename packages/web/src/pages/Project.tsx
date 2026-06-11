@@ -192,7 +192,7 @@ export function Project() {
           <div className="max-w-sm text-center">
             <h1 className="text-lg font-semibold">Project unavailable</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              This project is private or doesn't exist. If it's private, <Link to="/login" className="text-primary underline">sign in</Link> with an account that has access.
+              This project is private or doesn't exist. If it's private, <Link to="/login" className="text-primary-text underline">sign in</Link> with an account that has access.
             </p>
           </div>
         </main>
@@ -230,7 +230,7 @@ export function Project() {
             <span>The latest run failed to generate. <span className="underline">View &amp; retry</span></span>
           </button>
         )}
-        <div className={cn("flex flex-wrap items-center gap-3", focusReport && "hidden")}>
+        <div className={cn("flex flex-wrap items-center gap-3", focusReport && tab === "report" && "hidden")}>
           {cur && <StatusBadge status={cur.status} />}
           {cur?.stats && (
             <span className="text-sm text-muted-foreground">
@@ -244,7 +244,7 @@ export function Project() {
           {cur?.status === "ready" && current && <GateBadge projectId={id} runId={current} />}
           {cur?.branch && <Badge variant="secondary">branch {cur.branch}{cur.commit ? `@${cur.commit.slice(0, 7)}` : ""}</Badge>}
           {cur?.environment && <Badge variant="secondary">env {cur.environment}</Badge>}
-          {cur?.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">CI build ↗</a>}
+          {cur?.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer" className="text-sm text-primary-text underline">CI build ↗</a>}
           {current && (
             <Button variant="ghost" size="sm" className="text-muted-foreground"
               onClick={async () => {
@@ -261,7 +261,7 @@ export function Project() {
             </Button>
           )}
         </div>
-        <div className={cn("flex flex-wrap gap-3", focusReport && "hidden")}>
+        <div className={cn("flex flex-wrap gap-3", focusReport && tab === "report" && "hidden")}>
           <Card className="min-w-[260px] flex-1">
             <CardContent className="flex items-center gap-3 p-4">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><TrendingUp className="size-5" /></span>
@@ -270,7 +270,7 @@ export function Project() {
           </Card>
           <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
         </div>
-        <Tabs value={tab} onValueChange={(v) => { setTab(v as "report" | "runs"); if (v !== "report") setFocusReport(false); }} className="flex min-h-0 flex-1 flex-col">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "report" | "runs")} className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center justify-between">
             <TabsList>
               <TabsTrigger value="report">Report</TabsTrigger>
@@ -390,7 +390,7 @@ function TrendBar({ points }: { points: TrendPoint[] }) {
       <div className="flex flex-col gap-0.5 text-[11px] text-muted-foreground">
         <span className="font-medium text-foreground">Trend</span>
         {anyFlaky && <span className="text-status-broken">▮ flaky</span>}
-        {anyDur && <span className="text-primary">╱ duration</span>}
+        {anyDur && <span className="text-primary-text">╱ duration</span>}
       </div>
     </div>
   );
@@ -439,7 +439,7 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
               <Bucket label="Fixed" color="text-status-pass" tests={diff.fixed} onOpen={setSelected} />
               <Bucket label="Flaky" color="text-status-broken" tests={diff.flaky} onOpen={setSelected} />
               <Bucket label="Still failing" color="text-status-fail" tests={diff.stillFailing} onOpen={setSelected} />
-              <Bucket label="Added" color="text-primary" tests={diff.added} onOpen={setSelected} />
+              <Bucket label="Added" color="text-primary-text" tests={diff.added} onOpen={setSelected} />
               <Bucket label="Removed" color="text-muted-foreground" tests={diff.removed} onOpen={setSelected} />
             </div>
           )}
@@ -514,7 +514,7 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
                     {e.flaky ? <span className="text-status-broken">flaky</span> : null}
                     <span className="text-muted-foreground" title={e.createdAt}>{relativeTime(e.createdAt)}</span>
                     {e.commit ? <span className="text-muted-foreground">· {e.commit.slice(0, 7)}</span> : null}
-                    {e.ciUrl ? <a href={e.ciUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">CI</a> : null}
+                    {e.ciUrl ? <a href={e.ciUrl} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">CI</a> : null}
                   </div>
                   {e.message ? <pre className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">{e.message}</pre> : null}
                   {e.hasTrace && test ? <TraceDetails projectId={projectId} test={test} runId={e.runId} /> : null}
@@ -534,7 +534,7 @@ function RegressionHint({ regression, entries }: { regression: Regression; entri
     const ciUrl = entries.find((e) => e.runId === ref.runId)?.ciUrl ?? null;
     const label = relativeTime(ref.createdAt);
     return ciUrl
-      ? <a href={ciUrl} target="_blank" rel="noreferrer" title={ref.createdAt} className="text-primary hover:underline">{label}</a>
+      ? <a href={ciUrl} target="_blank" rel="noreferrer" title={ref.createdAt} className="text-primary-text hover:underline">{label}</a>
       : <span title={ref.createdAt}>{label}</span>;
   };
   if (regression.windowLimited) {

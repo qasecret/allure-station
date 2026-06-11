@@ -1,39 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
-import type { Page } from "@playwright/test";
-
-const here = dirname(fileURLToPath(import.meta.url));
-const FIXTURE = resolve(here, "../fixtures/00000000-0000-0000-0000-000000000001-result.json");
+import { createProjectWithRun, visible } from "./helpers.js";
 
 test.use({ viewport: { width: 375, height: 812 } });
-
-/** Create a project, upload fixture, wait for Ready. Mirrors ux-fixes.spec.ts helper style. */
-async function createProjectWithRun(page: Page, id: string) {
-  await page.goto("/");
-  await page.getByRole("button", { name: "New project" }).first().click();
-  await page.getByLabel("Project id").fill(id);
-  await page.getByRole("button", { name: "Create" }).click();
-  // Wait for the dialog to close.
-  await expect(page.getByRole("button", { name: "Create" })).toHaveCount(0);
-  // Navigate to the newly-created project.
-  await page.getByText(id).first().click();
-  // Open the Upload dialog via the trigger button.
-  await page.getByRole("button", { name: /Upload/ }).first().click();
-  // Set the fixture file on the labelled file input.
-  await page.getByLabel("Allure result files").setInputFiles(FIXTURE);
-  // Submit via the dialog's internal footer button (last "Upload" button on the page).
-  await page.getByRole("button", { name: /Upload & generate/ }).last().click();
-  // Wait for the dialog to close.
-  await expect(page.getByLabel("Allure result files")).toHaveCount(0, { timeout: 10_000 });
-  // Switch to the Runs tab and wait for the run to reach "Ready".
-  // locator("visible=true") is explicit about matching only visible nodes even though at
-  // 375 px the desktop table is hidden — keeps the assertion honest at any viewport.
-  await page.getByRole("tab", { name: "Runs" }).click();
-  await expect(
-    page.getByRole("tabpanel").getByText("Ready", { exact: true }).locator("visible=true").first()
-  ).toBeVisible({ timeout: 60_000 });
-}
 
 test("mobile: runs tab renders card rows with reachable actions", async ({ page }) => {
   test.setTimeout(120_000);
@@ -42,9 +10,7 @@ test("mobile: runs tab renders card rows with reachable actions", async ({ page 
   await createProjectWithRun(page, id);
   // createProjectWithRun already clicks the Runs tab and waits for Ready
   await expect(page.getByRole("table")).toBeHidden();           // table hidden below sm
-  // locator("visible=true") ensures we get the mobile card's Open button, not the
-  // hidden desktop table's button (which also appears in the DOM at 375 px).
-  const open = page.getByRole("button", { name: "Open" }).locator("visible=true").first();
+  const open = visible(page.getByRole("button", { name: "Open" }));
   await expect(open).toBeVisible();
   const box = await open.boundingBox();
   expect(box!.x + box!.width).toBeLessThanOrEqual(375);          // action on screen, not behind scroll
@@ -57,11 +23,11 @@ test("mobile: report focus mode hides the header cards", async ({ page }) => {
   await createProjectWithRun(page, id);
   // Switch back to the Report tab (createProjectWithRun ends on Runs tab).
   await page.getByRole("tab", { name: "Report" }).click();
-  await expect(page.getByText(/Trends appear/).locator("visible=true").first()).toBeVisible();
+  await expect(visible(page.getByText(/Trends appear/))).toBeVisible();
   await page.getByRole("button", { name: "Focus report" }).click();
   await expect(page.getByText(/Trends appear/)).toBeHidden();
   await page.getByRole("button", { name: "Focus report" }).click();
-  await expect(page.getByText(/Trends appear/).locator("visible=true").first()).toBeVisible();
+  await expect(visible(page.getByText(/Trends appear/))).toBeVisible();
 });
 
 test("mobile: drawer opens and topbar controls stay tappable", async ({ page }) => {
