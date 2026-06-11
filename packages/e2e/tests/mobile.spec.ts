@@ -33,6 +33,19 @@ async function createProjectWithRun(page: Page, id: string) {
   ).toBeVisible({ timeout: 60_000 });
 }
 
+test("mobile: runs tab renders card rows with reachable actions", async ({ page }) => {
+  test.setTimeout(120_000);
+
+  const id = `mobile-runs-${Date.now()}`;
+  await createProjectWithRun(page, id);
+  // createProjectWithRun already clicks the Runs tab and waits for Ready
+  await expect(page.getByRole("table")).toBeHidden();           // table hidden below sm
+  const open = page.getByRole("button", { name: "Open" }).first();
+  await expect(open).toBeVisible();
+  const box = await open.boundingBox();
+  expect(box!.x + box!.width).toBeLessThanOrEqual(375);          // action on screen, not behind scroll
+});
+
 test("mobile: drawer opens and topbar controls stay tappable", async ({ page }) => {
   test.setTimeout(120_000);
 
