@@ -252,11 +252,11 @@ function GateBadge({ projectId, runId }: { projectId: string; runId: string }) {
 function TrendBar({ points }: { points: TrendPoint[] }) {
   if (points.length < 2) {
     return (
-      <div className="flex flex-1 items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex flex-1 items-center text-sm text-muted-foreground">
         <span>
           {points.length === 1
-            ? "Trends appear after 2 runs — 1 more to go."
-            : "Trends appear after 2 runs. Push results to start the series."}
+            ? "Trends appear after 2 successful runs — 1 more to go."
+            : "Trends appear after 2 successful runs. Push results to start the series."}
         </span>
       </div>
     );
