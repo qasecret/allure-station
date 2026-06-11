@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import type { Run, RunStatus } from "@allure-station/shared";
 import { api } from "@/main";
 import { StatusBadge } from "@/components/StatusBadge";
+import { SortTh } from "@/components/SortTh";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { relativeTime, formatDurationSec } from "@/lib/format";
@@ -23,13 +23,6 @@ function nextSort(current: SortKey | null, order: SortOrder | null, key: SortKey
   if (current !== key) return { sortKey: key, order: "desc" };
   if (order === "desc") return { sortKey: key, order: "asc" };
   return { sortKey: null, order: null }; // third click: reset
-}
-
-function SortIcon({ active, order }: { active: boolean; order: SortOrder | null }) {
-  if (!active) return <ChevronsUpDown className="ml-1 inline h-3 w-3 opacity-50" aria-hidden />;
-  return order === "asc"
-    ? <ChevronUp className="ml-1 inline h-3 w-3" aria-hidden />
-    : <ChevronDown className="ml-1 inline h-3 w-3" aria-hidden />;
 }
 
 function GateMark({ verdict }: { verdict: { passed: boolean; reasons: string[] } | null }) {
@@ -113,27 +106,6 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
 
   useEffect(() => { if (page >= pages) setPage(pages - 1); }, [page, pages]);
 
-  const SortTh = ({ label, sortable }: { label: string; sortable: SortKey }) => {
-    const active = sortKey === sortable;
-    return (
-      <th
-        scope="col"
-        className="p-2"
-        aria-sort={active ? (sortOrder === "asc" ? "ascending" : "descending") : undefined}
-      >
-        <button
-          type="button"
-          className="flex items-center whitespace-nowrap font-medium hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => handleSort(sortable)}
-          aria-label={`Sort by ${label}`}
-        >
-          {label}
-          <SortIcon active={active} order={active ? sortOrder : null} />
-        </button>
-      </th>
-    );
-  };
-
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex gap-1">
@@ -175,13 +147,13 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
         <table className="w-full text-sm">
           <thead className="text-left text-muted-foreground">
             <tr className="border-b">
-              <th scope="col" className="p-2">Status</th>
+              <SortTh label="Status" sortKey="status" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("status")} />
               <th scope="col" className="p-2">Result</th>
               <th scope="col" className="p-2">Gate</th>
               <th scope="col" className="p-2">Branch</th>
               <th scope="col" className="p-2">Env</th>
-              <SortTh label="Duration" sortable="duration" />
-              <SortTh label="Age" sortable="createdAt" />
+              <SortTh label="Duration" sortKey="duration" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("duration")} />
+              <SortTh label="Age" sortKey="createdAt" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("createdAt")} />
               <th scope="col" className="p-2"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>

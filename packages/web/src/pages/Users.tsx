@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import type { GlobalRole } from "@allure-station/shared";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
+import { SortTh } from "@/components/SortTh";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,13 +19,6 @@ function nextSort(current: UserSortKey | null, order: SortOrder | null, key: Use
   if (current !== key) return { sortKey: key, order: "asc" };
   if (order === "asc") return { sortKey: key, order: "desc" };
   return { sortKey: null, order: null };
-}
-
-function SortIcon({ active, order }: { active: boolean; order: SortOrder | null }) {
-  if (!active) return <ChevronsUpDown className="ml-1 inline h-3 w-3 opacity-50" aria-hidden />;
-  return order === "asc"
-    ? <ChevronUp className="ml-1 inline h-3 w-3" aria-hidden />
-    : <ChevronDown className="ml-1 inline h-3 w-3" aria-hidden />;
 }
 
 export function Users() {
@@ -69,26 +62,6 @@ export function Users() {
   if (isLoading) return null;
   if (user?.role !== "admin") return (<><Topbar title="Users" /><main className="grid flex-1 place-items-center p-6"><p className="text-sm text-muted-foreground">Admins only.</p></main></>);
 
-  const SortTh = ({ label, sortable, className }: { label: string; sortable: UserSortKey; className?: string }) => {
-    const active = sortKey === sortable;
-    return (
-      <TableHead
-        className={className}
-        aria-sort={active ? (sortOrder === "asc" ? "ascending" : "descending") : undefined}
-      >
-        <button
-          type="button"
-          className="flex items-center whitespace-nowrap font-medium hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => handleSort(sortable)}
-          aria-label={`Sort by ${label}`}
-        >
-          {label}
-          <SortIcon active={active} order={active ? sortOrder : null} />
-        </button>
-      </TableHead>
-    );
-  };
-
   return (
     <>
       <Topbar title="Users" />
@@ -127,8 +100,8 @@ export function Users() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <SortTh label="Email" sortable="email" />
-                      <SortTh label="Role" sortable="role" />
+                      <SortTh label="Email" sortKey="email" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("email")} as={TableHead} />
+                      <SortTh label="Role" sortKey="role" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("role")} as={TableHead} />
                       <TableHead />
                     </TableRow>
                   </TableHeader>

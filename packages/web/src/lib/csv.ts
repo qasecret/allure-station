@@ -3,11 +3,14 @@
 
 function escapeCell(val: unknown): string {
   const s = val == null ? "" : String(val);
+  // Guard against CSV formula injection: spreadsheet apps treat cells starting
+  // with =, +, -, or @ as formulas. Prefix with a single-quote to neutralise.
+  const safe = /^[=+\-@]/.test(s) ? `'${s}` : s;
   // Must quote if the value contains comma, double-quote, or newline characters
-  if (/[",\r\n]/.test(s)) {
-    return `"${s.replace(/"/g, '""')}"`;
+  if (/[",\r\n]/.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`;
   }
-  return s;
+  return safe;
 }
 
 /** Convert an array of plain objects to a RFC4180 CSV string with a header row. */

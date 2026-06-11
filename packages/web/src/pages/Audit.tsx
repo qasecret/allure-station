@@ -114,6 +114,7 @@ export function Audit() {
         targetId: e.targetId ?? "",
         projectId: e.projectId ?? "",
         event: describeAuditEntry(e),
+        metadata: e.metadata ? JSON.stringify(e.metadata) : "",
       }));
 
       downloadCsv(`audit-${new Date().toISOString().slice(0, 10)}.csv`, csvRows);

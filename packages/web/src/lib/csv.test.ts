@@ -10,7 +10,7 @@ describe("toCsv", () => {
     expect(lines[1]).toBe('1,"x,""y"""');
   });
 
-  it("handles empty array with a header from provided keys", () => {
+  it("returns empty string for an empty array", () => {
     const result = toCsv([]);
     expect(result).toBe("");
   });
@@ -37,5 +37,13 @@ describe("toCsv", () => {
     expect(lines[1]).toBe("1,");
     // row 2: a=2, b=hello
     expect(lines[2]).toBe("2,hello");
+  });
+
+  it("prefixes formula-injection characters with a single-quote", () => {
+    // Cells starting with =, +, -, or @ must be neutralised so spreadsheet apps
+    // do not interpret them as formulas.
+    const result = toCsv([{ a: "=SUM(1)", b: "+1", c: "-1", d: "@user" }]);
+    const lines = result.split("\r\n");
+    expect(lines[1]).toBe("'=SUM(1),'+1,'-1,'@user");
   });
 });

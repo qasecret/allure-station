@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { auditActionSchema } from "@allure-station/shared";
 import type { AuditAction } from "@allure-station/shared";
 import { Input } from "@/components/ui/input";
@@ -37,13 +37,24 @@ export function AuditFilterBar({ filters, onChange }: AuditFilterBarProps) {
     [filters, onChange]
   );
 
+  // Clear the actor debounce timer on unmount to prevent calling onChange after the component is gone
+  useEffect(() => () => clearTimeout(actorTimer.current ?? undefined), []);
+
   const setFrom = useCallback(
-    (val: string) => onChange({ ...filters, from: val ? `${val}T00:00:00.000Z` : undefined }),
+    (val: string) => {
+      if (!val) { onChange({ ...filters, from: undefined }); return; }
+      const [y, m, d] = val.split("-").map(Number);
+      onChange({ ...filters, from: new Date(y, m - 1, d).toISOString() });
+    },
     [filters, onChange]
   );
 
   const setTo = useCallback(
-    (val: string) => onChange({ ...filters, to: val ? `${val}T23:59:59.999Z` : undefined }),
+    (val: string) => {
+      if (!val) { onChange({ ...filters, to: undefined }); return; }
+      const [y, m, d] = val.split("-").map(Number);
+      onChange({ ...filters, to: new Date(y, m - 1, d, 23, 59, 59, 999).toISOString() });
+    },
     [filters, onChange]
   );
 
