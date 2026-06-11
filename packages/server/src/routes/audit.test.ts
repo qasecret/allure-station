@@ -5,7 +5,6 @@ import { makeTestDeps } from "../test-helpers.js";
 import { hashPassword } from "../password.js";
 import type { AppDeps } from "../app.js";
 import type { AuditEntry } from "@allure-station/shared";
-import { auditActionSchema } from "@allure-station/shared";
 
 async function seed(deps: AppDeps) {
   await deps.users.create("admin@x.com", await hashPassword("password123"), "admin", deps.now());
@@ -95,6 +94,8 @@ describe("audit log filters", () => {
     });
     expect(filteredByAction.statusCode).toBe(200);
     const filteredEntries = filteredByAction.json() as AuditEntry[];
+    // Seeding guarantees exactly one project_created entry in this scope.
+    expect(filteredEntries.length).toBe(1);
     expect(filteredEntries.every((e) => e.action === "project_created")).toBe(true);
     expect(Number(filteredByAction.headers["x-total-count"])).toBe(filteredEntries.length);
 
@@ -133,6 +134,15 @@ describe("audit log filters", () => {
     expect(toNone.statusCode).toBe(200);
     expect((toNone.json() as AuditEntry[]).length).toBe(0);
 
+    // --- from/to window that INCLUDES entries (wide window around now) ---
+    const wide = await app.inject({
+      method: "GET",
+      url: "/api/audit?from=2000-01-01T00:00:00.000Z&to=2099-12-31T23:59:59.999Z",
+      cookies: { as_session: adminCookie },
+    });
+    expect(wide.statusCode).toBe(200);
+    expect((wide.json() as AuditEntry[]).length).toBeGreaterThan(0);
+
     // --- invalid date → 400 ---
     expect(
       (await app.inject({ method: "GET", url: "/api/audit?from=not-a-date", cookies: { as_session: adminCookie } })).statusCode
@@ -161,6 +171,8 @@ describe("audit log filters", () => {
     });
     expect(res.statusCode).toBe(200);
     const entries = res.json() as AuditEntry[];
+    // Seeding guarantees exactly one project_created entry for this project.
+    expect(entries.length).toBe(1);
     expect(entries.every((e) => e.action === "project_created")).toBe(true);
     expect(Number(res.headers["x-total-count"])).toBe(entries.length);
 

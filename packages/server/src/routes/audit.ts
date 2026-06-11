@@ -19,29 +19,35 @@ interface AuditFilters {
 }
 
 /** Parse and validate the audit filter query params.
- *  Returns the parsed filters or throws/returns an error message string on invalid input. */
+ *  Returns the parsed filters or returns an `{ error }` object on invalid input. */
 function parseAuditFilters(query: Record<string, unknown>): AuditFilters | { error: string } {
   const raw = query as { action?: string; actor?: string; from?: string; to?: string };
 
+  // Treat empty strings as absent, consistent with parsePage's convention.
+  const action_raw = raw.action === "" ? undefined : raw.action;
+  const actor_raw  = raw.actor  === "" ? undefined : raw.actor;
+  const from_raw   = raw.from   === "" ? undefined : raw.from;
+  const to_raw     = raw.to     === "" ? undefined : raw.to;
+
   let action: AuditAction | undefined;
-  if (raw.action !== undefined) {
-    const parsed = auditActionSchema.safeParse(raw.action);
-    if (!parsed.success) return { error: `invalid action "${raw.action}"` };
+  if (action_raw !== undefined) {
+    const parsed = auditActionSchema.safeParse(action_raw);
+    if (!parsed.success) return { error: `invalid action "${action_raw}"` };
     action = parsed.data;
   }
 
-  const actor = typeof raw.actor === "string" ? raw.actor : undefined;
+  const actor = typeof actor_raw === "string" ? actor_raw : undefined;
 
   let from: string | undefined;
-  if (raw.from !== undefined) {
-    if (Number.isNaN(Date.parse(raw.from))) return { error: `invalid from date "${raw.from}"` };
-    from = raw.from;
+  if (from_raw !== undefined) {
+    if (Number.isNaN(Date.parse(from_raw))) return { error: `invalid from date "${from_raw}"` };
+    from = new Date(from_raw).toISOString();
   }
 
   let to: string | undefined;
-  if (raw.to !== undefined) {
-    if (Number.isNaN(Date.parse(raw.to))) return { error: `invalid to date "${raw.to}"` };
-    to = raw.to;
+  if (to_raw !== undefined) {
+    if (Number.isNaN(Date.parse(to_raw))) return { error: `invalid to date "${to_raw}"` };
+    to = new Date(to_raw).toISOString();
   }
 
   return { action, actor, from, to };
