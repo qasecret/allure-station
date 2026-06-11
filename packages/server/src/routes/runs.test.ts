@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { buildApp } from "../app.js";
 import { makeTestDeps } from "../test-helpers.js";
+import { hashPassword } from "../password.js";
+import type { AuditEntry } from "@allure-station/shared";
 
 describe("run routes", () => {
   it("lists runs for a project and 404s unknown run", async () => {
@@ -57,6 +59,145 @@ describe("run routes", () => {
     const ok = await app.inject({ method: "GET", url: `/api/projects/p2/runs/${p2RunId}` });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().projectId).toBe("p2");
+
+    await app.close();
+  });
+});
+
+describe("DELETE run", () => {
+  it("hard-deletes a run: row gone, storage prefix removed, audited", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
+    await deps.runs.create("p", "r1", "R", "2026-06-10T00:00:01.000Z");
+    await deps.storage.putBuffer("p/runs/r1/results/x-result.json", Buffer.from("{}"));
+
+    const res = await app.inject({ method: "DELETE", url: "/api/projects/p/runs/r1" });
+    expect(res.statusCode).toBe(204);
+    expect(await deps.runs.get("r1")).toBeNull();
+    expect(await deps.storage.exists("p/runs/r1")).toBe(false);
+    expect((await app.inject({ method: "GET", url: "/api/projects/p/runs/r1" })).statusCode).toBe(404);
+
+    const audit = await deps.audit.list({ limit: 10 });
+    expect(audit.some((e: AuditEntry) => e.action === "run_deleted" && e.targetId === "r1")).toBe(true);
+
+    await app.close();
+  });
+
+  it("409s while generating, 404s cross-project (IDOR) and unknown ids", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "other" } });
+    await deps.runs.create("p", "busy", "R", "2026-06-10T00:00:01.000Z");
+    await deps.runs.claimPending("busy", "2026-06-10T00:00:02.000Z"); // now 'generating'
+
+    expect((await app.inject({ method: "DELETE", url: "/api/projects/p/runs/busy" })).statusCode).toBe(409);
+    expect((await app.inject({ method: "DELETE", url: "/api/projects/other/runs/busy" })).statusCode).toBe(404);
+    expect((await app.inject({ method: "DELETE", url: "/api/projects/p/runs/nope" })).statusCode).toBe(404);
+    await app.close();
+  });
+
+  it("publishes a deleted run event", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
+    await deps.runs.create("p", "r1", "R", "2026-06-10T00:00:01.000Z");
+    const events: unknown[] = [];
+    const unsub = deps.bus.subscribe((e) => { if (e.projectId === "p") events.push(e); });
+    await app.inject({ method: "DELETE", url: "/api/projects/p/runs/r1" });
+    expect(events.some((e) => (e as { deleted?: boolean }).deleted === true)).toBe(true);
+    unsub();
+    await app.close();
+  });
+
+  it("cascade regression: test_results rows are gone after run is deleted", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
+    await deps.runs.create("p", "r1", "R", "2026-06-10T00:00:01.000Z");
+    // Seed test results for the run
+    await deps.testResults.replaceForRun("r1", [
+      { historyId: "h1", name: "Test A", fullName: "suite.TestA", status: "passed", duration: 100, flaky: false },
+    ]);
+    // Verify they exist before delete
+    expect(await deps.testResults.listByRun("r1")).toHaveLength(1);
+
+    const res = await app.inject({ method: "DELETE", url: "/api/projects/p/runs/r1" });
+    expect(res.statusCode).toBe(204);
+
+    // Row gone from runs
+    expect(await deps.runs.get("r1")).toBeNull();
+    // test_results rows must also be gone (cascade)
+    expect(await deps.testResults.listByRun("r1")).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it("anonymous DELETE returns 401 when security is enabled (a user exists)", async () => {
+    const deps = await makeTestDeps();
+    // Seeding a user enables security (zero-config open mode requires no users).
+    await deps.users.create("admin@x.com", await hashPassword("password123"), "admin", deps.now());
+    const app = buildApp(deps);
+    // Seed project and run directly through the repos (API is now auth-guarded).
+    await deps.projects.create("p", deps.now());
+    await deps.runs.create("p", "r1", "R", "2026-06-10T00:00:01.000Z");
+
+    const res = await app.inject({ method: "DELETE", url: "/api/projects/p/runs/r1" });
+    expect(res.statusCode).toBe(401);
+
+    await app.close();
+  });
+});
+
+describe("DELETE run — private-project existence-tell fix (A1)", () => {
+  it("anonymous DELETE on a run in a private project returns 404", async () => {
+    const deps = await makeTestDeps();
+    await deps.users.create("admin@x.com", await hashPassword("password123"), "admin", deps.now());
+    const app = buildApp(deps);
+
+    // Log in as admin to set up the project and run
+    const adminLogin = await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "admin@x.com", password: "password123" } });
+    const adminCookie = adminLogin.cookies.find((c) => c.name === "as_session")!.value;
+
+    await deps.projects.create("secret", deps.now());
+    await deps.projects.setVisibility("secret", "private");
+    await deps.runs.create("secret", "r1", "R", "2026-06-10T00:00:01.000Z");
+
+    // Anonymous DELETE must return 404 — 401 would reveal the project exists
+    const res = await app.inject({ method: "DELETE", url: "/api/projects/secret/runs/r1" });
+    expect(res.statusCode).toBe(404);
+
+    // Admin can still delete it successfully
+    const adminRes = await app.inject({ method: "DELETE", url: "/api/projects/secret/runs/r1", cookies: { as_session: adminCookie } });
+    expect(adminRes.statusCode).toBe(204);
+
+    await app.close();
+  });
+
+  it("anonymous DELETE on a run in a public project returns 401", async () => {
+    const deps = await makeTestDeps();
+    await deps.users.create("admin@x.com", await hashPassword("password123"), "admin", deps.now());
+    const app = buildApp(deps);
+
+    await deps.projects.create("open", deps.now());
+    // public visibility (default) — unauthorized should get 401
+    await deps.runs.create("open", "r1", "R", "2026-06-10T00:00:01.000Z");
+
+    const res = await app.inject({ method: "DELETE", url: "/api/projects/open/runs/r1" });
+    expect(res.statusCode).toBe(401);
+
+    await app.close();
+  });
+
+  it("anonymous DELETE on a missing project returns 404 — indistinguishable from private", async () => {
+    const deps = await makeTestDeps();
+    await deps.users.create("admin@x.com", await hashPassword("password123"), "admin", deps.now()); // security on
+    const app = buildApp(deps);
+
+    // No project created — does-not-exist must return 404, same as a private project
+    const res = await app.inject({ method: "DELETE", url: "/api/projects/does-not-exist/runs/x" });
+    expect(res.statusCode).toBe(404);
 
     await app.close();
   });

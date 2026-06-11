@@ -23,6 +23,7 @@ const PROJECT_ROLES: ProjectRole[] = ["viewer", "maintainer", "owner"];
 export function ProjectSettings() {
   const { id = "" } = useParams();
   const { user, isLoading: authLoading } = useAuth();
+  const { data: project } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
   const { data: config, isLoading: configLoading } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
   // Owner-gated members fetch doubles as the capability probe.
   const { data: members, isError } = useQuery({
@@ -33,7 +34,7 @@ export function ProjectSettings() {
 
   return (
     <>
-      <Topbar title={<span className="flex items-center gap-2"><Link to={`/projects/${id}`} className="text-muted-foreground hover:text-foreground">{id}</Link><span className="text-muted-foreground">/</span>Settings</span>} />
+      <Topbar title={<span className="flex items-center gap-2"><Link to={`/projects/${id}`} className="text-muted-foreground hover:text-foreground">{project?.displayName ?? id}</Link><span className="text-muted-foreground">/</span>Settings</span>} />
       <main className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-3xl space-y-6">
           {(configLoading || authLoading) ? (
@@ -50,6 +51,7 @@ export function ProjectSettings() {
                   Set <code>ADMIN_EMAIL</code> and <code>ADMIN_PASSWORD</code> to require sign-in.
                 </CardContent></Card>
               )}
+              <ProjectNameCard projectId={id} />
               <VisibilityCard projectId={id} />
               <BadgeCard projectId={id} />
               <QualityGateCard projectId={id} />
@@ -73,6 +75,35 @@ export function ProjectSettings() {
         </div>
       </main>
     </>
+  );
+}
+
+function ProjectNameCard({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const { data: project } = useQuery({ queryKey: ["project", projectId], queryFn: () => api.getProject(projectId) });
+  const [name, setName] = useState(project?.displayName ?? "");
+  useEffect(() => { setName(project?.displayName ?? ""); }, [project?.displayName]);
+  const save = useMutation({
+    mutationFn: () => api.updateProject(projectId, { displayName: name.trim() || null }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["project", projectId] });
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Project name saved");
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  if (!project) return null;
+  return (
+    <Card>
+      <CardHeader><CardTitle>Project name</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex gap-2">
+          <Input aria-label="Display name" value={name} onChange={(e) => setName(e.target.value)} placeholder={projectId} />
+          <Button disabled={save.isPending} onClick={() => save.mutate()}>Save</Button>
+        </div>
+        <p className="text-sm text-muted-foreground">Shown instead of the id. Leave blank to clear. The id <code>{projectId}</code> never changes.</p>
+      </CardContent>
+    </Card>
   );
 }
 

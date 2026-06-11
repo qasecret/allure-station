@@ -1,4 +1,5 @@
-import type { QualityGateCheck, QualityGateVerdict } from "@allure-station/shared";
+import type { QualityGateCheck, QualityGateConfig, QualityGateVerdict, RunStats } from "@allure-station/shared";
+import { evaluateGate as sharedEvaluateGate } from "@allure-station/shared";
 import { formatPercent, formatDurationSec } from "./format.js";
 
 type Dir = "near" | "up" | "down";
@@ -27,4 +28,12 @@ export function formatGateCheck(check: QualityGateCheck): string {
 /** The humanized reasons a verdict failed — only the checks that didn't pass. Empty when all pass. */
 export function failedReasons(verdict: QualityGateVerdict): string[] {
   return verdict.checks.filter((c) => !c.ok).map(formatGateCheck);
+}
+
+/** Evaluate a gate config directly against run stats (client-side; delegates rule logic to shared).
+ *  Returns null when no rule is configured (nothing to evaluate). */
+export function evaluateGate(cfg: QualityGateConfig, stats: RunStats): { passed: boolean; reasons: string[] } | null {
+  const verdict = sharedEvaluateGate(stats, cfg);
+  if (!verdict.configured) return null;
+  return { passed: verdict.passed, reasons: failedReasons(verdict) };
 }

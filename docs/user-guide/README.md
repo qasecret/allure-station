@@ -78,7 +78,9 @@ of the project's latest run. Click a card to open the project. The top bar has t
 ## 3. Create a project
 
 Click **New project** (top‑right). Give it a unique id — this is the id CI will push to. Names are
-lowercase‑ish slugs (`my-service`, `demo-web`).
+lowercase‑ish slugs (`my-service`, `demo-web`). Optionally add a **Display name** (e.g. "Demo Web
+App") — it shows on the card and in breadcrumbs instead of the raw id, making projects easier to
+scan when you have many.
 
 ![Create project dialog](images/02-create-project-dialog.png)
 
@@ -87,8 +89,11 @@ The same thing over the API (this is what CI or a script would do):
 ```bash
 curl -XPOST localhost:5050/api/projects \
   -H 'content-type: application/json' \
-  -d '{"id":"demo-web","name":"Demo Web App"}'
+  -d '{"id":"demo-web","displayName":"Demo Web App"}'
 ```
+
+To rename a project later, use `PATCH /api/projects/:id` (`{"displayName":"New Name"}`); set it
+to `null` to revert to the id. Project ids are immutable once created.
 
 A project starts empty and **public**, with no runs.
 
@@ -129,8 +134,10 @@ run. The endpoint returns immediately (202) — generation runs in a worker and 
 
 ### 4b. From the UI
 
-Inside a project, click **Upload & generate**, pick your result files, and submit — same flow, no
-terminal needed. Handy for ad‑hoc uploads or trying it out.
+Inside a project, click **Upload & generate**, pick your result files, then optionally expand the
+**Add CI context (optional)** section to fill in Branch, Commit, Environment, and CI build URL.
+These fields are **remembered per project** in your browser so repeat uploads are quick — just
+change what differs.
 
 ![Upload results dialog](images/11-upload-dialog.png)
 
@@ -152,20 +159,27 @@ Open the project. This is the cockpit you'll spend most of your time in.
 
 Top to bottom:
 
-- **Breadcrumb + run controls** — `Projects / demo-web`, a **branch filter** (`all branches`), a
-  **run selector** (every run, newest first, labelled with a friendly relative time —
-  `3m ago — ready (7/8) — main@e4f5a6b · staging`; hover any option for the exact timestamp),
-  and the **Upload & generate** button.
+- **Breadcrumb + run controls** — `Projects / demo-web` (showing the display name when set), a
+  **branch filter** (`all branches`), a **run selector** (every run, newest first, labelled with a
+  friendly relative time — `3m ago — ready (7/8) — main@e4f5a6b · staging`; hover any option for
+  the exact timestamp), and the **Upload & generate** button.
 - **Run status header** — `Ready · 7/8 passed · 1 failed · 65.4s`, plus the run's `branch main@e4f5a6b`
   and `env staging` chips (these come from the metadata you sent in step 4). If a
   [quality gate](#9-quality-gates--the-status-badge) is configured, a **Quality gate passed/failed**
   badge appears here too — and on failure it names the rules that tripped (e.g.
-  *failures 1 > 0, pass rate 87.5% < 95%*).
-- **Trend** card (left) and **Compare** card (right) — covered in steps 6–8.
-- **Embedded Allure 3 report** — the full official Allure report, served inline: the success‑rate
-  donut (`87.5%`), the `Results / Categories / Quality Gates / Global Attachments / Global Errors`
-  tabs, search, status filters, and the suite tree. It behaves exactly like a standalone Allure
-  report because it *is* one.
+  *failures 1 > 0, pass rate 87.5% < 95%*). A **Copy link** button produces a shareable URL that
+  encodes the selected run (`?run=`) and the open test (`#report=`), so teammates land on exactly
+  what you're looking at.
+- **Trend** card (left) and **Compare** card (right) — covered in steps 6–8. The Trend card shows
+  an empty‑state hint ("Trends appear after 2 successful runs…") until at least two ready runs exist.
+- **Report | Runs tabs** — the lower half of the page has two tabs:
+  - **Report** — the embedded Allure 3 report (full official UI, served inline).
+  - **Runs** — a paginated table of every run for this project with status, pass/fail stats, gate
+    verdict, branch, environment, duration, and age. Filter by status (`all` / `ready` / `failed` /
+    `generating`). Each row has three actions: **Open** (switch to the Report tab for that run),
+    **Retry** (re-run generation without re-uploading — only on failed runs), and **Delete**
+    (permanently removes the run, its report, and its history contribution; guarded by a confirm
+    dialog; disabled while a run is generating).
 
 ### Drill into a test
 
@@ -575,9 +589,9 @@ All endpoints are under `/api`. Reads are public; writes follow the access model
 
 | Area | Endpoints |
 |---|---|
-| Projects | `GET/POST /projects` · `GET/DELETE /projects/:id` |
+| Projects | `GET/POST /projects` · `GET/DELETE /projects/:id` · `PATCH /projects/:id` (rename — body `{"displayName":"…"│null}`) · `PUT /projects/:id/visibility` |
 | Results | `POST /projects/:id/send-results` · `POST /projects/:id/generate[?runId=]` · `POST …/runs/:runId/retry` |
-| Runs & report | `GET /projects/:id/runs[?status=&limit=&offset=]` · `GET …/runs/:runId` · `GET …/runs/:runId/report/*` · `GET …/runs/:runId/summary` |
+| Runs & report | `GET /projects/:id/runs[?status=&limit=&offset=]` · `GET …/runs/:runId` · `DELETE …/runs/:runId` · `GET …/runs/:runId/report/*` · `GET …/runs/:runId/summary` |
 | Analytics | `GET /projects/:id/trends` · `GET /projects/:id/compare?base=&target=` · `GET /projects/:id/tests/history?fullName=|historyId=` · `GET /projects/:id/events` (SSE) · `GET /projects/:id/badge.svg` |
 | Quality gate | `GET/PUT /projects/:id/quality-gate` |
 | Tokens | `GET/POST /projects/:id/tokens` · `DELETE …/tokens/:tokenId` |

@@ -2,6 +2,7 @@ import type {
   Project, Run, TrendPoint, RunEvent, CompareResult, TestHistory, TestTrace,
   SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry, ProjectVisibility,
   ApiToken, CreatedToken, QualityGateConfig, RunSummary, Notification, NotificationKind, NotificationTrigger,
+  RunMetadata, UpdateProjectRequest,
 } from "@allure-station/shared";
 
 export interface AppConfigInfo {
@@ -13,14 +14,17 @@ export interface AppConfigInfo {
 export interface ApiClient {
   getConfig(): Promise<AppConfigInfo>;
   listProjects(opts?: { q?: string; limit?: number; offset?: number }): Promise<{ items: Project[]; total: number }>;
-  createProject(id: string): Promise<Project>;
+  createProject(id: string, displayName?: string): Promise<Project>;
+  updateProject(id: string, body: UpdateProjectRequest): Promise<Project>;
   getProject(id: string): Promise<Project>;
   deleteProject(id: string): Promise<void>;
   setVisibility(id: string, visibility: ProjectVisibility): Promise<Project>;
   listRuns(projectId: string, opts?: { status?: string; limit?: number; offset?: number }): Promise<Run[]>;
+  listRunsWithTotal(projectId: string, opts?: { status?: string; limit?: number; offset?: number }): Promise<{ items: Run[]; total: number }>;
+  deleteRun(projectId: string, runId: string): Promise<void>;
   getRunSummary(projectId: string, runId: string): Promise<RunSummary>;
   retryRun(projectId: string, runId: string): Promise<Run>;
-  sendResults(projectId: string, files: File[]): Promise<{ runId: string }>;
+  sendResults(projectId: string, files: File[], meta?: RunMetadata): Promise<{ runId: string }>;
   generate(projectId: string): Promise<Run>;
   listTrends(projectId: string): Promise<TrendPoint[]>;
   compareRuns(projectId: string, base: string, target: string): Promise<CompareResult>;
@@ -81,18 +85,23 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
   return {
     getConfig: () => json<AppConfigInfo>("/config", { method: "GET" }),
     listProjects: (opts = {}) => listWithTotal<Project>(`/projects${qs(opts)}`),
-    createProject: (id) =>
-      json<Project>("/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }),
+    createProject: (id, displayName) =>
+      json<Project>("/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(displayName ? { id, displayName } : { id }) }),
+    updateProject: (id: string, body: UpdateProjectRequest) =>
+      json<Project>(`/projects/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
     getProject: (id) => json<Project>(`/projects/${id}`, { method: "GET" }),
     deleteProject: (id) => noContent(`/projects/${id}`, { method: "DELETE" }),
     setVisibility: (id, visibility) =>
       json<Project>(`/projects/${id}/visibility`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ visibility }) }),
     listRuns: (projectId, opts = {}) => json<Run[]>(`/projects/${projectId}/runs${qs(opts)}`, { method: "GET" }),
+    listRunsWithTotal: (projectId, opts = {}) => listWithTotal<Run>(`/projects/${projectId}/runs${qs(opts)}`),
+    deleteRun: (projectId, runId) => noContent(`/projects/${projectId}/runs/${runId}`, { method: "DELETE" }),
     getRunSummary: (projectId, runId) => json<RunSummary>(`/projects/${projectId}/runs/${runId}/summary`, { method: "GET" }),
     retryRun: (projectId, runId) => json<Run>(`/projects/${projectId}/runs/${runId}/retry`, { method: "POST" }),
-    sendResults: (projectId, files) => {
+    sendResults: (projectId, files, meta = {}) => {
       const fd = new FormData();
       for (const file of files) fd.append("files", file, file.name);
+      for (const [k, v] of Object.entries(meta)) if (v) fd.append(k, v);
       return json<{ runId: string }>(`/projects/${projectId}/send-results`, { method: "POST", body: fd });
     },
     generate: (projectId) => json<Run>(`/projects/${projectId}/generate`, { method: "POST" }),

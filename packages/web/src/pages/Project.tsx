@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { Run, RunStatus, TestDiff, TestHistoryEntry, Regression, RunRef, TrendPoint } from "@allure-station/shared";
 import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History, ShieldCheck, ShieldAlert, AlertTriangle } from "lucide-react";
@@ -16,9 +16,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { relativeTime, runLabel, formatDurationSec } from "@/lib/format";
+import { parseReportFragment, buildReportFragment, withReportHash } from "@/lib/report-deep-link";
 import { failedReasons } from "@/lib/quality-gate-verdict";
 import { severityChipClass } from "@/lib/severity";
+import { RunsTable } from "@/components/RunsTable";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
 const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
@@ -26,18 +29,31 @@ const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, read
 export function Project() {
   const { id = "" } = useParams();
   const qc = useQueryClient();
-  const [selectedRun, setSelectedRun] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedRun = searchParams.get("run");
+  const setSelectedRun = (runId: string | null) => {
+    setSearchParams((p) => {
+      const next = new URLSearchParams(p);
+      if (runId) next.set("run", runId); else next.delete("run");
+      return next;
+    }, { replace: true });
+  };
   const [branchFilter, setBranchFilter] = useState("");
+  const [tab, setTab] = useState<"report" | "runs">("report");
   const { user } = useAuth();
 
   useEffect(() => {
-    setSelectedRun(null);
     setBranchFilter(""); // don't carry a previous project's branch filter (could hide all its runs)
+    setTab("report"); // reset to report tab when navigating to a new project
   }, [id]);
 
   // A read-gated project 404s for anonymous/non-members — surface that as a clear message
   // instead of a silently-empty page.
-  const { isError: projectDenied } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
+  const { isError: projectDenied, data: project } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
+  // canWrite comes from the server (already part of GET /projects/:id) so the UI always reflects
+  // the authoritative permission state — undefined → false while loading (no destructive buttons
+  // visible until the server confirms write access).
+  const canWrite = project?.canWrite ?? false;
 
   // SSE drives instant updates; a slow refetch is kept only as a backstop while a run is
   // generating, so the UI still self-heals if SSE is unavailable or an event is missed.
@@ -53,10 +69,24 @@ export function Project() {
     refetchInterval: () => (runs.some((r) => r.status === "generating") ? 5000 : false),
   });
 
-  // Live updates over SSE: upsert the run on every lifecycle event, and refresh trends once a
-  // run reaches a terminal status.
+  // Live updates over SSE: handle deletions first, then upsert lifecycle events.
+  // Refresh trends once a run reaches a terminal status.
   useEffect(() => {
     const unsub = api.subscribeRuns(id, (event) => {
+      // A deletion event removes the run from both caches and refreshes paginated/trend views.
+      if (event.deleted) {
+        qc.setQueryData<Run[]>(["runs", id], (prev = []) => prev.filter((r) => r.id !== event.run.id));
+        qc.invalidateQueries({ queryKey: ["runs-page", id] });
+        qc.invalidateQueries({ queryKey: ["trends", id] });
+        // C5: also invalidate test-history and the deleted run's summary so they don't show stale data.
+        qc.invalidateQueries({ queryKey: ["test-history", id] });
+        qc.invalidateQueries({ queryKey: ["run-summary", id, event.run.id] });
+        // C1: read the CURRENT ?run= value at event time (not the closed-over searchParams object
+        // which was captured when the effect ran and doesn't update on navigation).
+        const currentRun = new URLSearchParams(window.location.search).get("run");
+        if (currentRun === event.run.id) setSelectedRun(null);
+        return;
+      }
       qc.setQueryData<Run[]>(["runs", id], (prev = []) => {
         // Ignore a stale/out-of-order transition (e.g. a delayed 'generating' arriving after
         // 'ready' over independent Redis paths in bullmq mode) — never regress a run's status.
@@ -67,6 +97,8 @@ export function Project() {
         const next = prev.filter((r) => r.id !== event.run.id);
         return [event.run, ...next].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
       });
+      // Keep the paginated runs table live on every run event (status changes are always relevant).
+      qc.invalidateQueries({ queryKey: ["runs-page", id] });
       if (event.run.status === "ready" || event.run.status === "failed") {
         qc.invalidateQueries({ queryKey: ["trends", id] });
         // A newly-ready run adds a point to every open test timeline — refresh them too.
@@ -88,6 +120,62 @@ export function Project() {
   // banner — so a failure isn't hidden behind an older report, even when a newer run is still generating.
   const latestDone = visibleRuns.find((r) => r.status === "ready" || r.status === "failed");
 
+  // Ref to the report iframe; used to mirror the Allure SPA's internal hash into the parent URL.
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  // Capture the initial #report= once (lazy so parsing runs exactly once, not on every render).
+  // runId is set to the first run that consumed the hash; subsequent run switches must not re-apply it.
+  // requestedRun captures the ?run= at page load so we can detect a fallback (deleted/missing run).
+  const initialDeepLink = useRef<{ hash: string | null; runId: string | null; requestedRun: string | null } | null>(null);
+  if (initialDeepLink.current === null) {
+    initialDeepLink.current = {
+      hash: parseReportFragment(window.location.hash),
+      runId: null,
+      requestedRun: new URLSearchParams(window.location.search).get("run"),
+    };
+  }
+  // C4(a): pin the run that first consumes the hash; if the resolved run differs from the
+  // originally requested run (i.e. we fell back to a different run), drop the hash entirely.
+  if (current && initialDeepLink.current.runId === null) {
+    const d = initialDeepLink.current;
+    if (d.requestedRun && d.requestedRun !== current) d.hash = null;
+    d.runId = current;
+  }
+
+  // C4(b): once the user navigates away from the deep-linked run, consume the hash permanently
+  // so switching back to it doesn't jump to a stale test position.
+  useEffect(() => {
+    const d = initialDeepLink.current;
+    if (d?.runId && current && current !== d.runId) d.hash = null;
+  }, [current]);
+
+  // Poll the iframe's location hash and mirror it to the parent URL fragment.
+  // When the inner hash is empty or just "#" (fresh load / run switch), clean up the parent fragment.
+  // Note: history.replaceState writes bypass react-router, so useLocation().hash is stale by design here.
+  useEffect(() => {
+    const t = setInterval(() => {
+      const frame = frameRef.current;
+      if (!frame?.contentWindow) return;
+      try {
+        // C4(c): only trust the inner hash once the report document has committed — about:blank's
+        // pathname is "" or "/" and doesn't contain "/report/", so we skip it entirely.
+        if (!frame.contentWindow.location.pathname.includes("/report/")) return;
+        const inner = frame.contentWindow.location.hash;
+        // Treat "#" (Allure's default root hash) the same as empty — no meaningful test selected.
+        const meaningfulInner = inner && inner !== "#" ? inner : "";
+        if (meaningfulInner) {
+          const outer = buildReportFragment(meaningfulInner);
+          if (window.location.hash !== outer) {
+            history.replaceState(null, "", window.location.pathname + window.location.search + outer);
+          }
+        } else if (window.location.hash.startsWith("#report=")) {
+          // Inner hash cleared — remove the stale parent fragment (e.g. after run switch).
+          history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
+      } catch { /* cross-origin or detached frame — ignore */ }
+    }, 500);
+    return () => clearInterval(t);
+  }, [current]);
+
   if (projectDenied) {
     return (
       <>
@@ -107,7 +195,7 @@ export function Project() {
   return (
     <>
       <Topbar
-        title={<span className="flex items-center gap-2"><Link to="/" className="text-muted-foreground hover:text-foreground">Projects</Link><span className="text-muted-foreground">/</span><span className="truncate">{id}</span></span>}
+        title={<span className="flex items-center gap-2"><Link to="/" className="text-muted-foreground hover:text-foreground">Projects</Link><span className="text-muted-foreground">/</span><span className="truncate">{project?.displayName ?? id}</span></span>}
         actions={<>
           {branches.length > 0 && (
             <Select value={branchFilter || "__all"} onValueChange={(v) => { setBranchFilter(v === "__all" ? "" : v); setSelectedRun(null); }}>
@@ -148,6 +236,21 @@ export function Project() {
           {cur?.branch && <Badge variant="secondary">branch {cur.branch}{cur.commit ? `@${cur.commit.slice(0, 7)}` : ""}</Badge>}
           {cur?.environment && <Badge variant="secondary">env {cur.environment}</Badge>}
           {cur?.ciUrl && <a href={cur.ciUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">CI build ↗</a>}
+          {current && (
+            <Button variant="ghost" size="sm" className="text-muted-foreground"
+              onClick={async () => {
+                try {
+                  const u = new URL(window.location.href);
+                  if (current) u.searchParams.set("run", current);
+                  await navigator.clipboard.writeText(u.toString());
+                  toast.success("Link copied");
+                } catch {
+                  toast.error("Couldn't copy — copy the URL from the address bar");
+                }
+              }}>
+              Copy link
+            </Button>
+          )}
         </div>
         <div className="flex flex-wrap gap-3">
           <Card className="min-w-[260px] flex-1">
@@ -158,12 +261,23 @@ export function Project() {
           </Card>
           <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
         </div>
-        {cur?.status === "failed"
-          ? <FailedRunPanel projectId={id} run={cur} />
-          : current
-            ? <iframe title="report" className="min-h-0 flex-1 rounded-xl border bg-card shadow-sm"
-                src={`/api/projects/${id}/runs/${current}/report/index.html`} />
-            : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use “Upload & generate” to create the first report.'} />}
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "report" | "runs")} className="flex min-h-0 flex-1 flex-col">
+          <TabsList className="self-start">
+            <TabsTrigger value="report">Report</TabsTrigger>
+            <TabsTrigger value="runs">Runs</TabsTrigger>
+          </TabsList>
+          <TabsContent value="report" className="flex min-h-0 flex-1 flex-col">
+            {cur?.status === "failed"
+              ? <FailedRunPanel projectId={id} run={cur} />
+              : current
+                ? <iframe ref={frameRef} title="report" className="min-h-0 flex-1 rounded-xl border bg-card shadow-sm"
+                    src={withReportHash(`/api/projects/${id}/runs/${current}/report/index.html`, current === initialDeepLink.current?.runId ? initialDeepLink.current.hash : null)} />
+                : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use "Upload & generate" to create the first report.'} />}
+          </TabsContent>
+          <TabsContent value="runs" className="flex min-h-0 flex-1 flex-col">
+            <RunsTable projectId={id} canWrite={canWrite} onOpenRun={(runId) => { setSelectedRun(runId); setTab("report"); }} />
+          </TabsContent>
+        </Tabs>
       </div>
     </>
   );
@@ -221,7 +335,17 @@ function GateBadge({ projectId, runId }: { projectId: string; runId: string }) {
 }
 
 function TrendBar({ points }: { points: TrendPoint[] }) {
-  if (points.length < 2) return <span className="text-xs text-muted-foreground">Trends appear after 2+ runs.</span>;
+  if (points.length < 2) {
+    return (
+      <div className="flex flex-1 items-center text-sm text-muted-foreground">
+        <span>
+          {points.length === 1
+            ? "Trends appear after 2 successful runs — 1 more to go."
+            : "Trends appear after 2 successful runs. Push results to start the series."}
+        </span>
+      </div>
+    );
+  }
   const w = points.length * 14;
   const anyFlaky = points.some((p) => (p.stats.flaky ?? 0) > 0);
   const maxDur = Math.max(1, ...points.map((p) => p.stats.durationMs ?? 0));

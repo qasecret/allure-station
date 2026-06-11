@@ -7,7 +7,10 @@ export const projectIdSchema = z
   .max(64)
   .regex(/^[a-z0-9][a-z0-9-_]*$/, "id must be lowercase alphanumeric, dash or underscore");
 
-export const createProjectSchema = z.object({ id: projectIdSchema });
+export const displayNameSchema = z.string().trim().min(1).max(120);
+export const createProjectSchema = z.object({ id: projectIdSchema, displayName: displayNameSchema.optional() });
+// PATCH body: empty string is allowed and means "clear" (normalized to null by the route).
+export const updateProjectRequestSchema = z.object({ displayName: z.string().trim().max(120).nullable() });
 
 export const runStatusSchema = z.enum(["pending", "generating", "ready", "failed"]);
 
@@ -209,18 +212,30 @@ export const setVisibilityRequestSchema = z.object({ visibility: projectVisibili
 
 export const projectSchema = z.object({
   id: projectIdSchema,
+  displayName: z.string().nullable().default(null),
   createdAt: z.string(),
   latestRunId: z.string().nullable(),
   // public = readable by anyone; private = reads require viewer+ / admin / project token.
   visibility: projectVisibilitySchema.default("public"),
+  // Effective write permission for the caller. Optional — only the single-project GET (/projects/:id)
+  // sets it; list responses leave it absent to avoid N×auth lookups per page.
+  canWrite: z.boolean().optional(),
 });
 
 // Pushed to the UI over SSE on every run lifecycle transition (created/generating/ready/failed).
+// `deleted: true` signals that the run has been hard-deleted so live UIs can remove it rather
+// than upserting a stale row (the SSE handler upserts all other events).
+//
+// .passthrough() is intentional: during a rolling deploy an OLD replica re-validates events
+// published by a NEWER replica. Strip-mode (the zod default) would silently drop unknown fields
+// added in the newer version; passthrough ensures those fields survive the round-trip so the
+// event bus never narrows the schema on the forwarding path.
 export const runEventSchema = z.object({
   type: z.literal("run"),
   projectId: z.string(),
   run: runSchema,
-});
+  deleted: z.boolean().optional(),
+}).passthrough();
 
 // API token as shown to clients (never includes the hash or plaintext).
 export const apiTokenSchema = z.object({
@@ -278,10 +293,11 @@ export const auditActionSchema = z.enum([
   "user_created", "user_deleted",
   "token_created", "token_deleted",
   "member_set", "member_removed",
-  "project_created", "project_deleted",
+  "project_created", "project_deleted", "project_renamed",
   "project_visibility_set",
   "quality_gate_set",
   "notification_created", "notification_deleted",
+  "run_deleted",
 ]);
 export const auditActorTypeSchema = z.enum(["user", "token", "anonymous"]);
 export const auditEntrySchema = z.object({
@@ -297,6 +313,7 @@ export const auditEntrySchema = z.object({
   metadata: z.record(z.unknown()).nullable(),
 });
 
+export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
 export type ProjectId = z.infer<typeof projectIdSchema>;
 export type Run = z.infer<typeof runSchema>;
 export type RunStats = z.infer<typeof runStatsSchema>;

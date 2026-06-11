@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `display_name` text;

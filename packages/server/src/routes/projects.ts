@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createProjectSchema, projectIdSchema, setVisibilityRequestSchema } from "@allure-station/shared";
+import { createProjectSchema, projectIdSchema, setVisibilityRequestSchema, updateProjectRequestSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
 import { parsePage } from "./pagination.js";
 import { authenticate, authorizeProjectCreate, authorizeProjectOwner, authorizeProjectWrite, visibilityScopeFor } from "../auth.js";
@@ -19,7 +19,7 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     if (await deps.projects.get(parsed.data.id)) {
       return reply.code(409).send({ error: "project already exists" });
     }
-    const project = await deps.projects.create(parsed.data.id, deps.now());
+    const project = await deps.projects.create(parsed.data.id, deps.now(), parsed.data.displayName ?? null);
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "project_created", targetType: "project", targetId: project.id, projectId: project.id });
     return reply.code(201).send(project);
   });
@@ -43,7 +43,14 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     const id = projectIdSchema.safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.code(400).send({ error: id.error.message });
     if (!(await readGate(deps, req, id.data))) return reply.code(404).send({ error: "not found" });
-    return deps.projects.get(id.data);
+    const project = await deps.projects.get(id.data);
+    // Resolve the caller's effective write permission so the UI can show the correct affordances.
+    // readGate may have already authenticated internally (private projects), but it doesn't surface
+    // the principal — authenticating again is cheap (session cookie / token lookup is cached by
+    // the DB, not re-hashed) and keeps the read-gate contract simple.
+    const principal = await authenticate(deps, req);
+    const canWrite = (await authorizeProjectWrite(deps, principal, id.data)) !== "unauthorized";
+    return { ...project, canWrite };
   });
 
   app.delete("/projects/:id", async (req, reply) => {
@@ -61,6 +68,28 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AppDeps): void
     }
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "project_deleted", targetType: "project", targetId: id, projectId: id });
     return reply.code(204).send();
+  });
+
+  // Rename (presentation-only display name; id is the immutable handle). Maintainer+/token/open.
+  app.patch("/projects/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const principal = await authenticate(deps, req);
+    if ((await authorizeProjectWrite(deps, principal, id)) === "unauthorized") {
+      const vis = await deps.projects.getVisibility(id);
+      // Missing project (null) must be treated the same as private — both respond 404
+      // so the response is indistinguishable and a missing project can't be fingerprinted
+      // as "definitely doesn't exist" by the absence of a 404.
+      const hide = !vis || vis.visibility === "private";
+      return reply.code(hide ? 404 : 401).send({ error: hide ? "not found" : "unauthorized" });
+    }
+    const existing = await deps.projects.get(id);
+    if (!existing) return reply.code(404).send({ error: "not found" });
+    const parsed = updateProjectRequestSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
+    const displayName = parsed.data.displayName || null; // "" → null (clear)
+    await deps.projects.setDisplayName(id, displayName);
+    await recordAudit(deps, { ...actorFromPrincipal(principal), action: "project_renamed", targetType: "project", targetId: id, projectId: id, metadata: { from: existing.displayName, to: displayName } });
+    return reply.send(await deps.projects.get(id));
   });
 
   // Set project visibility (public/private) — owner or global admin.

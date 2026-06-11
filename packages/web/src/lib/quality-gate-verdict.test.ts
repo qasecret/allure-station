@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { QualityGateVerdict } from "@allure-station/shared";
-import { formatGateCheck, failedReasons } from "./quality-gate-verdict.js";
+import { formatGateCheck, failedReasons, evaluateGate } from "./quality-gate-verdict.js";
 
 describe("formatGateCheck", () => {
   it("renders a failed maxFailures as a > comparison", () => {
@@ -27,6 +27,20 @@ describe("formatGateCheck", () => {
   it("falls back gracefully for an unknown rule", () => {
     expect(formatGateCheck({ rule: "wat", ok: false, actual: 3, threshold: 2 }))
       .toBe("wat 3 vs 2");
+  });
+});
+
+describe("evaluateGate (client-side, config × stats)", () => {
+  const stats = { total: 8, passed: 7, failed: 1, broken: 0, skipped: 0, flaky: 0, durationMs: 65_000 };
+  it("returns null when no rule is configured", () => {
+    expect(evaluateGate({}, stats)).toBeNull();
+  });
+  it("fails on maxFailures and minPassRate, listing reasons", () => {
+    const v = evaluateGate({ maxFailures: 0, minPassRate: 0.95 }, stats);
+    expect(v).toEqual({ passed: false, reasons: ["failures 1 > 0", "pass rate 87.5% < 95%"] });
+  });
+  it("passes when all configured rules hold", () => {
+    expect(evaluateGate({ maxFailures: 1, minTests: 1 }, stats)).toEqual({ passed: true, reasons: [] });
   });
 });
 
