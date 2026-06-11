@@ -35,7 +35,7 @@ export function Audit() {
           <Card>
             <CardContent className="p-0">
               {/* Mobile list — visible below sm */}
-              <ul className="divide-y sm:hidden">
+              <ul role="list" className="divide-y sm:hidden">
                 {items.map((e) => (
                   <li key={e.id} className="space-y-0.5 p-3 text-sm">
                     <div className="flex items-center justify-between gap-2">

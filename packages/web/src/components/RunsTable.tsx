@@ -14,6 +14,14 @@ const FILTERS: Array<{ label: string; value?: RunStatus }> = [
   { label: "all" }, { label: "ready", value: "ready" }, { label: "failed", value: "failed" }, { label: "generating", value: "generating" },
 ];
 
+function GateMark({ verdict }: { verdict: { passed: boolean; reasons: string[] } | null }) {
+  if (!verdict) return null;
+  const reasons = verdict.reasons.join(", ");
+  return verdict.passed
+    ? <span role="img" aria-label="Gate passed" className="text-status-pass">✓</span>
+    : <span role="img" aria-label={`Gate failed: ${reasons}`} title={reasons} className="text-status-fail">✗</span>;
+}
+
 function RowActions({ r, canWrite, onOpenRun, retry, setConfirming }: {
   r: Run; canWrite: boolean; onOpenRun: (id: string) => void;
   retry: { isPending: boolean; mutate: (id: string) => void };
@@ -83,7 +91,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
         ))}
       </div>
       {/* Mobile card list — visible below sm */}
-      <ul className="space-y-2 sm:hidden">
+      <ul role="list" className="space-y-2 sm:hidden">
         {items.map((r) => {
           const verdict = gate && r.stats ? evaluateGate(gate, r.stats) : null;
           return (
@@ -92,9 +100,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
                 <span className="flex items-center gap-2">
                   <StatusBadge status={r.status} />
                   {r.stats && <span className="text-sm">{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail"> · {r.stats.failed} failed</span> : null}</span>}
-                  {verdict && (verdict.passed
-                    ? <span aria-label="Gate passed" className="text-status-pass">✓</span>
-                    : <span aria-label={`Gate failed: ${verdict.reasons.join(", ")}`} className="text-status-fail">✗</span>)}
+                  <GateMark verdict={verdict} />
                 </span>
                 <span title={r.createdAt} className="text-xs text-muted-foreground">{relativeTime(r.createdAt)}</span>
               </div>
@@ -109,7 +115,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
             </li>
           );
         })}
-        {items.length === 0 && <li className="rounded-xl border p-6 text-center text-sm text-muted-foreground">No runs{status ? ` with status ${status}` : ""}.</li>}
+        {items.length === 0 && <li className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">No runs{status ? ` with status ${status}` : ""}.</li>}
       </ul>
       {/* Desktop table — hidden below sm */}
       <div className="relative hidden overflow-x-auto rounded-xl border bg-card shadow-sm sm:block">
@@ -128,7 +134,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
                 <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40">
                   <td className="p-2"><StatusBadge status={r.status} /></td>
                   <td className="p-2">{r.stats ? <>{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail"> · {r.stats.failed} failed</span> : null}</> : "—"}</td>
-                  <td className="p-2" title={verdict?.reasons.join(", ") || undefined}>{verdict === null ? "—" : verdict.passed ? <span className="text-status-pass" aria-label="Gate passed">✓</span> : <span className="text-status-fail" aria-label={`Gate failed: ${verdict.reasons.join(", ")}`}>✗</span>}</td>
+                  <td className="p-2">{verdict === null ? "—" : <GateMark verdict={verdict} />}</td>
                   <td className="p-2">{r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : "—"}</td>
                   <td className="p-2">{r.environment ?? "—"}</td>
                   <td className="p-2">{r.stats?.durationMs ? formatDurationSec(r.stats.durationMs) : "—"}</td>

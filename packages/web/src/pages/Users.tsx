@@ -55,7 +55,7 @@ export function Users() {
           <Card>
             <CardContent className="p-0">
               {/* Mobile list — visible below sm */}
-              <ul className="divide-y sm:hidden">
+              <ul role="list" className="divide-y sm:hidden">
                 {users.map((u) => (
                   <li key={u.id} className="flex items-center justify-between gap-2 p-3">
                     <span className="min-w-0">
