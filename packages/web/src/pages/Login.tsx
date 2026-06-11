@@ -34,7 +34,8 @@ export function Login() {
 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
-      <div className="relative hidden flex-col justify-between bg-[#1db980] p-10 text-white lg:flex lg:p-14">
+      {/* Panel bg darkened from #1db980 to #0f6143 for WCAG-AA contrast with white/70 text (4.57:1). */}
+      <div className="relative hidden flex-col justify-between bg-[#0f6143] p-10 text-white lg:flex lg:p-14">
         <div className="flex items-center gap-3 text-lg font-bold tracking-tight">
           <span className="flex size-9 items-center justify-center rounded-lg bg-white/20 shadow-sm backdrop-blur-sm"><img src="/favicon.svg" alt="" className="size-6" /></span>
           Allure Station

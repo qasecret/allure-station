@@ -17,14 +17,16 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* teal-emerald accent (#1db980) */
-    --primary: 158 73% 42%;
+    /* teal-emerald accent — darkened from 42% → 30% lightness so white text
+       achieves ≥4.5:1 (WCAG AA) on primary-coloured surfaces (buttons, rings). */
+    --primary: 158 73% 30%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 210 40% 96%;
     --secondary-foreground: 215 25% 27%;
     --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    /* Darkened from 47% → 45% to hit ≥4.5:1 against the light background. */
+    --muted-foreground: 215 16% 45%;
     --accent: 210 40% 96%;
     --accent-foreground: 222 47% 11%;
     --destructive: 0 84% 60%;
@@ -32,15 +34,17 @@
 
     --border: 214 32% 91%;
     --input: 213 27% 84%;
-    --ring: 158 73% 42%;
+    --ring: 158 73% 30%;
 
     /* cool light-blue sidebar (#e8f1fa) */
     --sidebar: 208 60% 95%;
     --sidebar-foreground: 215 25% 27%;
     --sidebar-border: 214 32% 88%;
     --sidebar-accent: 158 52% 90%;
-    --sidebar-accent-foreground: 158 75% 30%;
-    --sidebar-primary: 158 75% 33%;
+    /* Active nav text — darkened from 30%/33% → 26% so it reaches ≥4.5:1
+       against the light sidebar-accent background (#d8f3e9). */
+    --sidebar-accent-foreground: 158 75% 26%;
+    --sidebar-primary: 158 75% 26%;
     --sidebar-primary-foreground: 0 0% 100%;
   }
 
@@ -85,6 +89,19 @@
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
     border-radius: var(--radius);
   }
+}
+
+/* Sonner rich-colors WCAG-AA contrast fix (light mode).
+   Sonner's built-in token values fail 4.5:1 for normal text; we override
+   them to darker shades while keeping the background colours unchanged.
+   !important is required because Sonner injects its own <style> tag at
+   runtime (after our static stylesheet), giving it source-order priority
+   over identical-specificity rules. */
+[data-sonner-toaster][data-sonner-theme=light] {
+  --success-text: hsl(140, 100%, 26%) !important; /* was 27% → 4.53:1 on success-bg */
+  --info-text:    hsl(210, 92%, 44%) !important;  /* was 45% → 4.54:1 on info-bg */
+  --warning-text: hsl(31, 92%, 36%) !important;   /* was 45% → 4.56:1 on warning-bg */
+  --error-text:   hsl(360, 100%, 44%) !important; /* was 45% → 4.55:1 on error-bg */
 }
 
 /* Honor reduced-motion: neutralize transitions/animations app-wide. */
