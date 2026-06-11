@@ -4,36 +4,40 @@
 
 First of four sub-projects in the enterprise-upgrade arc (1 Reach & access → 2 Triage surfaces →
 3 Polish & trust → 4 Enterprise surface; each gets its own spec/plan/PR). This one fixes what is
-actually broken: below 768px the app has **no navigation at all** (`Sidebar.tsx` is
-`hidden md:block` with no replacement — Users, Audit, theme, and Sign in are unreachable), pages
-were never designed for small screens, and accessibility coverage is ad-hoc.
+actually broken on small screens and establishes the accessibility baseline.
+
+> **Correction (verified empirically at 375×812 before planning):** the original premise
+> "no navigation below 768px" was wrong — `Topbar.tsx` already ships a `md:hidden` hamburger
+> opening a left Sheet with `SidebarContent` (nav, theme, sign-in), and it works. What IS broken
+> at 375px on the project page: the topbar's `shrink-0` actions overflow the viewport —
+> **"Upload & generate" renders at x=542–719 (untappable)**, the run selector is half-clipped,
+> and the title is squeezed to zero width. The runs/users/audit tables horizontally scroll inside
+> their containers with row actions hidden off-screen. Scope below reflects this reality.
 
 ## Decisions made
 
 | Decision | Choice |
 |---|---|
 | Sequencing | All four sub-projects, in order, separate PRs |
-| Mobile navigation | Slim mobile top bar + hamburger → left Sheet drawer (desktop unchanged) |
+| Mobile navigation | Keep the existing Topbar hamburger → left Sheet drawer; fix the topbar action overflow (desktop unchanged) |
 | A11y CI gate | axe-core in Playwright e2e; **fail on serious + critical**, log the rest |
 | Approach | Responsive retrofit inside the existing shell (no AppShell rebuild, no separate mobile views) |
 
 ## 1. Mobile navigation & responsive layouts
 
-- **`components/NavContent.tsx` (new):** the sidebar's inner content — brand link, nav items
-  (Projects; Users/Audit when signed in as admin), theme toggle, account/sign-in — extracted from
-  `Sidebar.tsx` so it renders identically in two hosts. Accepts an `onNavigate?` callback so the
-  drawer can close on selection.
-- **`Sidebar.tsx`:** unchanged appearance; becomes a thin `<aside className="hidden md:block …">`
-  wrapper around `NavContent`.
-- **`components/MobileHeader.tsx` (new):** `md:hidden`, sticky top, safe-area padding
-  (`pt-[env(safe-area-inset-top)]`), brand wordmark + hamburger button
-  (`aria-label="Open navigation"`). Tapping opens a shadcn `Sheet` (`side="left"`) containing
-  `NavContent`; the sheet closes on navigation; Radix handles focus trap and return-focus.
-  `AppShell` renders it above the page column on mobile.
-- **Project page header (`Project.tsx`):** below `md` the controls must fit a 375px viewport with
-  no horizontal scroll: controls row wraps; "Upload & generate" shortens to icon + "Upload";
-  if wrapping still overflows at 375px, the branch filter moves into a popover behind a filter
-  icon. Status-chip row wraps (verify, already `flex-wrap`).
+- **Drawer navigation (existing — verify, don't rebuild):** `Topbar.tsx`'s hamburger + left
+  Sheet + `SidebarContent` already provide mobile navigation, theme, and sign-in on every page.
+  Tier-1 work here is verification + small polish only: the sheet closes on navigation (the
+  page's Topbar unmounts — confirm in the mobile e2e), the trigger keeps a proper `aria-label`,
+  and safe-area top padding (`pt-[env(safe-area-inset-top)]`) is added to the sticky header.
+  No `NavContent.tsx` or `MobileHeader.tsx` components are needed.
+- **Topbar overflow fix (`Topbar.tsx` + `Project.tsx`) — the real mobile bug:** below `md` the
+  header becomes two rows: row 1 = hamburger + title (truncating), row 2 = the actions
+  (`flex-wrap`, full width). The run selector gets a mobile width cap (`w-full max-w-full` in
+  row 2 instead of fixed `w-[320px]`), and "Upload & generate" shortens to icon + "Upload" below
+  `sm`. Acceptance: at 375px every header control is fully inside the viewport and tappable,
+  and the title is visible. Desktop (`md:`+) layout is unchanged.
+- **Status-chip row (`Project.tsx`):** already wraps (verified at 375px) — no change.
 - **Tables → card rows below `sm`:** runs table (`RunsTable.tsx`), users (`Users.tsx`), audit
   (`Audit.tsx`) render stacked card rows on mobile: line 1 = primary identity + status badge,
   line 2 = metadata, actions aligned right. The `<table>` markup remains for `sm:` and up. The
@@ -41,8 +45,8 @@ were never designed for small screens, and accessibility coverage is ad-hoc.
   in the plan after reading the markup; the visual contract is what's specified here. Pagination
   and filters keep working in both renderings.
 - **Report iframe (mobile):** gains a "Full screen" expand toggle (icon button, `aria-label`)
-  that hides the header cards/chips so the report gets the whole viewport below the mobile
-  header; toggling back restores. Deep-link/poll machinery untouched.
+  that hides the header cards/chips so the report gets the whole viewport below the topbar;
+  toggling back restores. Deep-link/poll machinery untouched.
 - **Projects grid (`Projects.tsx`):** add `xl:grid-cols-3` (currently caps at `sm:grid-cols-2`).
 
 ## 2. Accessibility baseline
@@ -70,8 +74,9 @@ were never designed for small screens, and accessibility coverage is ad-hoc.
   report iframe subtree is excluded (third-party content). Build fails on `serious`/`critical`
   impact violations; `moderate`/`minor` are logged to the test output. Runs in the existing e2e
   suite and workflow.
-- **`packages/e2e/tests/mobile.spec.ts` (new):** viewport 375×812: mobile header visible,
-  drawer opens → navigate to Audit (admin seeded) works, no horizontal overflow on projects and
+- **`packages/e2e/tests/mobile.spec.ts` (new):** viewport 375×812: hamburger visible,
+  drawer opens → navigate to Audit (admin seeded) works, every project-page topbar control is
+  fully inside the viewport (boundingBox check on the Upload button), no horizontal overflow on projects and
   project pages (`scrollWidth <= innerWidth`), runs view renders card rows, full-screen report
   toggle works.
 - Existing unit + e2e suites stay green; desktop visuals unchanged (existing screenshots remain
