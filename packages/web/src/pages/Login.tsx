@@ -34,14 +34,14 @@ export function Login() {
 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
-      {/* Panel bg darkened from #1db980 to #0f6143 for WCAG-AA contrast with white/70 text (4.57:1). */}
-      <div className="relative hidden flex-col justify-between bg-[#0f6143] p-10 text-white lg:flex lg:p-14">
-        <div className="flex items-center gap-3 text-lg font-bold tracking-tight">
+      {/* Panel bg is brand teal #1db980; text is dark slate for 7:1 AA contrast (axe-gate verified). */}
+      <div className="relative hidden flex-col justify-between bg-[#1db980] p-10 lg:flex lg:p-14">
+        <div className="flex items-center gap-3 text-lg font-bold tracking-tight text-slate-950">
           <span className="flex size-9 items-center justify-center rounded-lg bg-white/20 shadow-sm backdrop-blur-sm"><img src="/favicon.svg" alt="" className="size-6" /></span>
           Allure Station
         </div>
-        <div><h2 className="text-3xl font-bold leading-tight tracking-tight lg:text-4xl">Your test reports, beautifully hosted.</h2><p className="mt-4 max-w-md text-lg leading-relaxed text-white/90">Multi-project Allure 3 reports with trends, run comparison, and access control.</p></div>
-        <span className="text-sm font-medium text-white/70">Self-hosted report hub</span>
+        <div><h2 className="text-3xl font-bold leading-tight tracking-tight text-slate-950 lg:text-4xl">Your test reports, beautifully hosted.</h2><p className="mt-4 max-w-md text-lg leading-relaxed text-slate-950/90">Multi-project Allure 3 reports with trends, run comparison, and access control.</p></div>
+        <span className="text-sm font-medium text-slate-950/80">Self-hosted report hub</span>
       </div>
       <div className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm space-y-6">

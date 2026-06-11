@@ -17,10 +17,11 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* teal-emerald accent — darkened from 42% → 30% lightness so white text
-       achieves ≥4.5:1 (WCAG AA) on primary-coloured surfaces (buttons, rings). */
-    --primary: 158 73% 30%;
-    --primary-foreground: 0 0% 100%;
+    /* teal-emerald brand accent. primary-foreground uses dark slate (222 47% 11%)
+       for 7.06:1 contrast on #1DB980 — consistent with dark mode (dark-on-teal).
+       Ring stays at 30% lightness (3:1 non-text contrast vs canvas; 42% is ~2.4:1). */
+    --primary: 158 73% 42%;
+    --primary-foreground: 222 47% 11%;
 
     --secondary: 210 40% 96%;
     --secondary-foreground: 215 25% 27%;
@@ -96,7 +97,8 @@
    them to darker shades while keeping the background colours unchanged.
    !important is required because Sonner injects its own <style> tag at
    runtime (after our static stylesheet), giving it source-order priority
-   over identical-specificity rules. */
+   over identical-specificity rules.
+   NOTE: dark-mode toast contrast is unaudited — the axe gate scans light mode only. */
 [data-sonner-toaster][data-sonner-theme=light] {
   --success-text: hsl(140, 100%, 26%) !important; /* was 27% → 4.53:1 on success-bg */
   --info-text:    hsl(210, 92%, 44%) !important;  /* was 45% → 4.54:1 on info-bg */
