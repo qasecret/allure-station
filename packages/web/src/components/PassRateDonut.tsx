@@ -7,7 +7,7 @@ export function donutDash(pct: number, r: number): { dash: number; circ: number 
   return { dash: (safe / 100) * circ, circ };
 }
 
-export function PassRateDonut({ pct, size = 88, className }: { pct: number; size?: number; className?: string }) {
+export function PassRateDonut({ pct, size = 88, className, showLabel = true }: { pct: number; size?: number; className?: string; showLabel?: boolean }) {
   const safePct = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0;
   const r = Math.max(1, size / 2 - 8);
   const { dash, circ } = donutDash(safePct, r);
@@ -19,7 +19,7 @@ export function PassRateDonut({ pct, size = 88, className }: { pct: number; size
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={8} stroke={color}
           strokeLinecap="round" strokeDasharray={`${dash} ${circ - dash}`} />
       </svg>
-      <span className="absolute text-sm font-semibold tabular-nums">{safePct}%</span>
+      {showLabel && <span className="absolute text-sm font-semibold tabular-nums">{safePct}%</span>}
     </div>
   );
 }

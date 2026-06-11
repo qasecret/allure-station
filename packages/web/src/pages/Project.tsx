@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import type { Run, RunStatus, TestDiff, TestHistoryEntry, Regression, RunRef, TrendPoint } from "@allure-station/shared";
+import type { Run, RunStatus, TestDiff, TestHistoryEntry, Regression, RunRef } from "@allure-station/shared";
 import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History, ShieldCheck, ShieldAlert, AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
@@ -20,6 +20,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { relativeTime, runLabel, formatDurationSec, formatDelta, passRate } from "@/lib/format";
 import { PassRateDonut } from "@/components/PassRateDonut";
+import { TrendChart } from "@/components/TrendChart";
 import { parseReportFragment, buildReportFragment, withReportHash } from "@/lib/report-deep-link";
 import { failedReasons } from "@/lib/quality-gate-verdict";
 import { severityChipClass } from "@/lib/severity";
@@ -67,12 +68,6 @@ export function Project() {
     queryKey: ["runs", id],
     queryFn: () => api.listRuns(id),
     refetchInterval: (q) => (q.state.data?.some((r) => r.status === "generating") ? 5000 : false),
-  });
-
-  const { data: trends = [] } = useQuery({
-    queryKey: ["trends", id],
-    queryFn: () => api.listTrends(id),
-    refetchInterval: () => (runs.some((r) => r.status === "generating") ? 5000 : false),
   });
 
   // Live updates over SSE: handle deletions first, then upsert lifecycle events.
@@ -125,8 +120,9 @@ export function Project() {
   const selectedVisible = selectedRun && visibleRuns.some((r) => r.id === selectedRun) ? selectedRun : null;
   const current = selectedVisible ?? visibleRuns.find((r) => r.status === "ready")?.id ?? visibleRuns[0]?.id ?? null;
   const cur = runs.find((r) => r.id === current);
-  // The most-recent ready run strictly older than the current one — used for delta tiles in StatsRow.
-  const prevReady = runs
+  // The most-recent ready run strictly older than the current one — derived from visibleRuns so
+  // deltas compare within the active branch filter, not across branches.
+  const prevReady = visibleRuns
     .filter((r) => r.status === "ready" && r.createdAt < (cur?.createdAt ?? ""))
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0] ?? null;
   // The most recent COMPLETED run (ready/failed). If it failed and isn't what we're showing, surface a
@@ -268,7 +264,7 @@ export function Project() {
         </div>
         <div className={cn("space-y-3", focusReport && tab === "report" && "hidden")}>
           <StatsRow current={cur ?? null} previous={prevReady ?? null} />
-          <TrendCard projectId={id} points={trends} onSelectRun={setSelectedRun}
+          <TrendCard projectId={id} onSelectRun={setSelectedRun}
             readyRuns={runs.filter((r) => r.status === "ready")} />
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as "report" | "runs")} className="flex min-h-0 flex-1 flex-col">
@@ -365,7 +361,7 @@ function StatsRow({ current, previous }: { current: Run | null; previous: Run | 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <div className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm">
-        <PassRateDonut pct={pct} size={40} />
+        <PassRateDonut pct={pct} size={40} showLabel={false} />
         <div>
           <div className="text-xs text-muted-foreground">Pass rate</div>
           <div className="text-lg font-semibold tabular-nums">{pct}%</div>
@@ -397,10 +393,9 @@ function StatsRow({ current, previous }: { current: Run | null; previous: Run | 
   );
 }
 
-/** Full-width trend card wrapping the TrendBar + a collapsible Compare disclosure. */
-function TrendCard({ projectId, points, onSelectRun, readyRuns }: {
+/** Full-width trend card wrapping TrendChart + a collapsible Compare disclosure. */
+function TrendCard({ projectId, onSelectRun, readyRuns }: {
   projectId: string;
-  points: TrendPoint[];
   onSelectRun: (id: string) => void;
   readyRuns: Run[];
 }) {
@@ -434,6 +429,8 @@ function TrendCard({ projectId, points, onSelectRun, readyRuns }: {
   }, [readyRuns.length >= 2]);
 
   const handleToggle = (open: boolean) => {
+    // Carry-over fix: early-return on no-op toggles (programmatic/SSR) to avoid polluting storage.
+    if (open === compareOpen) return;
     setCompareOpen(open);
     sessionStorage.setItem(storageKey, String(open));
   };
@@ -443,7 +440,9 @@ function TrendCard({ projectId, points, onSelectRun, readyRuns }: {
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><TrendingUp className="size-5" /></span>
-          <TrendBar points={points} />
+          <div className="flex-1 min-w-0">
+            <TrendChart projectId={projectId} onSelectRun={onSelectRun} />
+          </div>
         </div>
         {readyRuns.length >= 2 && (
           <details open={compareOpen} onToggle={(e) => handleToggle((e.currentTarget as HTMLDetailsElement).open)}>
@@ -463,50 +462,6 @@ function TrendCard({ projectId, points, onSelectRun, readyRuns }: {
   );
 }
 
-function TrendBar({ points }: { points: TrendPoint[] }) {
-  if (points.length < 2) {
-    return (
-      <div className="flex flex-1 items-center text-sm text-muted-foreground">
-        <span>
-          {points.length === 1
-            ? "Trends appear after 2 successful runs — 1 more to go."
-            : "Trends appear after 2 successful runs. Push results to start the series."}
-        </span>
-      </div>
-    );
-  }
-  const w = points.length * 14;
-  const anyFlaky = points.some((p) => (p.stats.flaky ?? 0) > 0);
-  const maxDur = Math.max(1, ...points.map((p) => p.stats.durationMs ?? 0));
-  const anyDur = points.some((p) => (p.stats.durationMs ?? 0) > 0);
-  const durLine = points.map((p, i) => `${i * 14 + 5},${42 - Math.round(((p.stats.durationMs ?? 0) / maxDur) * 36) - 2}`).join(" ");
-  return (
-    <div className="flex items-end gap-3">
-      <svg width={w} height={44} role="img" aria-label={`Pass-rate and duration trend across ${points.length} runs; latest ${points[points.length - 1].stats.passed}/${points[points.length - 1].stats.total} passed`}>
-        {points.map((p, i) => {
-          const rate = p.stats.total ? p.stats.passed / p.stats.total : 0;
-          const h = Math.round(rate * 38) + 2;
-          const flaky = p.stats.flaky ?? 0;
-          const durMs = p.stats.durationMs ?? 0;
-          return (
-            <g key={p.runId}>
-              <rect x={i * 14} y={42 - h} width={10} height={h} fill={p.stats.failed || p.stats.broken ? "#EF4444" : "#1DB980"}>
-                <title>{`${new Date(p.createdAt).toLocaleString()}\n${p.stats.passed}/${p.stats.total} passed, ${p.stats.failed} failed, ${p.stats.broken} broken${flaky ? `, ${flaky} flaky` : ""}${durMs ? `\n${formatDurationSec(durMs)} total` : ""}`}</title>
-              </rect>
-              {flaky > 0 && <rect x={i * 14} y={Math.max(0, 42 - h - 3)} width={10} height={3} fill="#F59E0B" pointerEvents="none" />}
-            </g>
-          );
-        })}
-        {anyDur && <polyline points={durLine} fill="none" stroke="hsl(var(--primary))" strokeWidth={1.5} opacity={0.8} pointerEvents="none" />}
-      </svg>
-      <div className="flex flex-col gap-0.5 text-[11px] text-muted-foreground">
-        <span className="font-medium text-foreground">Trend</span>
-        {anyFlaky && <span className="text-status-broken">▮ flaky</span>}
-        {anyDur && <span className="text-primary-text">╱ duration</span>}
-      </div>
-    </div>
-  );
-}
 
 function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: Run[] }) {
   const [base, setBase] = useState<string>(() => readyRuns[1]?.id ?? "");
