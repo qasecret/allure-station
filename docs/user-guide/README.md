@@ -181,6 +181,8 @@ Top to bottom:
     (permanently removes the run, its report, and its history contribution; guarded by a confirm
     dialog; disabled while a run is generating).
 
+![Runs tab — filterable run table with gate verdicts and per-run actions](images/13-runs-tab.png)
+
 ### Drill into a test
 
 Click any test in the report tree. Here's the failing `positive square` — Allure shows the status,
