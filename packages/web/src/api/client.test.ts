@@ -244,4 +244,17 @@ describe("api client", () => {
     expect(calls[1].url).toBe("/api/projects/p");
     expect(JSON.parse(String(calls[1].init.body))).toEqual({ displayName: null });
   });
+
+  it("listProjects passes sort; getOverview hits /overview", async () => {
+    const calls: string[] = [];
+    const f = (async (url: string) => {
+      calls.push(String(url));
+      return new Response(JSON.stringify(url.includes("overview") ? { projects: 1, failing: 0, gateBreached: 0, runsLast24h: 2, generating: 0 } : []), { status: 200, headers: { "content-type": "application/json", "x-total-count": "0" } });
+    }) as unknown as typeof fetch;
+    const c = createClient("/api", f);
+    await c.listProjects({ sort: "worst" });
+    expect(calls[0]).toContain("sort=worst");
+    const o = await c.getOverview();
+    expect(o.runsLast24h).toBe(2);
+  });
 });
