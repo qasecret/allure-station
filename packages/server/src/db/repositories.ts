@@ -11,7 +11,7 @@ import { apiTokens, memberships, notifications, projects, runs, testResults } fr
 
 // Case-sensitive substring LIKE with wildcards escaped, so user input like "a_b" matches literally
 // rather than treating _/% as wildcards. Works on sqlite + pg via the ESCAPE clause.
-function likeContains(column: AnySQLiteColumn, q: string) {
+export function likeContains(column: AnySQLiteColumn, q: string) {
   const escaped = q.replace(/[\\%_]/g, (c) => `\\${c}`);
   return sql`${column} LIKE ${`%${escaped}%`} ESCAPE '\\'`;
 }

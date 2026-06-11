@@ -14,7 +14,7 @@ import {
   loginRequestSchema, sessionUserSchema,
   userSchema, createUserRequestSchema,
   membershipSchema, membershipWithUserSchema, setMembershipRequestSchema,
-  auditEntrySchema,
+  auditEntrySchema, auditActionSchema,
   overviewSchema,
 } from "@allure-station/shared";
 
@@ -162,9 +162,16 @@ const memberRoutes: RouteDecl[] = [
   { method: "delete", path: "/api/projects/{projectId}/members/{userId}", tag: "members", summary: "Remove a member", security: SESSION_ONLY, ok: { status: 204 } },
 ];
 
+const auditFilterQuery = z.object({
+  action: auditActionSchema.optional(),
+  actor: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+}).merge(pageQuery);
+
 const auditRoutes: RouteDecl[] = [
-  { method: "get", path: "/api/audit", tag: "audit", summary: "Global audit log", security: SESSION_ONLY, query: pageQuery, ok: { status: 200, schema: z.array(auditEntrySchema) } },
-  { method: "get", path: "/api/projects/{projectId}/audit", tag: "audit", summary: "Project audit log", security: SESSION_ONLY, query: pageQuery, ok: { status: 200, schema: z.array(auditEntrySchema) } },
+  { method: "get", path: "/api/audit", tag: "audit", summary: "Global audit log", security: SESSION_ONLY, query: auditFilterQuery, ok: { status: 200, schema: z.array(auditEntrySchema) } },
+  { method: "get", path: "/api/projects/{projectId}/audit", tag: "audit", summary: "Project audit log", security: SESSION_ONLY, query: auditFilterQuery, ok: { status: 200, schema: z.array(auditEntrySchema) } },
 ];
 
 const allRoutes: RouteDecl[] = [

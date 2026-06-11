@@ -2,12 +2,49 @@ import type { FastifyInstance } from "fastify";
 import type { AppDeps } from "../app.js";
 import { authenticate, requireAdmin, requireProjectOwner } from "../auth.js";
 import { parsePage, type PageParams } from "./pagination.js";
+import { auditActionSchema, type AuditAction } from "@allure-station/shared";
 
 // The audit log grows unbounded, so a request without ?limit must not serialize the whole table.
 const DEFAULT_LIMIT = 100;
 function pageWithDefault(query: Record<string, unknown>): PageParams {
   const page = parsePage(query);
   return { ...page, limit: page.limit ?? DEFAULT_LIMIT };
+}
+
+interface AuditFilters {
+  action?: AuditAction;
+  actor?: string;
+  from?: string;
+  to?: string;
+}
+
+/** Parse and validate the audit filter query params.
+ *  Returns the parsed filters or throws/returns an error message string on invalid input. */
+function parseAuditFilters(query: Record<string, unknown>): AuditFilters | { error: string } {
+  const raw = query as { action?: string; actor?: string; from?: string; to?: string };
+
+  let action: AuditAction | undefined;
+  if (raw.action !== undefined) {
+    const parsed = auditActionSchema.safeParse(raw.action);
+    if (!parsed.success) return { error: `invalid action "${raw.action}"` };
+    action = parsed.data;
+  }
+
+  const actor = typeof raw.actor === "string" ? raw.actor : undefined;
+
+  let from: string | undefined;
+  if (raw.from !== undefined) {
+    if (Number.isNaN(Date.parse(raw.from))) return { error: `invalid from date "${raw.from}"` };
+    from = raw.from;
+  }
+
+  let to: string | undefined;
+  if (raw.to !== undefined) {
+    if (Number.isNaN(Date.parse(raw.to))) return { error: `invalid to date "${raw.to}"` };
+    to = raw.to;
+  }
+
+  return { action, actor, from, to };
 }
 
 export function registerAuditRoutes(app: FastifyInstance, deps: AppDeps): void {
@@ -17,7 +54,10 @@ export function registerAuditRoutes(app: FastifyInstance, deps: AppDeps): void {
     let page;
     try { page = pageWithDefault(req.query as Record<string, unknown>); }
     catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
-    const [items, total] = await Promise.all([deps.audit.list(page), deps.audit.count()]);
+    const filters = parseAuditFilters(req.query as Record<string, unknown>);
+    if ("error" in filters) return reply.code(400).send({ error: filters.error });
+    const opts = { ...filters, ...page };
+    const [items, total] = await Promise.all([deps.audit.list(opts), deps.audit.count(filters)]);
     reply.header("X-Total-Count", String(total));
     return items;
   });
@@ -31,12 +71,16 @@ export function registerAuditRoutes(app: FastifyInstance, deps: AppDeps): void {
     let page;
     try { page = pageWithDefault(req.query as Record<string, unknown>); }
     catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    const filters = parseAuditFilters(req.query as Record<string, unknown>);
+    if ("error" in filters) return reply.code(400).send({ error: filters.error });
     // since = this project's createdAt, so a reused (deleted-then-recreated) id can't reveal the
     // prior tenant's audit history.
     const scope = { projectId, since: project.createdAt };
+    const fullOpts = { ...scope, ...filters, ...page };
+    const countOpts = { ...scope, ...filters };
     const [items, total] = await Promise.all([
-      deps.audit.list({ ...scope, ...page }),
-      deps.audit.count(scope),
+      deps.audit.list(fullOpts),
+      deps.audit.count(countOpts),
     ]);
     reply.header("X-Total-Count", String(total));
     return items;
