@@ -33,7 +33,7 @@ export function ProjectCard({ p }: { p: ProjectListItem }) {
     <Link to={`/projects/${p.id}`} className="group block"
       onMouseEnter={() => setHovered(true)}
       onFocus={() => setHovered(true)}>
-      <Card className="transition-shadow hover:border-primary/30 hover:shadow-md">
+      <Card className="transition duration-fast hover:border-primary/30 hover:shadow-md active:scale-[0.98]">
         <CardContent className="flex items-center gap-4 p-5">
           {pct !== null
             ? <PassRateDonut pct={pct} size={64} />
@@ -58,6 +58,7 @@ export function ProjectCard({ p }: { p: ProjectListItem }) {
               {!p.latestRunId
                 ? "No runs yet"
                 : lr
+                  // Keep plain relativeTime here — a TimeStamp tooltip inside a <Link> is a focus trap.
                   ? <>{lr.status === "ready" && lr.stats ? `${lr.stats.passed}/${lr.stats.total} passed` : lr.status}{lr.createdAt ? ` · ${relativeTime(lr.createdAt)}` : ""}</>
                   : "No runs yet"}
             </p>

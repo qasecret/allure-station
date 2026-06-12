@@ -14,7 +14,7 @@
  * against a secure-mode server with a seeded admin): humanized sentences + action filter.
  */
 import { test, expect } from "@playwright/test";
-import { createProjectWithRun, uploadResults, waitForReadyCount, visible } from "./helpers.js";
+import { createProjectWithRun, uploadResults, waitForReadyCount, visible, expectNoSeriousViolations } from "./helpers.js";
 
 test.setTimeout(120_000);
 
@@ -89,4 +89,14 @@ test("triage: sort=name (default) renders project cards without ?sort param", as
   await expect(page).not.toHaveURL(/sort=/);
   // Sort select exists and shows the Name option as default
   await expect(page.getByLabel("Sort projects")).toBeVisible();
+});
+
+test("a missing project shows a humanized inline error with retry", async ({ page }) => {
+  await page.goto("/projects/does-not-exist-xyz");
+  const alert = page.getByRole("alert");
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText(/private or doesn't exist/i);
+  await expect(alert.getByRole("button", { name: "Retry" })).toBeVisible();
+  await expect(alert.getByRole("link", { name: "Sign in" })).toBeVisible();
+  await expectNoSeriousViolations(page, "project:error-state");
 });

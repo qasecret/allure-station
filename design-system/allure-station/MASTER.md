@@ -126,6 +126,49 @@ Prefer the shadcn primitives in `@/components/ui/*`; only add bespoke markup for
 
 ---
 
+## Motion
+
+All UI animation and transition durations are governed by three CSS-variable tokens defined in `styles.css :root`:
+
+| Token | Value | Tailwind utility |
+|-------|-------|-----------------|
+| `--motion-fast` | `150ms` | `duration-fast` |
+| `--motion-base` | `200ms` | `duration-base` |
+| `--motion-slow` | `300ms` | `duration-slow` |
+
+**Rules:**
+- **No raw `duration-N` classes** anywhere under `src/` — use `duration-fast`, `duration-base`, or `duration-slow` exclusively. The only permitted exception is keyframe definitions in `tailwind.config.ts` (e.g. `accordion-down 0.2s ease-out`) — these are the only place raw durations appear.
+- **Easing rule:** `ease-out` for enter animations; `ease-in` for exit animations.
+- **Transform and opacity only** — never animate `width`, `height`, `top`, `left`, or other layout properties.
+- **Reduced-motion guard:** the global `@media (prefers-reduced-motion: reduce)` block in `styles.css` neutralizes all transitions and animations app-wide. No per-component guards are needed — the global rule covers everything.
+- **`tailwindcss-animate` compatibility:** `duration-fast|base|slow` correctly drive `animation-duration` on `animate-in`/`animate-out` classes because `tailwindcss-animate` builds its `animationDuration` scale from `transitionDuration` (verified in `tailwindcss-animate@1.0.7`).
+
+**Targeted fade-in surfaces:** projects grid, RunsTable containers (desktop + mobile), Audit table container, StatsRow wrapper in Project. Use `animate-fade-in` (defined as `fade-in var(--motion-fast) ease-out`).
+
+**Press feedback:** interactive cards and tiles use `active:scale-[0.98] transition-transform duration-fast`.
+
+---
+
+## Time
+
+All timestamps in the UI follow a single convention driven by the `TimeStamp` component (`src/components/TimeStamp.tsx`):
+
+- **Default (relative + tooltip):** the visible text is a compact relative string (`relativeTime`) — `just now`, `3m ago`, `2d ago`, or a short absolute date when the event is more than 7 days ago (with year when the calendar year differs). The full local timestamp (`formatAbsolute`) is shown in a keyboard-accessible Radix `<Tooltip>` (the `title` attribute is not keyboard-reachable — never use it as the sole absolute timestamp source).
+- **Dense mode** (`dense` prop): renders both the relative and the full absolute timestamp inline, separated by ` · `. Use this on audit/compliance surfaces where hovering is unacceptable (e.g. the global Audit log Time column, the project-scoped AuditCard in ProjectSettings).
+- **ProjectCard exception:** `ProjectCard` keeps a plain `relativeTime` text with no tooltip — a `<Tooltip>` inside a `<Link>` creates a focus trap. Document any future exceptions with a comment at the call site.
+
+**Usage:**
+```tsx
+<TimeStamp iso={run.createdAt} />                          // relative + hover-to-absolute
+<TimeStamp iso={entry.at} dense />                         // audit rows: "2d ago · Jun 12, 2026, 09:44:11"
+<TimeStamp iso={entry.at} dense className="text-xs ..." /> // audit rows with custom class
+{t.lastUsedAt ? <TimeStamp iso={t.lastUsedAt} /> : "never"} // nullable timestamps
+```
+
+**`TooltipProvider`** is mounted once at the root in `main.tsx` with `delayDuration={300}` — do not add a second `<TooltipProvider>` in individual components.
+
+---
+
 ## Anti-patterns (do NOT use)
 
 - ❌ Playful design, AI purple/pink gradients, hidden credentials (off-brand for *Trust & Authority*)

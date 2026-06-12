@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -25,6 +25,11 @@ import { parseReportFragment, buildReportFragment, withReportHash } from "@/lib/
 import { failedReasons } from "@/lib/quality-gate-verdict";
 import { severityChipClass } from "@/lib/severity";
 import { RunsTable } from "@/components/RunsTable";
+import { QueryErrorState } from "@/components/QueryErrorState";
+import { humanizeError } from "@/lib/errors";
+import { TableSkeleton } from "@/components/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TimeStamp } from "@/components/TimeStamp";
 import { session } from "@/lib/storage";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
@@ -56,8 +61,8 @@ export function Project() {
   }, [id]);
 
   // A read-gated project 404s for anonymous/non-members — surface that as a clear message
-  // instead of a silently-empty page.
-  const { isError: projectDenied, data: project } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
+  // with a sign-in prompt for anonymous visitors (private ≡ missing to prevent enumeration).
+  const { isError: projectDenied, error: projectError, data: project, refetch: refetchProject } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
   // canWrite comes from the server (already part of GET /projects/:id) so the UI always reflects
   // the authoritative permission state — undefined → false while loading (no destructive buttons
   // visible until the server confirms write access).
@@ -191,11 +196,13 @@ export function Project() {
       <>
         <Topbar title="Project unavailable" />
         <main className="grid flex-1 place-items-center p-6">
-          <div className="max-w-sm text-center">
-            <h1 className="text-lg font-semibold">Project unavailable</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              This project is private or doesn't exist. If it's private, <Link to="/login" className="text-primary-text underline">sign in</Link> with an account that has access.
-            </p>
+          <div className="w-full max-w-sm">
+            <QueryErrorState
+              error={projectError}
+              onRetry={() => refetchProject()}
+              message="This project is private or doesn't exist. If it's private, sign in with an account that can view it."
+              actions={!user ? <Button variant="default" size="sm" asChild><Link to="/login">Sign in</Link></Button> : undefined}
+            />
           </div>
         </main>
       </>
@@ -286,8 +293,12 @@ export function Project() {
             {cur?.status === "failed"
               ? <FailedRunPanel projectId={id} run={cur} />
               : current
-                ? <iframe ref={frameRef} title="report" className="min-h-0 flex-1 rounded-xl border bg-card shadow-sm"
-                    src={withReportHash(`/api/projects/${id}/runs/${current}/report/index.html`, current === initialDeepLink.current?.runId ? initialDeepLink.current.hash : null)} />
+                ? <ReportFrame
+                    key={current}
+                    ref={frameRef}
+                    src={withReportHash(`/api/projects/${id}/runs/${current}/report/index.html`, current === initialDeepLink.current?.runId ? initialDeepLink.current.hash : null)}
+                    title="report"
+                  />
                 : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use "Upload & generate" to create the first report.'} />}
           </TabsContent>
           <TabsContent value="runs" className="flex min-h-0 flex-1 flex-col">
@@ -299,6 +310,31 @@ export function Project() {
   );
 }
 
+// Owns the loaded/shimmer state for a single report iframe. Rendered with key={runId} by the
+// parent so a run switch remounts it with fresh state — no post-paint reset effect needed.
+// forwardRef keeps the parent's frameRef polling machinery intact.
+const ReportFrame = forwardRef<HTMLIFrameElement, { src: string; title: string }>(
+  function ReportFrame({ src, title }, ref) {
+    const [loaded, setLoaded] = useState(false);
+    return (
+      <div className="relative min-h-0 flex-1">
+        {!loaded && (
+          <div className="absolute inset-0 rounded-xl bg-card">
+            <Skeleton aria-hidden className="size-full rounded-xl" />
+          </div>
+        )}
+        <iframe
+          ref={ref}
+          title={title}
+          className="size-full min-h-0 rounded-xl border bg-card shadow-sm"
+          src={src}
+          onLoad={() => setLoaded(true)}
+        />
+      </div>
+    );
+  }
+);
+
 // A failed run has no report to embed; show the captured error and a one-click retry (which re-runs
 // generation against the still-staged results). SSE flips the run back to generating/ready live.
 function FailedRunPanel({ projectId, run }: { projectId: string; run: Run }) {
@@ -306,7 +342,7 @@ function FailedRunPanel({ projectId, run }: { projectId: string; run: Run }) {
   const retry = useMutation({
     mutationFn: () => api.retryRun(projectId, run.id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["runs", projectId] }); toast.success("Retrying generation…"); },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   return (
     <div className="grid min-h-0 flex-1 place-items-center rounded-xl border bg-card p-6 shadow-sm">
@@ -361,7 +397,7 @@ function StatsRow({ current, previous }: { current: Run | null; previous: Run | 
   const durDelta = (s.durationMs && p?.durationMs) ? formatDelta(Math.round((s.durationMs - p.durationMs) / 1000)) : null;
   const pct = passRate(s);
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="animate-fade-in grid grid-cols-2 gap-3 sm:grid-cols-4">
       <div className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm">
         <PassRateDonut pct={pct} size={40} showLabel={false} />
         <div>
@@ -479,7 +515,7 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
       setBase((b) => (ids.includes(b) ? b : ids[1] ?? ""));
     } else { setTarget(ids[0] ?? ""); setBase(ids[1] ?? ""); }
   }, [readyIds, touched]);
-  const { data: diff } = useQuery({
+  const { data: diff, isLoading: diffLoading, isError: diffError, error: diffErrorVal, refetch: refetchDiff } = useQuery({
     queryKey: ["compare", projectId, base, target],
     queryFn: () => api.compareRuns(projectId, base, target),
     enabled: !!base && !!target && base !== target,
@@ -488,6 +524,7 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
   useEffect(() => { setSelected(null); }, [base, target]); // don't leave the drawer open across a comparison change
   if (readyRuns.length < 2) return null;
   const pick = (set: (v: string) => void) => (v: string) => { setTouched(true); set(v); };
+  // title, not TimeStamp: tooltip triggers inside Radix Select options are not keyboard-reachable
   const runItems = readyRuns.map((r) => (
     <SelectItem key={r.id} value={r.id}><span title={r.createdAt}>{runLabel(r)}</span></SelectItem>
   ));
@@ -500,7 +537,9 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
         <Select value={target} onValueChange={pick(setTarget)}><SelectTrigger className="h-8 w-[180px]" aria-label="Target run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
       </div>
       {base === target ? <p className="text-sm text-muted-foreground">Pick two different runs.</p>
-        : !diff ? <p className="text-sm text-muted-foreground">Loading comparison…</p>
+        : diffError ? <QueryErrorState error={diffErrorVal} onRetry={() => refetchDiff()} />
+        : diffLoading ? <TableSkeleton rows={4} cols={3} />
+        : !diff ? null
         : (
           <div className="flex flex-wrap gap-4">
             <Bucket label="Newly failing" color="text-status-fail-text" tests={diff.newlyFailing} onOpen={setSelected} />
@@ -558,7 +597,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 function TestHistorySheet({ projectId, test, onClose }: { projectId: string; test: TestDiff | null; onClose: () => void }) {
-  const { data } = useQuery({
+  const { data, isLoading: historyLoading, isError: historyError, error: historyErrorVal, refetch: refetchHistory } = useQuery({
     queryKey: ["test-history", projectId, test?.historyId, test?.fullName],
     queryFn: () => api.getTestHistory(projectId, { historyId: test!.historyId ?? undefined, fullName: test!.fullName ?? undefined, name: test!.name, limit: 50 }),
     enabled: !!test && !!(test.historyId ?? test.fullName),
@@ -569,7 +608,11 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
         <SheetHeader>
           <SheetTitle className="truncate">{test?.name ?? "Test history"}</SheetTitle>
         </SheetHeader>
-        {!data ? <p className="mt-4 text-sm text-muted-foreground">Loading history…</p> : (
+        {historyError ? (
+          <div className="mt-4"><QueryErrorState error={historyErrorVal} onRetry={() => refetchHistory()} /></div>
+        ) : historyLoading ? <div className="mt-4"><TableSkeleton rows={6} cols={2} /></div> : !data ? (
+          <p className="mt-4 text-sm text-muted-foreground">No history available for this test.</p>
+        ) : (
           <div className="mt-4 space-y-3">
             <Badge variant="secondary">Flaky {Math.round(data.flakeRate * 100)}% over {data.window} run{data.window === 1 ? "" : "s"}</Badge>
             {data.regression ? <RegressionHint regression={data.regression} entries={data.entries} /> : null}
@@ -579,7 +622,7 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
                   <div className="flex items-center gap-2">
                     <span className={`font-semibold ${STATUS_COLOR[e.status]}`}>{e.status}</span>
                     {e.flaky ? <span className="text-status-broken-text">flaky</span> : null}
-                    <span className="text-muted-foreground" title={e.createdAt}>{relativeTime(e.createdAt)}</span>
+                    <TimeStamp iso={e.createdAt} className="text-muted-foreground" />
                     {e.commit ? <span className="text-muted-foreground">· {e.commit.slice(0, 7)}</span> : null}
                     {e.ciUrl ? <a href={e.ciUrl} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">CI</a> : null}
                   </div>
@@ -602,7 +645,7 @@ function RegressionHint({ regression, entries }: { regression: Regression; entri
     const label = relativeTime(ref.createdAt);
     return ciUrl
       ? <a href={ciUrl} target="_blank" rel="noreferrer" title={ref.createdAt} className="text-primary-text hover:underline">{label}</a>
-      : <span title={ref.createdAt}>{label}</span>;
+      : <TimeStamp iso={ref.createdAt} />;
   };
   if (regression.windowLimited) {
     return (

@@ -10,6 +10,7 @@ export function RunSelector({ runs, value, onChange }: { runs: Run[]; value: str
       <SelectTrigger aria-label="Select run to view" className="w-full max-w-full md:w-[320px]"><SelectValue /></SelectTrigger>
       <SelectContent>
         {runs.map((r) => (
+          // title, not TimeStamp: tooltip triggers inside Radix Select options are not keyboard-reachable
           <SelectItem key={r.id} value={r.id}>
             <span className="flex items-center gap-2" title={r.createdAt}>
               <span className={`size-2 rounded-full ${DOT[r.status] ?? "bg-status-skip"}`} />

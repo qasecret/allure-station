@@ -517,6 +517,10 @@ The **Export CSV** button downloads all matching entries (up to 10 000 rows) as 
 CSV with an `event` column containing the same human sentence — ready to open in a spreadsheet or
 pipe into a SIEM.
 
+> **Time column:** each row shows both a relative label (e.g. *"2d ago"*) and the full local
+> timestamp inline (`relative · absolute`), so compliance reviewers can read exact times without
+> hovering. The CSV `at` field is always an ISO 8601 UTC string.
+
 The per-project **Audit** card in Project Settings shows the same interface scoped to that one project.
 
 ![Global audit log](images/10-audit-log.png)

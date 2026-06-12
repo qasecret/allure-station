@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
+import { humanizeError } from "@/lib/errors";
 
 export function NewProjectDialog() {
   const qc = useQueryClient();
@@ -22,7 +23,7 @@ export function NewProjectDialog() {
       qc.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Project created");
     },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e, "project")),
   });
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setId(""); setName(""); } }}>

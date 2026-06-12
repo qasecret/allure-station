@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { passRate, relativeTime, runLabel, formatPercent, formatDurationSec, formatDelta } from "./format.js";
+import { passRate, relativeTime, runLabel, formatPercent, formatDurationSec, formatDelta, absoluteDate, formatAbsolute } from "./format.js";
 
 describe("formatDelta", () => {
   it("renders signed deltas and omits zero", () => {
@@ -45,6 +45,42 @@ describe("relativeTime", () => {
     expect(relativeTime("2026-06-07T11:30:00Z", now)).toBe("30m ago");
     expect(relativeTime("2026-06-07T09:00:00Z", now)).toBe("3h ago");
     expect(relativeTime("2026-06-05T12:00:00Z", now)).toBe("2d ago");
+  });
+});
+
+describe("relativeTime fallover", () => {
+  const now = Date.parse("2026-06-12T12:00:00.000Z");
+  it("keeps compact forms under 7 days", () => {
+    expect(relativeTime("2026-06-12T11:59:30.000Z", now)).toBe("just now");
+    expect(relativeTime("2026-06-10T12:00:00.000Z", now)).toBe("2d ago");
+  });
+  it("falls over to a date beyond 7 days, with year beyond a year", () => {
+    expect(relativeTime("2026-06-01T12:00:00.000Z", now)).toBe(absoluteDate("2026-06-01T12:00:00.000Z"));
+    expect(relativeTime("2024-12-25T12:00:00.000Z", now)).toBe(absoluteDate("2024-12-25T12:00:00.000Z", { year: true }));
+  });
+  it("exactly 7 days ago shows '7d ago'", () => {
+    const exactly7d = Date.parse("2026-06-05T12:00:00.000Z"); // exactly 7 days before now
+    expect(relativeTime("2026-06-05T12:00:00.000Z", exactly7d + 7 * 24 * 3600 * 1000)).toBe("7d ago");
+  });
+  it("8 days ago falls over to a date string", () => {
+    const ref = "2026-06-04T12:00:00.000Z"; // 8 days before June 12
+    const result = relativeTime(ref, now);
+    expect(result).not.toMatch(/ago/);
+    expect(result).toMatch(/Jun/);
+  });
+  it("a December date viewed in January includes the year (calendar-year boundary)", () => {
+    const jan1Now = Date.parse("2027-01-15T12:00:00.000Z");
+    const dec25 = "2026-12-25T12:00:00.000Z";
+    const result = relativeTime(dec25, jan1Now);
+    // The years differ (2026 vs 2027) → year must be shown
+    expect(result).toContain("2026");
+  });
+});
+describe("formatAbsolute", () => {
+  it("renders a full local timestamp", () => {
+    // local-TZ dependent — assert shape, not exact text
+    expect(formatAbsolute("2026-06-12T06:44:11.000Z")).toMatch(/2026/);
+    expect(formatAbsolute("2026-06-12T06:44:11.000Z")).toMatch(/\d{1,2}:\d{2}/);
   });
 });
 

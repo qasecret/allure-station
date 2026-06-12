@@ -1,10 +1,14 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { GlobalRole } from "@allure-station/shared";
+import { toast } from "sonner";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
 import { SortTh } from "@/components/SortTh";
 import { Topbar } from "@/components/Topbar";
+import { QueryErrorState } from "@/components/QueryErrorState";
+import { humanizeError } from "@/lib/errors";
+import { TableSkeleton } from "@/components/skeletons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +35,7 @@ export function Users() {
   const [sortKey, setSortKey] = useState<UserSortKey | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder | null>(null);
 
-  const { data: rawUsers = [] } = useQuery({ queryKey: ["users"], queryFn: () => api.listUsers(), enabled: user?.role === "admin" });
+  const { data: rawUsers = [], isLoading: usersLoading, isError: usersError, error: usersErrorVal, refetch: refetchUsers } = useQuery({ queryKey: ["users"], queryFn: () => api.listUsers(), enabled: user?.role === "admin" });
 
   const users = useMemo(() => {
     if (!sortKey) return rawUsers;
@@ -52,11 +56,12 @@ export function Users() {
   const create = useMutation({
     mutationFn: () => api.createUser(email, password, role),
     onSuccess: () => { setEmail(""); setPassword(""); setError(null); qc.invalidateQueries({ queryKey: ["users"] }); },
-    onError: (e: Error) => setError(e.message.includes("409") ? "Email already in use." : "Could not create user (password must be 8+ chars)."),
+    onError: (e) => setError(humanizeError(e, "user")),
   });
   const remove = useMutation({
     mutationFn: (id: string) => api.deleteUser(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+    onError: (e) => toast.error(humanizeError(e)),
   });
 
   if (isLoading) return null;
@@ -81,7 +86,9 @@ export function Users() {
               {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
             </CardContent>
           </Card>
-          <Card>
+          {usersError && <QueryErrorState error={usersErrorVal} onRetry={() => refetchUsers()} />}
+          {usersLoading && <TableSkeleton rows={3} cols={3} />}
+          {!usersLoading && !usersError && <Card>
             <CardContent className="p-0">
               {/* Mobile list — visible below sm */}
               <ul role="list" className="divide-y sm:hidden">
@@ -117,7 +124,7 @@ export function Users() {
                 </Table>
               </div>
             </CardContent>
-          </Card>
+          </Card>}
         </div>
       </main>
     </>

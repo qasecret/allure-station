@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ProjectCard } from "@/components/ProjectCard";
 import { NewProjectDialog } from "@/components/NewProjectDialog";
 import { EmptyState } from "@/components/EmptyState";
+import { QueryErrorState } from "@/components/QueryErrorState";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
@@ -22,7 +23,7 @@ const PAGE_SIZE = 20;
 function Tile({ label, value, accent, onClick }: { label: string; value: number; accent?: string; onClick?: () => void }) {
   return (
     <button type="button" disabled={!onClick} onClick={onClick}
-      className={cn("rounded-xl border bg-card p-3 text-left shadow-sm", onClick && "cursor-pointer hover:shadow-md")}>
+      className={cn("rounded-xl border bg-card p-3 text-left shadow-sm", onClick && "cursor-pointer hover:shadow-md active:scale-[0.98] transition-transform duration-fast")}>
       <div className={cn("text-2xl font-semibold tabular-nums", accent)}>{value}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </button>
@@ -79,7 +80,7 @@ export function Projects() {
     setPage(0);
   };
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError: projectsError, error: projectsErrorVal, refetch: refetchProjects } = useQuery({
     queryKey: ["projects", q, page, sort],
     queryFn: () => api.listProjects({ q, sort, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
     placeholderData: keepPreviousData,
@@ -118,13 +119,15 @@ export function Projects() {
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[104px] rounded-xl" />)}
             </div>
+          ) : projectsError ? (
+            <QueryErrorState error={projectsErrorVal} onRetry={() => refetchProjects()} />
           ) : items.length === 0 ? (
             <EmptyState icon={FolderOpen}
               title={q ? `No projects matching "${q}"` : "No projects yet"}
               description={q ? "Try a different search." : "Create a project, then push results from CI."}
               action={!q ? <NewProjectDialog /> : undefined} />
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="animate-fade-in grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {items.map((p) => <ProjectCard key={p.id} p={p} />)}
             </div>
           )}

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { local } from "@/lib/storage";
+import { humanizeError } from "@/lib/errors";
 
 const META_KEYS = ["branch", "commit", "environment", "ciUrl"] as const;
 type Meta = Record<(typeof META_KEYS)[number], string>;
@@ -51,7 +52,7 @@ export function UploadDialog({ projectId }: { projectId: string }) {
       qc.invalidateQueries({ queryKey: ["trends", projectId] });
       toast.success("Generating report…");
     },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   return (
     <Dialog open={open} onOpenChange={setOpen}>
