@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
+import { randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../app.js";
 import { makeTestDeps } from "../test-helpers.js";
 import { hashPassword } from "../password.js";
+import { hashSessionToken, generateSessionToken } from "../auth.js";
 import type { AppDeps } from "../app.js";
 import type { SessionInfo } from "@allure-station/shared";
 
@@ -248,6 +250,38 @@ describe("account & sessions", () => {
     ])) {
       expect(res.json().error).toBe("unauthenticated");
     }
+    await app.close();
+  });
+
+  it("OIDC-provisioned user (no usable local password) cannot change password: any currentPassword yields 400 invalid credentials", async () => {
+    // Mirrors oidc.ts auto-provisioning: a random 32-byte hex string is hashed as the local password,
+    // making the plaintext permanently unknowable. POST /auth/password must reject with 400.
+    const deps = await makeTestDeps();
+    const oidcEmail = "oidc-user@example.com";
+    const randomPlaintext = randomBytes(32).toString("hex");
+    await deps.users.create(oidcEmail, await hashPassword(randomPlaintext), "user", deps.now());
+    const app = buildApp(deps);
+
+    // Create a session directly (simulating a successful OIDC callback) rather than going via
+    // /auth/login (which would require knowing the random plaintext password).
+    const tokenPlaintext = generateSessionToken();
+    const tokenHash = hashSessionToken(tokenPlaintext);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const user = await deps.users.findByEmail(oidcEmail);
+    await deps.sessions.create(tokenHash, user!.id, deps.now(), expiresAt);
+    const cookieHeader = `as_session=${tokenPlaintext}`;
+
+    // Attempt password change with any currentPassword — must fail with 400 "invalid credentials"
+    // because the local password hash was set from an unknown random value.
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/auth/password",
+      headers: { cookie: cookieHeader },
+      payload: { currentPassword: "any-guess-12", newPassword: "brand-new-pass-9" },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe("invalid credentials");
+
     await app.close();
   });
 });

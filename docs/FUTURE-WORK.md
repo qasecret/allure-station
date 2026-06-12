@@ -111,3 +111,9 @@ test-isolation gap; worth fixing when next in the e2e files.)
 **Suggested next slice:** #1 (run metadata) — smallest contained change with the widest downstream
 payoff. #2 (private reports) is the likely adoption blocker. #3 + #4 are the daily-triage win.
 
+## Auth: rate limiting
+
+`POST /auth/login` and `POST /auth/password` accept unlimited attempts. scrypt cost plus
+`login_failed`/`password_change_failed` audit entries mitigate, but a per-IP/per-account
+limiter (e.g. @fastify/rate-limit on the two routes) is the right next step.
+

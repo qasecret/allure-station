@@ -146,15 +146,15 @@ export async function authorizeProjectRead(
   deps: AppDeps,
   principal: Principal,
   project: { id: string; visibility: ProjectVisibility },
-): Promise<"ok" | "unauthorized"> {
+): Promise<"ok" | "forbidden"> {
   if (project.visibility !== "private") return "ok";
   switch (principal.kind) {
     case "user":
-      return principal.role === "admin" || (await userProjectRank(deps, principal.userId, project.id)) >= PROJECT_RANK.viewer ? "ok" : "unauthorized";
+      return principal.role === "admin" || (await userProjectRank(deps, principal.userId, project.id)) >= PROJECT_RANK.viewer ? "ok" : "forbidden";
     case "token":
-      return principal.projectId === project.id ? "ok" : "unauthorized";
+      return principal.projectId === project.id ? "ok" : "forbidden";
     case "anonymous":
-      return "unauthorized";
+      return "forbidden";
   }
 }
 

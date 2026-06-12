@@ -181,7 +181,7 @@ describe("DELETE run — private-project existence-tell fix (A1)", () => {
     const app = buildApp(deps);
 
     await deps.projects.create("open", deps.now());
-    // public visibility (default) — unauthorized should get 401
+    // public visibility (default) — anonymous principal has no write rights → 401 unauthenticated
     await deps.runs.create("open", "r1", "R", "2026-06-10T00:00:01.000Z");
 
     const res = await app.inject({ method: "DELETE", url: "/api/projects/open/runs/r1" });
