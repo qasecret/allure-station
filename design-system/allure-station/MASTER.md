@@ -153,7 +153,7 @@ All UI animation and transition durations are governed by three CSS-variable tok
 
 All timestamps in the UI follow a single convention driven by the `TimeStamp` component (`src/components/TimeStamp.tsx`):
 
-- **Default (relative + tooltip):** the visible text is a compact relative string (`relativeTime`) — `just now`, `3m ago`, `2d ago`, or a short absolute date when the event is more than 7 days ago (with year when more than a year apart). The full local timestamp (`formatAbsolute`) is shown in a keyboard-accessible Radix `<Tooltip>` (the `title` attribute is not keyboard-reachable — never use it as the sole absolute timestamp source).
+- **Default (relative + tooltip):** the visible text is a compact relative string (`relativeTime`) — `just now`, `3m ago`, `2d ago`, or a short absolute date when the event is more than 7 days ago (with year when the calendar year differs). The full local timestamp (`formatAbsolute`) is shown in a keyboard-accessible Radix `<Tooltip>` (the `title` attribute is not keyboard-reachable — never use it as the sole absolute timestamp source).
 - **Dense mode** (`dense` prop): renders both the relative and the full absolute timestamp inline, separated by ` · `. Use this on audit/compliance surfaces where hovering is unacceptable (e.g. the global Audit log Time column, the project-scoped AuditCard in ProjectSettings).
 - **ProjectCard exception:** `ProjectCard` keeps a plain `relativeTime` text with no tooltip — a `<Tooltip>` inside a `<Link>` creates a focus trap. Document any future exceptions with a comment at the call site.
 

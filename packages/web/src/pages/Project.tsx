@@ -128,7 +128,6 @@ export function Project() {
   const current = selectedVisible ?? visibleRuns.find((r) => r.status === "ready")?.id ?? visibleRuns[0]?.id ?? null;
   const cur = runs.find((r) => r.id === current);
   // Reset iframe loaded state when the selected run changes so the shimmer shows on each run switch.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setIframeLoaded(false); }, [current]);
   // The most-recent ready run strictly older than the current one — derived from visibleRuns so
   // deltas compare within the active branch filter, not across branches.
@@ -293,7 +292,7 @@ export function Project() {
               ? <FailedRunPanel projectId={id} run={cur} />
               : current
                 ? <div className="relative min-h-0 flex-1">
-                    {!iframeLoaded && <Skeleton className="absolute inset-0 rounded-xl" />}
+                    {!iframeLoaded && <Skeleton aria-hidden className="absolute inset-0 rounded-xl" />}
                     <iframe ref={frameRef} title="report" className="size-full min-h-0 rounded-xl border bg-card shadow-sm"
                       src={withReportHash(`/api/projects/${id}/runs/${current}/report/index.html`, current === initialDeepLink.current?.runId ? initialDeepLink.current.hash : null)}
                       onLoad={() => setIframeLoaded(true)} />
@@ -583,7 +582,9 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
         </SheetHeader>
         {historyError ? (
           <div className="mt-4"><QueryErrorState error={historyErrorVal} onRetry={() => refetchHistory()} /></div>
-        ) : historyLoading ? <div className="mt-4"><TableSkeleton rows={6} cols={2} /></div> : !data ? null : (
+        ) : historyLoading ? <div className="mt-4"><TableSkeleton rows={6} cols={2} /></div> : !data ? (
+          <p className="mt-4 text-sm text-muted-foreground">No history available for this test.</p>
+        ) : (
           <div className="mt-4 space-y-3">
             <Badge variant="secondary">Flaky {Math.round(data.flakeRate * 100)}% over {data.window} run{data.window === 1 ? "" : "s"}</Badge>
             {data.regression ? <RegressionHint regression={data.regression} entries={data.entries} /> : null}

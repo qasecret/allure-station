@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ProjectRole, CreatedToken, NotificationKind, NotificationTrigger } from "@allure-station/shared";
 import { TimeStamp } from "@/components/TimeStamp";
@@ -266,6 +266,7 @@ function AuditCard({ projectId, enabled }: { projectId: string; enabled: boolean
   const { data, isLoading: auditLoading, isError: auditError, error: auditErrorVal, refetch: refetchAudit } = useQuery({
     queryKey: ["project-audit", projectId, filters.action, filters.actor, filters.from, filters.to],
     queryFn: () => api.listProjectAudit(projectId, queryOpts),
+    placeholderData: keepPreviousData,
     retry: false,
     enabled,
   });
