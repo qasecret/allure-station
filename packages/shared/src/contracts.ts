@@ -307,6 +307,23 @@ export const setMembershipRequestSchema = z.object({
   role: projectRoleSchema,
 });
 
+// --- Session info (returned by GET /auth/sessions — no tokenHash exposed) ---
+export const sessionInfoSchema = z.object({
+  id: z.string(),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  userAgent: z.string().nullable(),
+  ip: z.string().nullable(),
+  current: z.boolean(),
+});
+export type SessionInfo = z.infer<typeof sessionInfoSchema>;
+
+export const changePasswordRequestSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
+
 // --- Audit log (Phase 5c) ---
 export const auditActionSchema = z.enum([
   "login", "login_failed", "logout",
@@ -318,6 +335,8 @@ export const auditActionSchema = z.enum([
   "quality_gate_set",
   "notification_created", "notification_deleted",
   "run_deleted",
+  "password_changed",
+  "session_revoked",
 ]);
 export const auditActorTypeSchema = z.enum(["user", "token", "anonymous"]);
 export const auditEntrySchema = z.object({

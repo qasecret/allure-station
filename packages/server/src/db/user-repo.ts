@@ -58,6 +58,11 @@ export class UserRepository {
     return Number(row?.c ?? 0);
   }
 
+  /** Update the user's stored password hash (e.g. after a password-change flow). */
+  async setPasswordHash(id: string, passwordHash: string): Promise<void> {
+    await this.db.update(users).set({ passwordHash }).where(eq(users.id, id));
+  }
+
   /** Delete a user and (because libsql doesn't cascade) their sessions + memberships. */
   async remove(id: string): Promise<boolean> {
     await this.db.delete(sessions).where(eq(sessions.userId, id));
