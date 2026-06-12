@@ -1,12 +1,17 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "@/components/Sidebar";
+import { api } from "../main.js";
 
 /** Frame for all routes: persistent sidebar + a per-page topbar (rendered by each page). */
 export function AppShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const mainRef = useRef<HTMLDivElement>(null);
   const firstRender = useRef(true);
+  const { data: config } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
+  const brandName = config?.branding?.name;
+  useEffect(() => { if (brandName) document.title = brandName; }, [brandName]);
   const focusMain = () => {
     mainRef.current?.focus({ preventScroll: true });
     mainRef.current?.querySelector("main")?.scrollTo({ top: 0 });

@@ -58,6 +58,15 @@ export function formatDelta(n: number): string | null {
   return n === 0 ? null : n > 0 ? `+${n}` : String(n);
 }
 
+/** Token-expiry badge model. warn within 14 days; expiresAt <= now is expired. */
+export function tokenExpiryStatus(expiresAt: string | null, now: number = Date.now()): { label: string; tone: "muted" | "warn" | "expired" } {
+  if (!expiresAt) return { label: "never expires", tone: "muted" };
+  const ms = Date.parse(expiresAt) - now;
+  if (ms <= 0) return { label: "expired", tone: "expired" };
+  const days = Math.ceil(ms / 86_400_000);
+  return { label: `expires in ${days}d`, tone: days <= 14 ? "warn" : "muted" };
+}
+
 /** Human-friendly run label for selectors: relative time, status, pass ratio, branch@sha · env. */
 export function runLabel(r: Run, now: number = Date.now()): string {
   const base = `${relativeTime(r.createdAt, now)} — ${r.status}${r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}`;
