@@ -11,6 +11,8 @@ import { downloadCsv } from "@/lib/csv";
 import { AuditFilterBar } from "@/components/AuditFilterBar";
 import type { AuditFilters } from "@/components/AuditFilterBar";
 import { Topbar } from "@/components/Topbar";
+import { QueryErrorState } from "@/components/QueryErrorState";
+import { humanizeError } from "@/lib/errors";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -69,7 +71,7 @@ export function Audit() {
     ...(filters.to ? { to: filters.to } : {}),
   };
 
-  const { data } = useQuery({
+  const { data, isError: auditError, error: auditErrorVal, refetch: refetchAudit } = useQuery({
     queryKey: ["audit", page, filters.action, filters.actor, filters.from, filters.to],
     queryFn: () => api.listAudit(queryOpts),
     enabled: user?.role === "admin",
@@ -119,7 +121,7 @@ export function Audit() {
 
       downloadCsv(`audit-${new Date().toISOString().slice(0, 10)}.csv`, csvRows);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(humanizeError(e));
     } finally {
       setExporting(false);
     }
@@ -153,6 +155,7 @@ export function Audit() {
             </Button>
           </div>
 
+          {auditError && <QueryErrorState error={auditErrorVal} onRetry={() => refetchAudit()} />}
           <Card>
             <CardContent className="p-0">
               {/* Mobile list — visible below sm */}

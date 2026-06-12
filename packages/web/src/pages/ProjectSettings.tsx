@@ -7,6 +7,8 @@ import { describeAuditEntry } from "@/lib/audit-format";
 import { AuditFilterBar } from "@/components/AuditFilterBar";
 import type { AuditFilters } from "@/components/AuditFilterBar";
 import { toast } from "sonner";
+import { humanizeError } from "@/lib/errors";
+import { QueryErrorState } from "@/components/QueryErrorState";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
 import { settingsState } from "@/lib/settings-access";
@@ -26,7 +28,7 @@ const PROJECT_ROLES: ProjectRole[] = ["viewer", "maintainer", "owner"];
 export function ProjectSettings() {
   const { id = "" } = useParams();
   const { user, isLoading: authLoading } = useAuth();
-  const { data: project } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
+  const { data: project, isError: projectError, error: projectErrorVal, refetch: refetchProject } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
   const { data: config, isLoading: configLoading } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
   // Owner-gated members fetch doubles as the capability probe.
   const { data: members, isError } = useQuery({
@@ -40,7 +42,9 @@ export function ProjectSettings() {
       <Topbar title={<span className="flex items-center gap-2"><Link to={`/projects/${id}`} className="text-muted-foreground hover:text-foreground">{project?.displayName ?? id}</Link><span className="text-muted-foreground">/</span>Settings</span>} />
       <main className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-3xl space-y-6">
-          {(configLoading || authLoading) ? (
+          {projectError ? (
+            <QueryErrorState error={projectErrorVal} onRetry={() => refetchProject()} />
+          ) : (configLoading || authLoading) ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : state === "signin" ? (
             <p className="text-sm text-muted-foreground">
@@ -93,7 +97,7 @@ function ProjectNameCard({ projectId }: { projectId: string }) {
       qc.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Project name saved");
     },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   if (!project) return null;
   return (
@@ -116,7 +120,7 @@ function VisibilityCard({ projectId }: { projectId: string }) {
   const setVis = useMutation({
     mutationFn: (visibility: "public" | "private") => api.setVisibility(projectId, visibility),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["project", projectId] }); toast.success("Visibility updated"); },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   if (!project) return null;
   const next = project.visibility === "private" ? "public" : "private";
@@ -167,7 +171,7 @@ function DangerZoneCard({ projectId }: { projectId: string }) {
       toast.success(`Deleted ${projectId}`);
       navigate("/");
     },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   return (
     <Card className="border-destructive/40">
@@ -205,12 +209,12 @@ function MembersCard({ projectId, members }: { projectId: string; members: { use
   const setMember = useMutation({
     mutationFn: () => api.setMember(projectId, email, role),
     onSuccess: () => { setEmail(""); qc.invalidateQueries({ queryKey: ["members", projectId] }); toast.success("Member saved"); },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   const removeMember = useMutation({
     mutationFn: (userId: string) => api.removeMember(projectId, userId),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["members", projectId] }); toast.success("Member removed"); },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   return (
     <Card>
@@ -297,7 +301,7 @@ function QualityGateCard({ projectId }: { projectId: string }) {
   const save = useMutation({
     mutationFn: () => api.setQualityGate(projectId, qgFormToConfig(form)),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["quality-gate", projectId] }); toast.success("Quality gate saved"); },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   const field = (key: keyof QgForm, label: string, hint: string) => (
     <label className="flex flex-col gap-1 text-sm">
@@ -335,12 +339,12 @@ function TokensCard({ projectId }: { projectId: string }) {
   const create = useMutation({
     mutationFn: () => api.createToken(projectId, name),
     onSuccess: (t) => { setCreated(t); setName(""); qc.invalidateQueries({ queryKey: ["tokens", projectId] }); },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e, "token")),
   });
   const remove = useMutation({
     mutationFn: (tokenId: string) => api.deleteToken(projectId, tokenId),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["tokens", projectId] }); toast.success("Token revoked"); },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   if (tokens === undefined) return null;
   return (
@@ -395,17 +399,17 @@ function NotificationsCard({ projectId }: { projectId: string }) {
   const create = useMutation({
     mutationFn: () => api.createNotification(projectId, { kind, url, events }),
     onSuccess: () => { setUrl(""); qc.invalidateQueries({ queryKey: ["notifications", projectId] }); toast.success("Notification added"); },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   const remove = useMutation({
     mutationFn: (notificationId: string) => api.deleteNotification(projectId, notificationId),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["notifications", projectId] }); toast.success("Notification removed"); },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   const test = useMutation({
     mutationFn: (notificationId: string) => api.testNotification(projectId, notificationId),
     onSuccess: (r) => r.ok ? toast.success("Test notification sent") : toast.error(`Test failed: ${r.error ?? `HTTP ${r.status}`}`),
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   const toggle = (ev: NotificationTrigger) => setEvents((cur) => cur.includes(ev) ? cur.filter((x) => x !== ev) : [...cur, ev]);
   if (notifs === undefined) return null;

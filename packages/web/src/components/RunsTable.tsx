@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { relativeTime, formatDurationSec } from "@/lib/format";
 import { evaluateGate } from "@/lib/quality-gate-verdict";
+import { humanizeError } from "@/lib/errors";
+import { QueryErrorState } from "@/components/QueryErrorState";
 
 const PAGE = 20;
 const FILTERS: Array<{ label: string; value?: RunStatus }> = [
@@ -68,7 +70,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
     setPage(0);
   };
 
-  const { data } = useQuery({
+  const { data, isError: runsError, error: runsErrorVal, refetch: refetchRuns } = useQuery({
     queryKey: ["runs-page", projectId, status ?? "all", page, sortKey ?? "createdAt", sortOrder ?? "desc"],
     queryFn: () => api.listRunsWithTotal(projectId, {
       status,
@@ -89,7 +91,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
       qc.invalidateQueries({ queryKey: ["trends", projectId] });
       toast.success("Run deleted");
     },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   const retry = useMutation({
     mutationFn: (runId: string) => api.retryRun(projectId, runId),
@@ -97,7 +99,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
       qc.invalidateQueries({ queryKey: ["runs-page", projectId] });
       toast.success("Retrying generation…");
     },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
 
   const items = data?.items ?? [];
@@ -115,6 +117,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
             onClick={() => { setStatus(f.value); setPage(0); }}>{f.label}</Button>
         ))}
       </div>
+      {runsError && <QueryErrorState error={runsErrorVal} onRetry={() => refetchRuns()} />}
       {/* Mobile card list — visible below sm */}
       <ul role="list" className="space-y-2 sm:hidden">
         {items.map((r) => {

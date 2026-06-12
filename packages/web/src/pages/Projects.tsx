@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ProjectCard } from "@/components/ProjectCard";
 import { NewProjectDialog } from "@/components/NewProjectDialog";
 import { EmptyState } from "@/components/EmptyState";
+import { QueryErrorState } from "@/components/QueryErrorState";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
@@ -79,7 +80,7 @@ export function Projects() {
     setPage(0);
   };
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError: projectsError, error: projectsErrorVal, refetch: refetchProjects } = useQuery({
     queryKey: ["projects", q, page, sort],
     queryFn: () => api.listProjects({ q, sort, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
     placeholderData: keepPreviousData,
@@ -118,6 +119,8 @@ export function Projects() {
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[104px] rounded-xl" />)}
             </div>
+          ) : projectsError ? (
+            <QueryErrorState error={projectsErrorVal} onRetry={() => refetchProjects()} />
           ) : items.length === 0 ? (
             <EmptyState icon={FolderOpen}
               title={q ? `No projects matching "${q}"` : "No projects yet"}

@@ -25,6 +25,8 @@ import { parseReportFragment, buildReportFragment, withReportHash } from "@/lib/
 import { failedReasons } from "@/lib/quality-gate-verdict";
 import { severityChipClass } from "@/lib/severity";
 import { RunsTable } from "@/components/RunsTable";
+import { QueryErrorState } from "@/components/QueryErrorState";
+import { humanizeError } from "@/lib/errors";
 import { session } from "@/lib/storage";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
@@ -57,7 +59,7 @@ export function Project() {
 
   // A read-gated project 404s for anonymous/non-members — surface that as a clear message
   // instead of a silently-empty page.
-  const { isError: projectDenied, data: project } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
+  const { isError: projectDenied, error: projectError, data: project, refetch: refetchProject } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
   // canWrite comes from the server (already part of GET /projects/:id) so the UI always reflects
   // the authoritative permission state — undefined → false while loading (no destructive buttons
   // visible until the server confirms write access).
@@ -191,11 +193,8 @@ export function Project() {
       <>
         <Topbar title="Project unavailable" />
         <main className="grid flex-1 place-items-center p-6">
-          <div className="max-w-sm text-center">
-            <h1 className="text-lg font-semibold">Project unavailable</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              This project is private or doesn't exist. If it's private, <Link to="/login" className="text-primary-text underline">sign in</Link> with an account that has access.
-            </p>
+          <div className="w-full max-w-sm">
+            <QueryErrorState error={projectError} onRetry={() => refetchProject()} />
           </div>
         </main>
       </>
@@ -306,7 +305,7 @@ function FailedRunPanel({ projectId, run }: { projectId: string; run: Run }) {
   const retry = useMutation({
     mutationFn: () => api.retryRun(projectId, run.id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["runs", projectId] }); toast.success("Retrying generation…"); },
-    onError: (e) => toast.error((e as Error).message),
+    onError: (e) => toast.error(humanizeError(e)),
   });
   return (
     <div className="grid min-h-0 flex-1 place-items-center rounded-xl border bg-card p-6 shadow-sm">
@@ -479,7 +478,7 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
       setBase((b) => (ids.includes(b) ? b : ids[1] ?? ""));
     } else { setTarget(ids[0] ?? ""); setBase(ids[1] ?? ""); }
   }, [readyIds, touched]);
-  const { data: diff } = useQuery({
+  const { data: diff, isError: diffError, error: diffErrorVal, refetch: refetchDiff } = useQuery({
     queryKey: ["compare", projectId, base, target],
     queryFn: () => api.compareRuns(projectId, base, target),
     enabled: !!base && !!target && base !== target,
@@ -500,6 +499,7 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
         <Select value={target} onValueChange={pick(setTarget)}><SelectTrigger className="h-8 w-[180px]" aria-label="Target run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
       </div>
       {base === target ? <p className="text-sm text-muted-foreground">Pick two different runs.</p>
+        : diffError ? <QueryErrorState error={diffErrorVal} onRetry={() => refetchDiff()} />
         : !diff ? <p className="text-sm text-muted-foreground">Loading comparison…</p>
         : (
           <div className="flex flex-wrap gap-4">
@@ -558,7 +558,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 function TestHistorySheet({ projectId, test, onClose }: { projectId: string; test: TestDiff | null; onClose: () => void }) {
-  const { data } = useQuery({
+  const { data, isError: historyError, error: historyErrorVal, refetch: refetchHistory } = useQuery({
     queryKey: ["test-history", projectId, test?.historyId, test?.fullName],
     queryFn: () => api.getTestHistory(projectId, { historyId: test!.historyId ?? undefined, fullName: test!.fullName ?? undefined, name: test!.name, limit: 50 }),
     enabled: !!test && !!(test.historyId ?? test.fullName),
@@ -569,7 +569,9 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
         <SheetHeader>
           <SheetTitle className="truncate">{test?.name ?? "Test history"}</SheetTitle>
         </SheetHeader>
-        {!data ? <p className="mt-4 text-sm text-muted-foreground">Loading history…</p> : (
+        {historyError ? (
+          <div className="mt-4"><QueryErrorState error={historyErrorVal} onRetry={() => refetchHistory()} /></div>
+        ) : !data ? <p className="mt-4 text-sm text-muted-foreground">Loading history…</p> : (
           <div className="mt-4 space-y-3">
             <Badge variant="secondary">Flaky {Math.round(data.flakeRate * 100)}% over {data.window} run{data.window === 1 ? "" : "s"}</Badge>
             {data.regression ? <RegressionHint regression={data.regression} entries={data.entries} /> : null}

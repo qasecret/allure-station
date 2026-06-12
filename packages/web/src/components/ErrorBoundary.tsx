@@ -24,7 +24,12 @@ interface State { error: Error | null }
 
 export class ErrorBoundary extends React.Component<{ children: React.ReactNode }, State> {
   state: State = { error: null };
-  static getDerivedStateFromError(error: Error): State { return { error }; }
+  static getDerivedStateFromError(error: unknown): State {
+    return { error: error instanceof Error ? error : new Error(String(error)) };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("ErrorBoundary:", error, info.componentStack);
+  }
   render() {
     if (this.state.error) return <ErrorFallback error={this.state.error} />;
     return this.props.children;
