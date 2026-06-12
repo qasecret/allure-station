@@ -157,7 +157,7 @@ export function Audit() {
           </div>
 
           {auditError && <QueryErrorState error={auditErrorVal} onRetry={() => refetchAudit()} />}
-          <Card>
+          <Card className="animate-fade-in">
             <CardContent className="p-0">
               {/* Mobile list — visible below sm */}
               <ul role="list" className="divide-y sm:hidden">

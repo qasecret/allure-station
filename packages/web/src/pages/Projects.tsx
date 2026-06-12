@@ -23,7 +23,7 @@ const PAGE_SIZE = 20;
 function Tile({ label, value, accent, onClick }: { label: string; value: number; accent?: string; onClick?: () => void }) {
   return (
     <button type="button" disabled={!onClick} onClick={onClick}
-      className={cn("rounded-xl border bg-card p-3 text-left shadow-sm", onClick && "cursor-pointer hover:shadow-md")}>
+      className={cn("rounded-xl border bg-card p-3 text-left shadow-sm", onClick && "cursor-pointer hover:shadow-md active:scale-[0.98] transition-transform duration-fast")}>
       <div className={cn("text-2xl font-semibold tabular-nums", accent)}>{value}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </button>
@@ -127,7 +127,7 @@ export function Projects() {
               description={q ? "Try a different search." : "Create a project, then push results from CI."}
               action={!q ? <NewProjectDialog /> : undefined} />
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="animate-fade-in grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {items.map((p) => <ProjectCard key={p.id} p={p} />)}
             </div>
           )}

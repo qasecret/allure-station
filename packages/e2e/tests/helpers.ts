@@ -82,9 +82,16 @@ export async function waitForReadyCount(page: Page, n: number): Promise<void> {
 
 /** Axe gate: fails the test on serious/critical violations; logs everything else.
  *  The embedded Allure report iframe is third-party content — excluded.
- *  Shared by a11y.spec.ts (open mode) and authed.spec.ts (users/audit pages). */
+ *  Shared by a11y.spec.ts (open mode) and authed.spec.ts (users/audit pages).
+ *  Waits for CSS animations to complete (fade-in: --motion-fast = 150 ms) before
+ *  scanning so opacity keyframes don't artificially fail contrast checks. */
 export async function expectNoSeriousViolations(page: Page, label: string) {
   await page.mouse.move(0, 0);
+  // Let enter-animations (--motion-fast = 150 ms) finish before axe measures contrast.
+  await page.waitForFunction(() => {
+    const animating = document.getAnimations().filter((a) => a.playState === "running");
+    return animating.length === 0;
+  }, { timeout: 2000 }).catch(() => { /* timed out — scan anyway */ });
   const results = await new AxeBuilder({ page })
     .exclude('iframe[title="report"]')
     .analyze();

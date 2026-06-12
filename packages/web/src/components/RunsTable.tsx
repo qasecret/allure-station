@@ -120,7 +120,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
       </div>
       {runsError && <QueryErrorState error={runsErrorVal} onRetry={() => refetchRuns()} />}
       {/* Mobile card list — visible below sm */}
-      <ul role="list" className="space-y-2 sm:hidden">
+      <ul role="list" className="animate-fade-in space-y-2 sm:hidden">
         {items.map((r) => {
           const verdict = gate && r.stats ? evaluateGate(gate, r.stats) : null;
           return (
@@ -147,7 +147,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
         {items.length === 0 && !runsError && <li className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">No runs{status ? ` with status ${status}` : ""}.</li>}
       </ul>
       {/* Desktop table — hidden below sm */}
-      <div className="relative hidden overflow-x-auto rounded-xl border bg-card shadow-sm sm:block">
+      <div className="animate-fade-in relative hidden overflow-x-auto rounded-xl border bg-card shadow-sm sm:block">
         <table className="w-full text-sm">
           <thead className="text-left text-muted-foreground">
             <tr className="border-b">

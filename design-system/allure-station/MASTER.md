@@ -126,6 +126,29 @@ Prefer the shadcn primitives in `@/components/ui/*`; only add bespoke markup for
 
 ---
 
+## Motion
+
+All UI animation and transition durations are governed by three CSS-variable tokens defined in `styles.css :root`:
+
+| Token | Value | Tailwind utility |
+|-------|-------|-----------------|
+| `--motion-fast` | `150ms` | `duration-fast` |
+| `--motion-base` | `200ms` | `duration-base` |
+| `--motion-slow` | `300ms` | `duration-slow` |
+
+**Rules:**
+- **No raw `duration-N` classes** anywhere under `src/` — use `duration-fast`, `duration-base`, or `duration-slow` exclusively. The only permitted exception is inside keyframe definitions (e.g. `accordion-down 0.2s ease-out` in `tailwind.config.ts`).
+- **Easing rule:** `ease-out` for enter animations; `ease-in` for exit animations.
+- **Transform and opacity only** — never animate `width`, `height`, `top`, `left`, or other layout properties.
+- **Reduced-motion guard:** the global `@media (prefers-reduced-motion: reduce)` block in `styles.css:148-155` neutralizes all transitions and animations app-wide. No per-component guards are needed — the global rule covers everything.
+- **`tailwindcss-animate` compatibility:** `duration-fast|base|slow` correctly drive `animation-duration` on `animate-in`/`animate-out` classes because `tailwindcss-animate` builds its `animationDuration` scale from `transitionDuration` (verified in `tailwindcss-animate@1.0.7`).
+
+**Targeted fade-in surfaces:** projects grid, RunsTable containers (desktop + mobile), Audit table container, StatsRow wrapper in Project. Use `animate-fade-in` (defined as `fade-in var(--motion-fast) ease-out`).
+
+**Press feedback:** interactive cards and tiles use `active:scale-[0.98] transition-transform duration-fast`.
+
+---
+
 ## Anti-patterns (do NOT use)
 
 - ❌ Playful design, AI purple/pink gradients, hidden credentials (off-brand for *Trust & Authority*)

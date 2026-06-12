@@ -53,6 +53,11 @@
     --input: 213 27% 84%;
     --ring: 158 73% 30%;
 
+    /* Motion scale — all UI animation durations come from these (MASTER.md "Motion"). */
+    --motion-fast: 150ms;
+    --motion-base: 200ms;
+    --motion-slow: 300ms;
+
     /* cool light-blue sidebar (#e8f1fa) */
     --sidebar: 208 60% 95%;
     --sidebar-foreground: 215 25% 27%;
@@ -144,11 +149,12 @@
   --error-text:   hsl(358, 100%, 81%) !important; /*  9.34:1 on error-bg hsl(358,76%,10%) */
 }
 
-/* Honor reduced-motion: neutralize transitions/animations app-wide. */
+/* Honor reduced-motion: neutralize transitions/animations app-wide.
+   animation: none ensures opacity-0 from-keyframes never render (prevents axe contrast failures).
+   Radix UI state machines still work; dialogs/sheets open instantly without animation. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+    animation: none !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }

@@ -27,6 +27,7 @@ import { severityChipClass } from "@/lib/severity";
 import { RunsTable } from "@/components/RunsTable";
 import { QueryErrorState } from "@/components/QueryErrorState";
 import { humanizeError } from "@/lib/errors";
+import { TimeStamp } from "@/components/TimeStamp";
 import { session } from "@/lib/storage";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
@@ -360,7 +361,7 @@ function StatsRow({ current, previous }: { current: Run | null; previous: Run | 
   const durDelta = (s.durationMs && p?.durationMs) ? formatDelta(Math.round((s.durationMs - p.durationMs) / 1000)) : null;
   const pct = passRate(s);
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="animate-fade-in grid grid-cols-2 gap-3 sm:grid-cols-4">
       <div className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm">
         <PassRateDonut pct={pct} size={40} showLabel={false} />
         <div>
@@ -581,7 +582,7 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
                   <div className="flex items-center gap-2">
                     <span className={`font-semibold ${STATUS_COLOR[e.status]}`}>{e.status}</span>
                     {e.flaky ? <span className="text-status-broken-text">flaky</span> : null}
-                    <span className="text-muted-foreground" title={e.createdAt}>{relativeTime(e.createdAt)}</span>
+                    <TimeStamp iso={e.createdAt} className="text-muted-foreground" />
                     {e.commit ? <span className="text-muted-foreground">· {e.commit.slice(0, 7)}</span> : null}
                     {e.ciUrl ? <a href={e.ciUrl} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">CI</a> : null}
                   </div>

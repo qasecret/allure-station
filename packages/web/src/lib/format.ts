@@ -15,7 +15,8 @@ export function formatAbsolute(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-/** Compact relative time. Falls over to absoluteDate beyond 7 days, including year beyond 365 days.
+/** Compact relative time. Falls over to absoluteDate beyond 7 days, including year when the
+ *  calendar year differs (so a December date viewed in January always shows the year).
  *  `now` is injectable for testing. */
 export function relativeTime(iso: string, now: number = Date.now()): string {
   const diff = now - new Date(iso).getTime();
@@ -28,7 +29,7 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
   if (hr < 24) return `${hr}h ago`;
   const day = Math.round(hr / 24);
   if (day <= 7) return `${day}d ago`;
-  const yearApart = diff > 365 * 24 * 3600 * 1000;
+  const yearApart = new Date(iso).getFullYear() !== new Date(now).getFullYear();
   return absoluteDate(iso, { year: yearApart });
 }
 
