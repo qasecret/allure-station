@@ -120,7 +120,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
         ))}
       </div>
       {runsError && <QueryErrorState error={runsErrorVal} onRetry={() => refetchRuns()} />}
-      {runsLoading && <TableSkeleton rows={5} cols={6} />}
+      {runsLoading && <div aria-busy={true}><TableSkeleton rows={5} cols={6} /></div>}
       {/* Mobile card list — visible below sm */}
       <ul role="list" className="animate-fade-in space-y-2 sm:hidden">
         {items.map((r) => {
@@ -146,7 +146,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
             </li>
           );
         })}
-        {items.length === 0 && !runsError && <li className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">No runs{status ? ` with status ${status}` : ""}.</li>}
+        {items.length === 0 && !runsError && !runsLoading && <li className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">No runs{status ? ` with status ${status}` : ""}.</li>}
       </ul>
       {/* Desktop table — hidden below sm */}
       <div className="animate-fade-in relative hidden overflow-x-auto rounded-xl border bg-card shadow-sm sm:block">
@@ -181,7 +181,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
                 </tr>
               );
             })}
-            {items.length === 0 && !runsError && <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No runs{status ? ` with status ${status}` : ""}.</td></tr>}
+            {items.length === 0 && !runsError && !runsLoading && <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No runs{status ? ` with status ${status}` : ""}.</td></tr>}
           </tbody>
         </table>
       </div>

@@ -416,7 +416,7 @@ function NotificationsCard({ projectId }: { projectId: string }) {
   });
   const test = useMutation({
     mutationFn: (notificationId: string) => api.testNotification(projectId, notificationId),
-    onSuccess: (r) => r.ok ? toast.success("Test notification sent") : toast.error(`Test failed: ${r.error ?? `HTTP ${r.status}`}`),
+    onSuccess: (r) => r.ok ? toast.success("Test notification sent") : toast.error(r.error ?? "Test failed — the endpoint did not accept the request."),
     onError: (e) => toast.error(humanizeError(e)),
   });
   const toggle = (ev: NotificationTrigger) => setEvents((cur) => cur.includes(ev) ? cur.filter((x) => x !== ev) : [...cur, ev]);

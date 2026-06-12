@@ -95,7 +95,8 @@ test("a missing project shows a humanized inline error with retry", async ({ pag
   await page.goto("/projects/does-not-exist-xyz");
   const alert = page.getByRole("alert");
   await expect(alert).toBeVisible();
-  await expect(alert).toContainText(/no longer exists/i);
+  await expect(alert).toContainText(/private or doesn't exist/i);
   await expect(alert.getByRole("button", { name: "Retry" })).toBeVisible();
+  await expect(alert.getByRole("link", { name: "Sign in" })).toBeVisible();
   await expectNoSeriousViolations(page, "project:error-state");
 });

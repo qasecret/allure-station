@@ -158,63 +158,67 @@ export function Audit() {
           </div>
 
           {auditError && <QueryErrorState error={auditErrorVal} onRetry={() => refetchAudit()} />}
-          {auditLoading && <TableSkeleton rows={8} cols={3} />}
-          <Card className="animate-fade-in">
-            <CardContent className="p-0">
-              {/* Mobile list — visible below sm */}
-              <ul role="list" className="divide-y sm:hidden">
-                {items.map((e) => (
-                  <li key={e.id} className="space-y-0.5 p-3 text-sm">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium">{describeAuditEntry(e)}</span>
-                      <TimeStamp iso={e.at} dense className="whitespace-nowrap text-xs text-muted-foreground" />
-                    </div>
-                    {e.projectId && <div className="text-xs text-muted-foreground">{e.projectId}</div>}
-                    <MetadataDisclosure entry={e} />
-                  </li>
-                ))}
-                {items.length === 0 && !auditError && (
-                  <li className="p-6 text-center text-sm text-muted-foreground">No audit events.</li>
-                )}
-              </ul>
-              {/* Desktop table — hidden below sm */}
-              <div className="hidden sm:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Time</TableHead>
-                      <TableHead>Event</TableHead>
-                      <TableHead>Project</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+          {auditLoading && <div aria-busy={true}><TableSkeleton rows={8} cols={3} /></div>}
+          {!auditLoading && !auditError && (
+            <>
+              <Card className="animate-fade-in">
+                <CardContent className="p-0">
+                  {/* Mobile list — visible below sm */}
+                  <ul role="list" className="divide-y sm:hidden">
                     {items.map((e) => (
-                      <TableRow key={e.id}>
-                        <TableCell className="whitespace-nowrap align-top text-muted-foreground">
-                          <TimeStamp iso={e.at} dense className="whitespace-nowrap text-xs text-muted-foreground" />
-                        </TableCell>
-                        <TableCell className="align-top">
+                      <li key={e.id} className="space-y-0.5 p-3 text-sm">
+                        <div className="flex items-center justify-between gap-2">
                           <span className="font-medium">{describeAuditEntry(e)}</span>
-                          <MetadataDisclosure entry={e} />
-                        </TableCell>
-                        <TableCell className="align-top text-muted-foreground">{e.projectId ?? ""}</TableCell>
-                      </TableRow>
+                          <TimeStamp iso={e.at} dense className="whitespace-nowrap text-xs text-muted-foreground" />
+                        </div>
+                        {e.projectId && <div className="text-xs text-muted-foreground">{e.projectId}</div>}
+                        <MetadataDisclosure entry={e} />
+                      </li>
                     ))}
-                    {items.length === 0 && !auditError && (
-                      <TableRow>
-                        <TableCell colSpan={3} className="p-6 text-center text-muted-foreground">No audit events.</TableCell>
-                      </TableRow>
+                    {items.length === 0 && !auditLoading && (
+                      <li className="p-6 text-center text-sm text-muted-foreground">No audit events.</li>
                     )}
-                  </TableBody>
-                </Table>
+                  </ul>
+                  {/* Desktop table — hidden below sm */}
+                  <div className="hidden sm:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Time</TableHead>
+                          <TableHead>Event</TableHead>
+                          <TableHead>Project</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {items.map((e) => (
+                          <TableRow key={e.id}>
+                            <TableCell className="whitespace-nowrap align-top text-muted-foreground">
+                              <TimeStamp iso={e.at} dense className="whitespace-nowrap text-xs text-muted-foreground" />
+                            </TableCell>
+                            <TableCell className="align-top">
+                              <span className="font-medium">{describeAuditEntry(e)}</span>
+                              <MetadataDisclosure entry={e} />
+                            </TableCell>
+                            <TableCell className="align-top text-muted-foreground">{e.projectId ?? ""}</TableCell>
+                          </TableRow>
+                        ))}
+                        {items.length === 0 && !auditLoading && (
+                          <TableRow>
+                            <TableCell colSpan={3} className="p-6 text-center text-muted-foreground">No audit events.</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+              <div className="flex items-center gap-3 text-sm">
+                <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>Prev</Button>
+                <span className="text-muted-foreground">{total === 0 ? 0 : page * PAGE + 1}–{Math.min((page + 1) * PAGE, total)} of {total}</span>
+                <Button variant="outline" size="sm" disabled={(page + 1) * PAGE >= total} onClick={() => setPage((p) => p + 1)}>Next</Button>
               </div>
-            </CardContent>
-          </Card>
-          <div className="flex items-center gap-3 text-sm">
-            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>Prev</Button>
-            <span className="text-muted-foreground">{total === 0 ? 0 : page * PAGE + 1}–{Math.min((page + 1) * PAGE, total)} of {total}</span>
-            <Button variant="outline" size="sm" disabled={(page + 1) * PAGE >= total} onClick={() => setPage((p) => p + 1)}>Next</Button>
-          </div>
+            </>
+          )}
         </div>
       </main>
     </>

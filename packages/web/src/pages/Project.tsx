@@ -62,7 +62,7 @@ export function Project() {
   }, [id]);
 
   // A read-gated project 404s for anonymous/non-members — surface that as a clear message
-  // instead of a silently-empty page.
+  // with a sign-in prompt for anonymous visitors (private ≡ missing to prevent enumeration).
   const { isError: projectDenied, error: projectError, data: project, refetch: refetchProject } = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), retry: false });
   // canWrite comes from the server (already part of GET /projects/:id) so the UI always reflects
   // the authoritative permission state — undefined → false while loading (no destructive buttons
@@ -200,7 +200,12 @@ export function Project() {
         <Topbar title="Project unavailable" />
         <main className="grid flex-1 place-items-center p-6">
           <div className="w-full max-w-sm">
-            <QueryErrorState error={projectError} onRetry={() => refetchProject()} />
+            <QueryErrorState
+              error={projectError}
+              onRetry={() => refetchProject()}
+              message="This project is private or doesn't exist. If it's private, sign in with an account that can view it."
+              actions={!user ? <Button variant="default" size="sm" asChild><Link to="/login">Sign in</Link></Button> : undefined}
+            />
           </div>
         </main>
       </>
@@ -510,7 +515,7 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
       </div>
       {base === target ? <p className="text-sm text-muted-foreground">Pick two different runs.</p>
         : diffError ? <QueryErrorState error={diffErrorVal} onRetry={() => refetchDiff()} />
-        : diffLoading ? <TableSkeleton rows={4} cols={3} />
+        : diffLoading ? <div aria-busy={true}><TableSkeleton rows={4} cols={3} /></div>
         : !diff ? null
         : (
           <div className="flex flex-wrap gap-4">
@@ -582,7 +587,7 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
         </SheetHeader>
         {historyError ? (
           <div className="mt-4"><QueryErrorState error={historyErrorVal} onRetry={() => refetchHistory()} /></div>
-        ) : historyLoading ? <div className="mt-4"><TableSkeleton rows={6} cols={2} /></div> : !data ? (
+        ) : historyLoading ? <div className="mt-4" aria-busy={true}><TableSkeleton rows={6} cols={2} /></div> : !data ? (
           <p className="mt-4 text-sm text-muted-foreground">No history available for this test.</p>
         ) : (
           <div className="mt-4 space-y-3">
