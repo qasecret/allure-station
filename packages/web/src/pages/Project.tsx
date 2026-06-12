@@ -502,6 +502,7 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
   useEffect(() => { setSelected(null); }, [base, target]); // don't leave the drawer open across a comparison change
   if (readyRuns.length < 2) return null;
   const pick = (set: (v: string) => void) => (v: string) => { setTouched(true); set(v); };
+  // title, not TimeStamp: tooltip triggers inside Radix Select options are not keyboard-reachable
   const runItems = readyRuns.map((r) => (
     <SelectItem key={r.id} value={r.id}><span title={r.createdAt}>{runLabel(r)}</span></SelectItem>
   ));
@@ -515,7 +516,7 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
       </div>
       {base === target ? <p className="text-sm text-muted-foreground">Pick two different runs.</p>
         : diffError ? <QueryErrorState error={diffErrorVal} onRetry={() => refetchDiff()} />
-        : diffLoading ? <div aria-busy={true}><TableSkeleton rows={4} cols={3} /></div>
+        : diffLoading ? <TableSkeleton rows={4} cols={3} />
         : !diff ? null
         : (
           <div className="flex flex-wrap gap-4">
@@ -587,7 +588,7 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
         </SheetHeader>
         {historyError ? (
           <div className="mt-4"><QueryErrorState error={historyErrorVal} onRetry={() => refetchHistory()} /></div>
-        ) : historyLoading ? <div className="mt-4" aria-busy={true}><TableSkeleton rows={6} cols={2} /></div> : !data ? (
+        ) : historyLoading ? <TableSkeleton rows={6} cols={2} /> : !data ? (
           <p className="mt-4 text-sm text-muted-foreground">No history available for this test.</p>
         ) : (
           <div className="mt-4 space-y-3">
@@ -622,7 +623,7 @@ function RegressionHint({ regression, entries }: { regression: Regression; entri
     const label = relativeTime(ref.createdAt);
     return ciUrl
       ? <a href={ciUrl} target="_blank" rel="noreferrer" title={ref.createdAt} className="text-primary-text hover:underline">{label}</a>
-      : <span title={ref.createdAt}>{label}</span>;
+      : <TimeStamp iso={ref.createdAt} />;
   };
   if (regression.windowLimited) {
     return (

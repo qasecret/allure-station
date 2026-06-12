@@ -119,72 +119,76 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
             onClick={() => { setStatus(f.value); setPage(0); }}>{f.label}</Button>
         ))}
       </div>
-      {runsError && <QueryErrorState error={runsErrorVal} onRetry={() => refetchRuns()} />}
-      {runsLoading && <div aria-busy={true}><TableSkeleton rows={5} cols={6} /></div>}
-      {/* Mobile card list — visible below sm */}
-      <ul role="list" className="animate-fade-in space-y-2 sm:hidden">
-        {items.map((r) => {
-          const verdict = gate && r.stats ? evaluateGate(gate, r.stats) : null;
-          return (
-            <li key={r.id} className="rounded-xl border bg-card p-3 shadow-sm">
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2">
-                  <StatusBadge status={r.status} />
-                  {r.stats && <span className="text-sm">{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail-text"> · {r.stats.failed} failed</span> : null}</span>}
-                  <GateMark verdict={verdict} />
-                </span>
-                <TimeStamp iso={r.createdAt} className="text-xs text-muted-foreground" />
-              </div>
-              <div className="mt-1 flex items-center justify-between gap-2">
-                <span className="truncate text-xs text-muted-foreground">
-                  {r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : "—"}
-                  {r.environment ? ` · ${r.environment}` : ""}
-                  {r.stats?.durationMs ? ` · ${formatDurationSec(r.stats.durationMs)}` : ""}
-                </span>
-                <RowActions r={r} canWrite={canWrite} onOpenRun={onOpenRun} retry={retry} setConfirming={setConfirming} />
-              </div>
-            </li>
-          );
-        })}
-        {items.length === 0 && !runsError && !runsLoading && <li className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">No runs{status ? ` with status ${status}` : ""}.</li>}
-      </ul>
-      {/* Desktop table — hidden below sm */}
-      <div className="animate-fade-in relative hidden overflow-x-auto rounded-xl border bg-card shadow-sm sm:block">
-        <table className="w-full text-sm">
-          <thead className="text-left text-muted-foreground">
-            <tr className="border-b">
-              <SortTh label="Status" sortKey="status" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("status")} />
-              <th scope="col" className="p-2">Result</th>
-              <th scope="col" className="p-2">Gate</th>
-              <th scope="col" className="p-2">Branch</th>
-              <th scope="col" className="p-2">Env</th>
-              <SortTh label="Duration" sortKey="duration" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("duration")} />
-              <SortTh label="Age" sortKey="createdAt" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("createdAt")} />
-              <th scope="col" className="p-2"><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((r) => {
-              const verdict = gate && r.stats ? evaluateGate(gate, r.stats) : null;
-              return (
-                <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40">
-                  <td className="p-2"><StatusBadge status={r.status} /></td>
-                  <td className="p-2">{r.stats ? <>{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail-text"> · {r.stats.failed} failed</span> : null}</> : "—"}</td>
-                  <td className="p-2"><GateMark verdict={verdict} /></td>
-                  <td className="p-2">{r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : "—"}</td>
-                  <td className="p-2">{r.environment ?? "—"}</td>
-                  <td className="p-2">{r.stats?.durationMs ? formatDurationSec(r.stats.durationMs) : "—"}</td>
-                  <td className="p-2"><TimeStamp iso={r.createdAt} /></td>
-                  <td className="p-2 text-right">
-                    <RowActions r={r} canWrite={canWrite} onOpenRun={onOpenRun} retry={retry} setConfirming={setConfirming} />
-                  </td>
-                </tr>
-              );
-            })}
-            {items.length === 0 && !runsError && !runsLoading && <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No runs{status ? ` with status ${status}` : ""}.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      {runsError ? <QueryErrorState error={runsErrorVal} onRetry={() => refetchRuns()} />
+        : runsLoading ? <TableSkeleton rows={5} cols={6} />
+        : (
+          <>
+            {/* Mobile card list — visible below sm */}
+            <ul role="list" className="animate-fade-in space-y-2 sm:hidden">
+              {items.map((r) => {
+                const verdict = gate && r.stats ? evaluateGate(gate, r.stats) : null;
+                return (
+                  <li key={r.id} className="rounded-xl border bg-card p-3 shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-2">
+                        <StatusBadge status={r.status} />
+                        {r.stats && <span className="text-sm">{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail-text"> · {r.stats.failed} failed</span> : null}</span>}
+                        <GateMark verdict={verdict} />
+                      </span>
+                      <TimeStamp iso={r.createdAt} className="text-xs text-muted-foreground" />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <span className="truncate text-xs text-muted-foreground">
+                        {r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : "—"}
+                        {r.environment ? ` · ${r.environment}` : ""}
+                        {r.stats?.durationMs ? ` · ${formatDurationSec(r.stats.durationMs)}` : ""}
+                      </span>
+                      <RowActions r={r} canWrite={canWrite} onOpenRun={onOpenRun} retry={retry} setConfirming={setConfirming} />
+                    </div>
+                  </li>
+                );
+              })}
+              {items.length === 0 && <li className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">No runs{status ? ` with status ${status}` : ""}.</li>}
+            </ul>
+            {/* Desktop table — hidden below sm */}
+            <div className="animate-fade-in relative hidden overflow-x-auto rounded-xl border bg-card shadow-sm sm:block">
+              <table className="w-full text-sm">
+                <thead className="text-left text-muted-foreground">
+                  <tr className="border-b">
+                    <SortTh label="Status" sortKey="status" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("status")} />
+                    <th scope="col" className="p-2">Result</th>
+                    <th scope="col" className="p-2">Gate</th>
+                    <th scope="col" className="p-2">Branch</th>
+                    <th scope="col" className="p-2">Env</th>
+                    <SortTh label="Duration" sortKey="duration" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("duration")} />
+                    <SortTh label="Age" sortKey="createdAt" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("createdAt")} />
+                    <th scope="col" className="p-2"><span className="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((r) => {
+                    const verdict = gate && r.stats ? evaluateGate(gate, r.stats) : null;
+                    return (
+                      <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40">
+                        <td className="p-2"><StatusBadge status={r.status} /></td>
+                        <td className="p-2">{r.stats ? <>{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail-text"> · {r.stats.failed} failed</span> : null}</> : "—"}</td>
+                        <td className="p-2"><GateMark verdict={verdict} /></td>
+                        <td className="p-2">{r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : "—"}</td>
+                        <td className="p-2">{r.environment ?? "—"}</td>
+                        <td className="p-2">{r.stats?.durationMs ? formatDurationSec(r.stats.durationMs) : "—"}</td>
+                        <td className="p-2"><TimeStamp iso={r.createdAt} /></td>
+                        <td className="p-2 text-right">
+                          <RowActions r={r} canWrite={canWrite} onOpenRun={onOpenRun} retry={retry} setConfirming={setConfirming} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {items.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No runs{status ? ` with status ${status}` : ""}.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
         <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Prev</Button>
         <span>{page + 1} / {pages} · {total} run{total === 1 ? "" : "s"}</span>

@@ -7,7 +7,17 @@ describe("skeletons", () => {
     const html = renderToStaticMarkup(<TableSkeleton rows={3} cols={4} />);
     expect(html.match(/data-skeleton-cell/g)).toHaveLength(12);
   });
+  it("TableSkeleton has role=status and sr-only loading text", () => {
+    const html = renderToStaticMarkup(<TableSkeleton rows={3} cols={4} />);
+    expect(html).toContain('role="status"');
+    expect(html).toContain("Loading…");
+  });
   it("CardSkeleton renders a card shell", () => {
     expect(renderToStaticMarkup(<CardSkeleton />)).toContain("rounded-xl");
+  });
+  it("CardSkeleton has role=status and sr-only loading text", () => {
+    const html = renderToStaticMarkup(<CardSkeleton />);
+    expect(html).toContain('role="status"');
+    expect(html).toContain("Loading…");
   });
 });

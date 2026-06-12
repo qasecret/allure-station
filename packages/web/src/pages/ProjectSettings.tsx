@@ -44,7 +44,12 @@ export function ProjectSettings() {
       <main className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-3xl space-y-6">
           {projectError ? (
-            <QueryErrorState error={projectErrorVal} onRetry={() => refetchProject()} />
+            <QueryErrorState
+              error={projectErrorVal}
+              onRetry={() => refetchProject()}
+              message="This project is private or doesn't exist. If it's private, sign in with an account that can manage it."
+              actions={!user ? <Button asChild size="sm"><Link to="/login">Sign in</Link></Button> : undefined}
+            />
           ) : (configLoading || authLoading) ? (
             <><CardSkeleton /><CardSkeleton /></>
           ) : state === "signin" ? (

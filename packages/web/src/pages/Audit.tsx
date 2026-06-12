@@ -158,7 +158,7 @@ export function Audit() {
           </div>
 
           {auditError && <QueryErrorState error={auditErrorVal} onRetry={() => refetchAudit()} />}
-          {auditLoading && <div aria-busy={true}><TableSkeleton rows={8} cols={3} /></div>}
+          {auditLoading && <TableSkeleton rows={8} cols={3} />}
           {!auditLoading && !auditError && (
             <>
               <Card className="animate-fade-in">

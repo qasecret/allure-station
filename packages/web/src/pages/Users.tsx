@@ -87,7 +87,7 @@ export function Users() {
             </CardContent>
           </Card>
           {usersError && <QueryErrorState error={usersErrorVal} onRetry={() => refetchUsers()} />}
-          {usersLoading && <div aria-busy={true}><TableSkeleton rows={3} cols={3} /></div>}
+          {usersLoading && <TableSkeleton rows={3} cols={3} />}
           {!usersLoading && !usersError && <Card>
             <CardContent className="p-0">
               {/* Mobile list — visible below sm */}
