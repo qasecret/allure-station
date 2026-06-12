@@ -45,8 +45,11 @@ export function humanizeError(e: unknown, context?: keyof typeof CONFLICTS | str
   const { status } = e;
   if (status === 0) return "Can't reach the server — check your connection and try again.";
   if (status === 401) {
+    // The server sends the same 401 {error:"unauthorized"} for an expired/missing session AND
+    // for a signed-in user below the required role — it cannot be disambiguated client-side
+    // (see docs/FUTURE-WORK.md: 401/403 split), so the copy must offer both remedies honestly.
     if (serverText(e.serverMessage).toLowerCase() === "unauthorized")
-      return "You don't have permission to do that — ask an owner for write access or use a CI token.";
+      return "You're not authorized to do that — sign in again, or ask an owner for write access.";
     return "Your session has expired — sign in again.";
   }
   if (status === 403) return "You don't have permission to do that.";

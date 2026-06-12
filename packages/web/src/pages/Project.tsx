@@ -610,7 +610,7 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
         </SheetHeader>
         {historyError ? (
           <div className="mt-4"><QueryErrorState error={historyErrorVal} onRetry={() => refetchHistory()} /></div>
-        ) : historyLoading ? <TableSkeleton rows={6} cols={2} /> : !data ? (
+        ) : historyLoading ? <div className="mt-4"><TableSkeleton rows={6} cols={2} /></div> : !data ? (
           <p className="mt-4 text-sm text-muted-foreground">No history available for this test.</p>
         ) : (
           <div className="mt-4 space-y-3">

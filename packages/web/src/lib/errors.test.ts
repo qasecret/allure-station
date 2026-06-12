@@ -56,7 +56,7 @@ describe("humanizeError", () => {
 
   // --- item 2: 401 insufficient-role vs session-expired ---
   it("401 with body 'unauthorized' shows a permission-denied copy, not session-expired", () => {
-    expect(humanizeError(new ApiError(401, "unauthorized"))).toMatch(/don't have permission to do that/i);
+    expect(humanizeError(new ApiError(401, "unauthorized"))).toMatch(/not authorized .* sign in again/i);
     expect(humanizeError(new ApiError(401, "unauthorized"))).toMatch(/ask an owner/i);
     expect(humanizeError(new ApiError(401, "unauthorized"))).not.toMatch(/session/i);
   });
