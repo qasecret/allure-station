@@ -11,20 +11,31 @@ export interface BarGeom {
   durY: number | null;
 }
 
+/**
+ * Returns the pixel distance between the left edges of adjacent bars (bar width + gap).
+ * Used by both barGeometry and the x-axis label thinning so geometry and labels
+ * can never disagree about bar spacing.
+ */
+export function barPitch(n: number, plotWidth: number): number {
+  const gap = 4;
+  const w = Math.max(6, Math.min(18, Math.floor(plotWidth / Math.max(1, n)) - gap));
+  return w + gap;
+}
+
 export function barGeometry(
   points: TrendPoint[],
   plot: { width: number; height: number }
 ): { bars: BarGeom[]; gridY: number[] } {
   const n = points.length;
-  const gap = 4;
-  const w = Math.max(6, Math.min(18, Math.floor(plot.width / Math.max(1, n)) - gap));
+  const pitch = barPitch(n, plot.width);
+  const w = pitch - 4; // gap is always 4
   const maxDur = Math.max(1, ...points.map((p) => p.stats.durationMs ?? 0));
   const bars = points.map((p, i) => {
     const rate = p.stats.total ? p.stats.passed / p.stats.total : 0;
     const h = Math.max(2, Math.round(rate * (plot.height - 4)));
     const dur = p.stats.durationMs ?? 0;
     return {
-      x: i * (w + gap),
+      x: i * pitch,
       y: plot.height - h,
       w,
       h,
@@ -43,32 +54,55 @@ export function xAxisLabels(
 ): Array<{ index: number; text: string }> {
   if (points.length === 0) return [];
   const day = (iso: string) => iso.slice(0, 10);
-  const labels: Array<{ index: number; text: string }> = [{ index: 0, text: day(points[0].createdAt) }];
+
+  // Build full day-boundary candidate list (always includes first and last)
+  const candidates: Array<{ index: number; text: string }> = [{ index: 0, text: day(points[0].createdAt) }];
   for (let i = 1; i < points.length; i++) {
     if (day(points[i].createdAt) !== day(points[i - 1].createdAt)) {
-      labels.push({ index: i, text: day(points[i].createdAt) });
+      candidates.push({ index: i, text: day(points[i].createdAt) });
     }
   }
-  const last = points.length - 1;
-  if (labels[labels.length - 1].index !== last) {
-    labels.push({ index: last, text: day(points[last].createdAt) });
+  const lastIdx = points.length - 1;
+  if (candidates[candidates.length - 1].index !== lastIdx) {
+    candidates.push({ index: lastIdx, text: day(points[lastIdx].createdAt) });
   }
 
-  // When a budget is provided and labels would collide, keep first + last and every k-th
-  // intermediate so the total fits within Math.floor(plotWidth / labelWidth) slots.
-  if (budget && labels.length * budget.labelWidth > budget.plotWidth) {
-    const maxSlots = Math.max(2, Math.floor(budget.plotWidth / budget.labelWidth));
-    const first = labels[0];
-    const lastLabel = labels[labels.length - 1];
-    const intermediates = labels.slice(1, -1);
-    const slots = maxSlots - 2; // slots available for intermediates
-    if (slots <= 0 || intermediates.length === 0) {
-      return [first, lastLabel];
+  // No budget: return all candidates unchanged (backward-compatible)
+  if (!budget) return candidates;
+
+  const { plotWidth, labelWidth } = budget;
+  const pitch = barPitch(points.length, plotWidth);
+  const n = candidates.length;
+
+  // If all candidates fit without overlap, return them all
+  if (n <= 1) return candidates;
+  const allFit = candidates.every((c, i) => {
+    if (i === 0) return true;
+    return (c.index - candidates[i - 1].index) * pitch >= labelWidth;
+  });
+  if (allFit) return candidates;
+
+  // Pixel-greedy pass: always keep first and last; keep an intermediate only when
+  // it is at least labelWidth pixels from the last kept label AND at least
+  // labelWidth pixels from the always-kept last label.
+  const first = candidates[0];
+  const last = candidates[n - 1];
+
+  if (n === 2) return [first, last];
+
+  const kept: Array<{ index: number; text: string }> = [first];
+  let lastKeptIdx = first.index;
+
+  for (let i = 1; i < n - 1; i++) {
+    const c = candidates[i];
+    const gapFromPrev = (c.index - lastKeptIdx) * pitch;
+    const gapToLast = (last.index - c.index) * pitch;
+    if (gapFromPrev >= labelWidth && gapToLast >= labelWidth) {
+      kept.push(c);
+      lastKeptIdx = c.index;
     }
-    const k = Math.ceil(intermediates.length / Math.max(1, slots));
-    const kept = intermediates.filter((_, idx) => idx % k === 0);
-    return [first, ...kept, lastLabel];
   }
 
-  return labels;
+  kept.push(last);
+  return kept;
 }
