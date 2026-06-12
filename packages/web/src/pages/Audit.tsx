@@ -3,6 +3,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { auditActionSchema } from "@allure-station/shared";
+import { TimeStamp } from "@/components/TimeStamp";
 import type { AuditAction, AuditEntry } from "@allure-station/shared";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
@@ -164,13 +165,13 @@ export function Audit() {
                   <li key={e.id} className="space-y-0.5 p-3 text-sm">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium">{describeAuditEntry(e)}</span>
-                      <span className="whitespace-nowrap text-xs text-muted-foreground">{new Date(e.at).toLocaleString()}</span>
+                      <TimeStamp iso={e.at} dense className="whitespace-nowrap text-xs text-muted-foreground" />
                     </div>
                     {e.projectId && <div className="text-xs text-muted-foreground">{e.projectId}</div>}
                     <MetadataDisclosure entry={e} />
                   </li>
                 ))}
-                {items.length === 0 && (
+                {items.length === 0 && !auditError && (
                   <li className="p-6 text-center text-sm text-muted-foreground">No audit events.</li>
                 )}
               </ul>
@@ -188,7 +189,7 @@ export function Audit() {
                     {items.map((e) => (
                       <TableRow key={e.id}>
                         <TableCell className="whitespace-nowrap align-top text-muted-foreground">
-                          {new Date(e.at).toLocaleString()}
+                          <TimeStamp iso={e.at} dense className="whitespace-nowrap text-xs text-muted-foreground" />
                         </TableCell>
                         <TableCell className="align-top">
                           <span className="font-medium">{describeAuditEntry(e)}</span>
@@ -197,7 +198,7 @@ export function Audit() {
                         <TableCell className="align-top text-muted-foreground">{e.projectId ?? ""}</TableCell>
                       </TableRow>
                     ))}
-                    {items.length === 0 && (
+                    {items.length === 0 && !auditError && (
                       <TableRow>
                         <TableCell colSpan={3} className="p-6 text-center text-muted-foreground">No audit events.</TableCell>
                       </TableRow>

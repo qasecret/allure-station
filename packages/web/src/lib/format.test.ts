@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { passRate, relativeTime, runLabel, formatPercent, formatDurationSec, formatDelta } from "./format.js";
+import { passRate, relativeTime, runLabel, formatPercent, formatDurationSec, formatDelta, absoluteDate, formatAbsolute } from "./format.js";
 
 describe("formatDelta", () => {
   it("renders signed deltas and omits zero", () => {
@@ -45,6 +45,25 @@ describe("relativeTime", () => {
     expect(relativeTime("2026-06-07T11:30:00Z", now)).toBe("30m ago");
     expect(relativeTime("2026-06-07T09:00:00Z", now)).toBe("3h ago");
     expect(relativeTime("2026-06-05T12:00:00Z", now)).toBe("2d ago");
+  });
+});
+
+describe("relativeTime fallover", () => {
+  const now = Date.parse("2026-06-12T12:00:00.000Z");
+  it("keeps compact forms under 7 days", () => {
+    expect(relativeTime("2026-06-12T11:59:30.000Z", now)).toBe("just now");
+    expect(relativeTime("2026-06-10T12:00:00.000Z", now)).toBe("2d ago");
+  });
+  it("falls over to a date beyond 7 days, with year beyond a year", () => {
+    expect(relativeTime("2026-06-01T12:00:00.000Z", now)).toBe(absoluteDate("2026-06-01T12:00:00.000Z"));
+    expect(relativeTime("2024-12-25T12:00:00.000Z", now)).toBe(absoluteDate("2024-12-25T12:00:00.000Z", { year: true }));
+  });
+});
+describe("formatAbsolute", () => {
+  it("renders a full local timestamp", () => {
+    // local-TZ dependent — assert shape, not exact text
+    expect(formatAbsolute("2026-06-12T06:44:11.000Z")).toMatch(/2026/);
+    expect(formatAbsolute("2026-06-12T06:44:11.000Z")).toMatch(/\d{1,2}:\d{2}/);
   });
 });
 

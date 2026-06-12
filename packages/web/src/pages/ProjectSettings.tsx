@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { ProjectRole, CreatedToken, NotificationKind, NotificationTrigger } from "@allure-station/shared";
-import { relativeTime } from "@/lib/format";
+import { TimeStamp } from "@/components/TimeStamp";
 import { describeAuditEntry } from "@/lib/audit-format";
 import { AuditFilterBar } from "@/components/AuditFilterBar";
 import type { AuditFilters } from "@/components/AuditFilterBar";
@@ -276,7 +276,7 @@ function AuditCard({ projectId, enabled }: { projectId: string; enabled: boolean
           <ul className="max-h-64 space-y-1 overflow-auto text-sm">
             {data.items.map((e) => (
               <li key={e.id}>
-                <span className="text-muted-foreground">{new Date(e.at).toLocaleString()}</span>{" "}
+                <TimeStamp iso={e.at} dense className="text-muted-foreground" />{" "}
                 <span className="font-medium">{describeAuditEntry(e)}</span>
                 {e.metadata ? (
                   <details className="inline ml-1">
@@ -375,7 +375,7 @@ function TokensCard({ projectId }: { projectId: string }) {
                 <TableRow key={t.id}>
                   <TableCell>{t.name}</TableCell>
                   <TableCell><code className="text-xs text-muted-foreground">{t.prefix}…</code></TableCell>
-                  <TableCell className="text-muted-foreground">{t.lastUsedAt ? relativeTime(t.lastUsedAt) : "never"}</TableCell>
+                  <TableCell className="text-muted-foreground">{t.lastUsedAt ? <TimeStamp iso={t.lastUsedAt} /> : "never"}</TableCell>
                   <TableCell className="text-right"><Button variant="ghost" size="sm" disabled={remove.isPending && remove.variables === t.id} onClick={() => remove.mutate(t.id)}>Revoke</Button></TableCell>
                 </TableRow>
               ))}

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { GlobalRole } from "@allure-station/shared";
+import { toast } from "sonner";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
 import { SortTh } from "@/components/SortTh";
@@ -59,6 +60,7 @@ export function Users() {
   const remove = useMutation({
     mutationFn: (id: string) => api.deleteUser(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+    onError: (e) => toast.error(humanizeError(e)),
   });
 
   if (isLoading) return null;

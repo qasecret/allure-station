@@ -13,6 +13,7 @@ import { Audit } from "./pages/Audit.js";
 import { AppShell } from "@/components/AppShell";
 import { AuthProvider } from "./auth.js";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { applyTheme, getTheme } from "./theme.js";
 import "./styles.css";
 
@@ -33,16 +34,18 @@ createRoot(document.getElementById("root")!).render(
       <ErrorBoundary>
         <BrowserRouter>
           <AuthProvider>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route element={<AppShell><Outlet /></AppShell>}>
-                <Route path="/" element={<Projects />} />
-                <Route path="/projects/:id" element={<Project />} />
-                <Route path="/projects/:id/settings" element={<ProjectSettings />} />
-                <Route path="/users" element={<Users />} />
-                <Route path="/audit" element={<Audit />} />
-              </Route>
-            </Routes>
+            <TooltipProvider delayDuration={300}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route element={<AppShell><Outlet /></AppShell>}>
+                  <Route path="/" element={<Projects />} />
+                  <Route path="/projects/:id" element={<Project />} />
+                  <Route path="/projects/:id/settings" element={<ProjectSettings />} />
+                  <Route path="/users" element={<Users />} />
+                  <Route path="/audit" element={<Audit />} />
+                </Route>
+              </Routes>
+            </TooltipProvider>
             <Toaster richColors position="top-right" />
           </AuthProvider>
         </BrowserRouter>

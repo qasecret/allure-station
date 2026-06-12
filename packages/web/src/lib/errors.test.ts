@@ -27,6 +27,7 @@ describe("humanizeError", () => {
     expect(humanizeError(new ApiError(400, 'invalid sort "bogus"'))).toBe('invalid sort "bogus"');
     expect(humanizeError(new ApiError(422, "{}"))).toMatch(/wasn't valid/i); // JSON-ish → generic
     expect(humanizeError(new ApiError(400, ""))).toMatch(/wasn't valid/i);
+    expect(humanizeError(new ApiError(400, '[{"code":"too_small"}]'))).toMatch(/wasn't valid/i); // zod issue arrays → generic
   });
   it("unwraps {error} JSON envelopes from the body", () => {
     expect(humanizeError(new ApiError(400, '{"error":"branch name too long"}'))).toBe("branch name too long");

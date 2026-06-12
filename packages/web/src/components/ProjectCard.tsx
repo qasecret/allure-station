@@ -58,6 +58,7 @@ export function ProjectCard({ p }: { p: ProjectListItem }) {
               {!p.latestRunId
                 ? "No runs yet"
                 : lr
+                  // Keep plain relativeTime here — a TimeStamp tooltip inside a <Link> is a focus trap.
                   ? <>{lr.status === "ready" && lr.stats ? `${lr.stats.passed}/${lr.stats.total} passed` : lr.status}{lr.createdAt ? ` · ${relativeTime(lr.createdAt)}` : ""}</>
                   : "No runs yet"}
             </p>

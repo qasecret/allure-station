@@ -24,7 +24,8 @@ function serverText(raw: string): string {
 
 /** True for short prose the server wrote for humans (zod/validation messages qualify). */
 function readsLikeSentence(s: string): boolean {
-  return s.length > 0 && s.length < 200 && !s.trimStart().startsWith("{") && !s.trimStart().startsWith("<");
+  const t = s.trimStart();
+  return s.length > 0 && s.length < 200 && !t.startsWith("{") && !t.startsWith("<") && !t.startsWith("[");
 }
 
 /** Map any thrown value to a human sentence with a recovery hint. Never returns raw "409: …". */

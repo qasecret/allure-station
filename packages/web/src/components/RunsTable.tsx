@@ -8,6 +8,7 @@ import { SortTh } from "@/components/SortTh";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { relativeTime, formatDurationSec } from "@/lib/format";
+import { TimeStamp } from "@/components/TimeStamp";
 import { evaluateGate } from "@/lib/quality-gate-verdict";
 import { humanizeError } from "@/lib/errors";
 import { QueryErrorState } from "@/components/QueryErrorState";
@@ -130,7 +131,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
                   {r.stats && <span className="text-sm">{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail-text"> · {r.stats.failed} failed</span> : null}</span>}
                   <GateMark verdict={verdict} />
                 </span>
-                <span title={r.createdAt} className="text-xs text-muted-foreground">{relativeTime(r.createdAt)}</span>
+                <TimeStamp iso={r.createdAt} className="text-xs text-muted-foreground" />
               </div>
               <div className="mt-1 flex items-center justify-between gap-2">
                 <span className="truncate text-xs text-muted-foreground">
@@ -143,7 +144,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
             </li>
           );
         })}
-        {items.length === 0 && <li className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">No runs{status ? ` with status ${status}` : ""}.</li>}
+        {items.length === 0 && !runsError && <li className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">No runs{status ? ` with status ${status}` : ""}.</li>}
       </ul>
       {/* Desktop table — hidden below sm */}
       <div className="relative hidden overflow-x-auto rounded-xl border bg-card shadow-sm sm:block">
@@ -171,14 +172,14 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
                   <td className="p-2">{r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : "—"}</td>
                   <td className="p-2">{r.environment ?? "—"}</td>
                   <td className="p-2">{r.stats?.durationMs ? formatDurationSec(r.stats.durationMs) : "—"}</td>
-                  <td className="p-2"><span title={r.createdAt}>{relativeTime(r.createdAt)}</span></td>
+                  <td className="p-2"><TimeStamp iso={r.createdAt} /></td>
                   <td className="p-2 text-right">
                     <RowActions r={r} canWrite={canWrite} onOpenRun={onOpenRun} retry={retry} setConfirming={setConfirming} />
                   </td>
                 </tr>
               );
             })}
-            {items.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No runs{status ? ` with status ${status}` : ""}.</td></tr>}
+            {items.length === 0 && !runsError && <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No runs{status ? ` with status ${status}` : ""}.</td></tr>}
           </tbody>
         </table>
       </div>

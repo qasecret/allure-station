@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../main.js";
 import { cn } from "@/lib/utils";
 import { barGeometry, xAxisLabels } from "@/lib/trend-geometry";
-import { formatDurationSec, relativeTime } from "@/lib/format";
+import { formatDurationSec, formatAbsolute } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { session } from "@/lib/storage";
 import type { TrendPoint } from "@allure-station/shared";
@@ -32,21 +32,17 @@ const SVG_PADDING_RIGHT = 8;
 const SVG_PADDING_TOP = 8;
 
 function buildAriaLabel(p: TrendPoint): string {
-  const date = new Date(p.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  const time = new Date(p.createdAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   const s = p.stats;
   const dur = s.durationMs ? `, ${formatDurationSec(s.durationMs)}` : "";
   const flaky = (s.flaky ?? 0) > 0 ? `, ${s.flaky} flaky` : "";
-  return `${date} ${time} — ${s.passed}/${s.total} passed, ${(s.failed ?? 0) + (s.broken ?? 0)} failed${flaky}${dur}`;
+  return `${formatAbsolute(p.createdAt)} — ${s.passed}/${s.total} passed, ${(s.failed ?? 0) + (s.broken ?? 0)} failed${flaky}${dur}`;
 }
 
 function TooltipContent({ point }: { point: TrendPoint }) {
   const s = point.stats;
-  const date = new Date(point.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const time = new Date(point.createdAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   return (
     <div className="space-y-0.5">
-      <div className="font-medium">{date} · {time}</div>
+      <div className="font-medium">{formatAbsolute(point.createdAt)}</div>
       <div className="text-muted-foreground">{s.passed}/{s.total} passed · {(s.failed ?? 0) + (s.broken ?? 0)} failed</div>
       {(s.flaky ?? 0) > 0 && <div className="text-amber-500">{s.flaky} flaky</div>}
       {s.durationMs ? <div className="text-muted-foreground">{formatDurationSec(s.durationMs)}</div> : null}

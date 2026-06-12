@@ -5,7 +5,18 @@ export function passRate(stats: { passed: number; total: number }): number {
   return Math.round((stats.passed / stats.total) * 100);
 }
 
-/** Compact relative time. `now` is injectable for testing. */
+/** Short local date: "Jun 5", with year when requested or differing: "Dec 25, 2024". */
+export function absoluteDate(iso: string, opts: { year?: boolean } = {}): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", ...(opts.year ? { year: "numeric" } : {}) });
+}
+
+/** Full local timestamp for tooltips and dense audit rows: "Jun 12, 2026, 06:44:11". */
+export function formatAbsolute(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+/** Compact relative time. Falls over to absoluteDate beyond 7 days, including year beyond 365 days.
+ *  `now` is injectable for testing. */
 export function relativeTime(iso: string, now: number = Date.now()): string {
   const diff = now - new Date(iso).getTime();
   const sec = Math.round(diff / 1000);
@@ -16,7 +27,9 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
   const hr = Math.round(min / 60);
   if (hr < 24) return `${hr}h ago`;
   const day = Math.round(hr / 24);
-  return `${day}d ago`;
+  if (day <= 7) return `${day}d ago`;
+  const yearApart = diff > 365 * 24 * 3600 * 1000;
+  return absoluteDate(iso, { year: yearApart });
 }
 
 /**
