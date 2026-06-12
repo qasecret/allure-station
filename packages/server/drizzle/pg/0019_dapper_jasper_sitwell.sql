@@ -1,0 +1,1 @@
+ALTER TABLE "runs" ALTER COLUMN "duration_ms" SET DATA TYPE bigint;

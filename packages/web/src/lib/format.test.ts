@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { passRate, relativeTime, runLabel, formatPercent, formatDurationSec } from "./format.js";
+import { passRate, relativeTime, runLabel, formatPercent, formatDurationSec, formatDelta } from "./format.js";
+
+describe("formatDelta", () => {
+  it("renders signed deltas and omits zero", () => {
+    expect(formatDelta(3)).toBe("+3");
+    expect(formatDelta(-2)).toBe("-2");
+    expect(formatDelta(0)).toBeNull();
+  });
+});
 
 describe("passRate", () => {
   it("returns rounded percent passed/total", () => {

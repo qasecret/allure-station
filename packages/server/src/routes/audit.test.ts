@@ -72,3 +72,120 @@ describe("audit routes + recording", () => {
     await app.close();
   });
 });
+
+describe("audit log filters", () => {
+  it("filters by action, actor substring, and from/to window; total reflects filters", async () => {
+    const deps = await makeTestDeps();
+    await deps.users.create("admin@x.com", await hashPassword("password123"), "admin", deps.now());
+    const app = buildApp(deps);
+    const adminCookie = await login(app, "admin@x.com");
+
+    // Seed: create a project (project_created), rename it (project_renamed), create a token (token_created).
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "filter-test" }, cookies: { as_session: adminCookie } });
+    await app.inject({ method: "PATCH", url: "/api/projects/filter-test", payload: { displayName: "Filter Test" }, cookies: { as_session: adminCookie } });
+    // project_renamed is recorded on displayName update (PATCH /projects/:id)
+    await app.inject({ method: "POST", url: "/api/projects/filter-test/tokens", payload: { name: "ci-token" }, cookies: { as_session: adminCookie } });
+
+    // --- action filter ---
+    const filteredByAction = await app.inject({
+      method: "GET",
+      url: "/api/audit?action=project_created",
+      cookies: { as_session: adminCookie },
+    });
+    expect(filteredByAction.statusCode).toBe(200);
+    const filteredEntries = filteredByAction.json() as AuditEntry[];
+    // Seeding guarantees exactly one project_created entry in this scope.
+    expect(filteredEntries.length).toBe(1);
+    expect(filteredEntries.every((e) => e.action === "project_created")).toBe(true);
+    expect(Number(filteredByAction.headers["x-total-count"])).toBe(filteredEntries.length);
+
+    // Bogus action → 400.
+    expect(
+      (await app.inject({ method: "GET", url: "/api/audit?action=bogus_action", cookies: { as_session: adminCookie } })).statusCode
+    ).toBe(400);
+
+    // --- actor substring filter ---
+    const byActor = await app.inject({
+      method: "GET",
+      url: "/api/audit?actor=admin%40",
+      cookies: { as_session: adminCookie },
+    });
+    expect(byActor.statusCode).toBe(200);
+    expect((byActor.json() as AuditEntry[]).length).toBeGreaterThan(0);
+    // Every returned entry must match the actor substring.
+    expect((byActor.json() as AuditEntry[]).every((e) => e.actorLabel.includes("admin@"))).toBe(true);
+
+    // --- from filter: far future → no results ---
+    const none = await app.inject({
+      method: "GET",
+      url: "/api/audit?from=2030-01-01T00:00:00.000Z",
+      cookies: { as_session: adminCookie },
+    });
+    expect(none.statusCode).toBe(200);
+    expect((none.json() as AuditEntry[]).length).toBe(0);
+    expect(Number(none.headers["x-total-count"])).toBe(0);
+
+    // --- to filter: cut off before any entries → no results ---
+    const toNone = await app.inject({
+      method: "GET",
+      url: "/api/audit?to=2000-01-01T00:00:00.000Z",
+      cookies: { as_session: adminCookie },
+    });
+    expect(toNone.statusCode).toBe(200);
+    expect((toNone.json() as AuditEntry[]).length).toBe(0);
+
+    // --- from/to window that INCLUDES entries (wide window around now) ---
+    const wide = await app.inject({
+      method: "GET",
+      url: "/api/audit?from=2000-01-01T00:00:00.000Z&to=2099-12-31T23:59:59.999Z",
+      cookies: { as_session: adminCookie },
+    });
+    expect(wide.statusCode).toBe(200);
+    expect((wide.json() as AuditEntry[]).length).toBeGreaterThan(0);
+
+    // --- invalid date → 400 ---
+    expect(
+      (await app.inject({ method: "GET", url: "/api/audit?from=not-a-date", cookies: { as_session: adminCookie } })).statusCode
+    ).toBe(400);
+    expect(
+      (await app.inject({ method: "GET", url: "/api/audit?to=not-a-date", cookies: { as_session: adminCookie } })).statusCode
+    ).toBe(400);
+
+    await app.close();
+  });
+
+  it("per-project audit also supports action/actor/from/to filters", async () => {
+    const deps = await makeTestDeps();
+    await deps.users.create("admin@x.com", await hashPassword("password123"), "admin", deps.now());
+    const app = buildApp(deps);
+    const adminCookie = await login(app, "admin@x.com");
+
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "proj-filter" }, cookies: { as_session: adminCookie } });
+    await app.inject({ method: "PATCH", url: "/api/projects/proj-filter", payload: { displayName: "Proj Filter" }, cookies: { as_session: adminCookie } });
+
+    // Filter project audit by action — only project_created (not project_renamed)
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/projects/proj-filter/audit?action=project_created",
+      cookies: { as_session: adminCookie },
+    });
+    expect(res.statusCode).toBe(200);
+    const entries = res.json() as AuditEntry[];
+    // Seeding guarantees exactly one project_created entry for this project.
+    expect(entries.length).toBe(1);
+    expect(entries.every((e) => e.action === "project_created")).toBe(true);
+    expect(Number(res.headers["x-total-count"])).toBe(entries.length);
+
+    // Bogus action → 400
+    expect(
+      (await app.inject({ method: "GET", url: "/api/projects/proj-filter/audit?action=bogus", cookies: { as_session: adminCookie } })).statusCode
+    ).toBe(400);
+
+    // Invalid date → 400
+    expect(
+      (await app.inject({ method: "GET", url: "/api/projects/proj-filter/audit?from=bad", cookies: { as_session: adminCookie } })).statusCode
+    ).toBe(400);
+
+    await app.close();
+  });
+});

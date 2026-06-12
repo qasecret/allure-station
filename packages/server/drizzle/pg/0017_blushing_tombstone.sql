@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "idx_runs_project_created" ON "runs" USING btree ("project_id","created_at");

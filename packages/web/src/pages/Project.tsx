@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import type { Run, RunStatus, TestDiff, TestHistoryEntry, Regression, RunRef, TrendPoint } from "@allure-station/shared";
+import type { Run, RunStatus, TestDiff, TestHistoryEntry, Regression, RunRef } from "@allure-station/shared";
 import { Settings, FileBarChart, TrendingUp, GitCompareArrows, History, ShieldCheck, ShieldAlert, AlertTriangle, Maximize2, Minimize2 } from "lucide-react";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
@@ -18,11 +18,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { relativeTime, runLabel, formatDurationSec } from "@/lib/format";
+import { relativeTime, runLabel, formatDurationSec, formatDelta, passRate } from "@/lib/format";
+import { PassRateDonut } from "@/components/PassRateDonut";
+import { TrendChart } from "@/components/TrendChart";
 import { parseReportFragment, buildReportFragment, withReportHash } from "@/lib/report-deep-link";
 import { failedReasons } from "@/lib/quality-gate-verdict";
 import { severityChipClass } from "@/lib/severity";
 import { RunsTable } from "@/components/RunsTable";
+import { session } from "@/lib/storage";
 
 // Lifecycle ordering: a run never moves backwards. Used to drop out-of-order SSE events.
 const STATUS_RANK: Record<RunStatus, number> = { pending: 0, generating: 1, ready: 2, failed: 2 };
@@ -66,12 +69,6 @@ export function Project() {
     queryKey: ["runs", id],
     queryFn: () => api.listRuns(id),
     refetchInterval: (q) => (q.state.data?.some((r) => r.status === "generating") ? 5000 : false),
-  });
-
-  const { data: trends = [] } = useQuery({
-    queryKey: ["trends", id],
-    queryFn: () => api.listTrends(id),
-    refetchInterval: () => (runs.some((r) => r.status === "generating") ? 5000 : false),
   });
 
   // Live updates over SSE: handle deletions first, then upsert lifecycle events.
@@ -124,6 +121,11 @@ export function Project() {
   const selectedVisible = selectedRun && visibleRuns.some((r) => r.id === selectedRun) ? selectedRun : null;
   const current = selectedVisible ?? visibleRuns.find((r) => r.status === "ready")?.id ?? visibleRuns[0]?.id ?? null;
   const cur = runs.find((r) => r.id === current);
+  // The most-recent ready run strictly older than the current one — derived from visibleRuns so
+  // deltas compare within the active branch filter, not across branches.
+  const prevReady = visibleRuns
+    .filter((r) => r.status === "ready" && r.createdAt < (cur?.createdAt ?? ""))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0] ?? null;
   // The most recent COMPLETED run (ready/failed). If it failed and isn't what we're showing, surface a
   // banner — so a failure isn't hidden behind an older report, even when a newer run is still generating.
   const latestDone = visibleRuns.find((r) => r.status === "ready" || r.status === "failed");
@@ -225,7 +227,7 @@ export function Project() {
             surface it, since otherwise the failure + retry would be hidden behind the run selector. */}
         {latestDone?.status === "failed" && current !== latestDone.id && (
           <button type="button" onClick={() => setSelectedRun(latestDone.id)}
-            className="flex items-center gap-2 rounded-lg border border-status-fail/40 bg-status-fail/5 px-3 py-2 text-left text-sm text-status-fail hover:bg-status-fail/10">
+            className="flex items-center gap-2 rounded-lg border border-status-fail/40 bg-status-fail/5 px-3 py-2 text-left text-sm text-status-fail-text hover:bg-status-fail/10">
             <AlertTriangle className="size-4 shrink-0" />
             <span>The latest run failed to generate. <span className="underline">View &amp; retry</span></span>
           </button>
@@ -235,9 +237,9 @@ export function Project() {
           {cur?.stats && (
             <span className="text-sm text-muted-foreground">
               <span className="font-medium text-foreground">{cur.stats.passed}/{cur.stats.total}</span> passed
-              {cur.stats.failed ? <> · <span className="text-status-fail">{cur.stats.failed} failed</span></> : null}
-              {cur.stats.broken ? <> · <span className="text-status-broken">{cur.stats.broken} broken</span></> : null}
-              {cur.stats.flaky ? <> · <span className="text-status-broken">{cur.stats.flaky} flaky</span></> : null}
+              {cur.stats.failed ? <> · <span className="text-status-fail-text">{cur.stats.failed} failed</span></> : null}
+              {cur.stats.broken ? <> · <span className="text-status-broken-text">{cur.stats.broken} broken</span></> : null}
+              {cur.stats.flaky ? <> · <span className="text-status-broken-text">{cur.stats.flaky} flaky</span></> : null}
               {cur.stats.durationMs ? <> · {formatDurationSec(cur.stats.durationMs)}</> : null}
             </span>
           )}
@@ -261,14 +263,11 @@ export function Project() {
             </Button>
           )}
         </div>
-        <div className={cn("flex flex-wrap gap-3", focusReport && tab === "report" && "hidden")}>
-          <Card className="min-w-[260px] flex-1">
-            <CardContent className="flex items-center gap-3 p-4">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><TrendingUp className="size-5" /></span>
-              <TrendBar points={trends} />
-            </CardContent>
-          </Card>
-          <ComparePanel projectId={id} readyRuns={runs.filter((r) => r.status === "ready")} />
+        <div className={cn("space-y-3", focusReport && tab === "report" && "hidden")}>
+          <StatsRow current={cur ?? null} previous={prevReady ?? null} />
+          <TrendCard projectId={id} onSelectRun={setSelectedRun}
+            readyRuns={runs.filter((r) => r.status === "ready")}
+            isGenerating={runs.some((r) => r.status === "generating")} />
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as "report" | "runs")} className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center justify-between">
@@ -312,7 +311,7 @@ function FailedRunPanel({ projectId, run }: { projectId: string; run: Run }) {
   return (
     <div className="grid min-h-0 flex-1 place-items-center rounded-xl border bg-card p-6 shadow-sm">
       <div className="max-w-lg text-center">
-        <AlertTriangle className="mx-auto size-8 text-status-fail" />
+        <AlertTriangle className="mx-auto size-8 text-status-fail-text" />
         <h2 className="mt-3 text-lg font-semibold">Generation failed</h2>
         {run.error
           ? <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-2 text-left text-xs text-muted-foreground">{run.error}</pre>
@@ -337,64 +336,135 @@ function GateBadge({ projectId, runId }: { projectId: string; runId: string }) {
   if (!gate?.configured) return null;
   if (gate.passed) {
     return (
-      <Badge variant="outline" className="gap-1 border-status-pass/40 text-status-pass">
+      <Badge variant="outline" className="gap-1 border-status-pass/40 text-status-pass-text">
         <ShieldCheck className="size-3.5" /> Quality gate passed
       </Badge>
     );
   }
   const reasons = failedReasons(gate);
   return (
-    <Badge variant="outline" className="gap-1 border-status-fail/40 text-status-fail">
+    <Badge variant="outline" className="gap-1 border-status-fail/40 text-status-fail-text">
       <ShieldAlert className="size-3.5" /> Quality gate failed
       {reasons.length ? <span className="font-normal text-muted-foreground">({reasons.join(", ")})</span> : null}
     </Badge>
   );
 }
 
-function TrendBar({ points }: { points: TrendPoint[] }) {
-  if (points.length < 2) {
-    return (
-      <div className="flex flex-1 items-center text-sm text-muted-foreground">
-        <span>
-          {points.length === 1
-            ? "Trends appear after 2 successful runs — 1 more to go."
-            : "Trends appear after 2 successful runs. Push results to start the series."}
-        </span>
-      </div>
-    );
-  }
-  const w = points.length * 14;
-  const anyFlaky = points.some((p) => (p.stats.flaky ?? 0) > 0);
-  const maxDur = Math.max(1, ...points.map((p) => p.stats.durationMs ?? 0));
-  const anyDur = points.some((p) => (p.stats.durationMs ?? 0) > 0);
-  const durLine = points.map((p, i) => `${i * 14 + 5},${42 - Math.round(((p.stats.durationMs ?? 0) / maxDur) * 36) - 2}`).join(" ");
+/** Four-tile stats row: pass rate donut, failures delta, duration delta, flaky count. */
+function StatsRow({ current, previous }: { current: Run | null; previous: Run | null }) {
+  if (!current?.stats) return null;
+  const s = current.stats;
+  const p = previous?.stats ?? null;
+  const failures = (s.failed ?? 0) + (s.broken ?? 0);
+  const prevFailures = p ? (p.failed ?? 0) + (p.broken ?? 0) : null;
+  const failDelta = prevFailures !== null ? formatDelta(failures - prevFailures) : null;
+  const durDelta = (s.durationMs && p?.durationMs) ? formatDelta(Math.round((s.durationMs - p.durationMs) / 1000)) : null;
+  const pct = passRate(s);
   return (
-    <div className="flex items-end gap-3">
-      <svg width={w} height={44} role="img" aria-label={`Pass-rate and duration trend across ${points.length} runs; latest ${points[points.length - 1].stats.passed}/${points[points.length - 1].stats.total} passed`}>
-        {points.map((p, i) => {
-          const rate = p.stats.total ? p.stats.passed / p.stats.total : 0;
-          const h = Math.round(rate * 38) + 2;
-          const flaky = p.stats.flaky ?? 0;
-          const durMs = p.stats.durationMs ?? 0;
-          return (
-            <g key={p.runId}>
-              <rect x={i * 14} y={42 - h} width={10} height={h} fill={p.stats.failed || p.stats.broken ? "#EF4444" : "#1DB980"}>
-                <title>{`${new Date(p.createdAt).toLocaleString()}\n${p.stats.passed}/${p.stats.total} passed, ${p.stats.failed} failed, ${p.stats.broken} broken${flaky ? `, ${flaky} flaky` : ""}${durMs ? `\n${formatDurationSec(durMs)} total` : ""}`}</title>
-              </rect>
-              {flaky > 0 && <rect x={i * 14} y={Math.max(0, 42 - h - 3)} width={10} height={3} fill="#F59E0B" pointerEvents="none" />}
-            </g>
-          );
-        })}
-        {anyDur && <polyline points={durLine} fill="none" stroke="hsl(var(--primary))" strokeWidth={1.5} opacity={0.8} pointerEvents="none" />}
-      </svg>
-      <div className="flex flex-col gap-0.5 text-[11px] text-muted-foreground">
-        <span className="font-medium text-foreground">Trend</span>
-        {anyFlaky && <span className="text-status-broken">▮ flaky</span>}
-        {anyDur && <span className="text-primary-text">╱ duration</span>}
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm">
+        <PassRateDonut pct={pct} size={40} showLabel={false} />
+        <div>
+          <div className="text-xs text-muted-foreground">Pass rate</div>
+          <div className="text-lg font-semibold tabular-nums">{pct}%</div>
+        </div>
+      </div>
+      <div className="rounded-xl border bg-card p-3 shadow-sm">
+        <div className="text-xs text-muted-foreground">Failures</div>
+        <div className="flex items-baseline gap-1">
+          <span className={cn("text-2xl font-semibold tabular-nums", failures > 0 ? "text-status-fail-text" : undefined)}>{failures}</span>
+          {failDelta && (
+            <span className={cn("text-xs font-medium", failDelta.startsWith("+") ? "text-status-fail-text" : "text-status-pass-text")}>{failDelta}</span>
+          )}
+        </div>
+      </div>
+      <div className="rounded-xl border bg-card p-3 shadow-sm">
+        <div className="text-xs text-muted-foreground">Duration</div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-2xl font-semibold tabular-nums">{s.durationMs ? formatDurationSec(s.durationMs) : "—"}</span>
+          {durDelta && (
+            <span className={cn("text-xs font-medium", durDelta.startsWith("+") ? "text-status-fail-text" : "text-status-pass-text")}>{durDelta}s</span>
+          )}
+        </div>
+      </div>
+      <div className="rounded-xl border bg-card p-3 shadow-sm">
+        <div className="text-xs text-muted-foreground">Flaky</div>
+        <div className={cn("text-2xl font-semibold tabular-nums", (s.flaky ?? 0) > 0 ? "text-status-broken-text" : undefined)}>{s.flaky ?? 0}</div>
       </div>
     </div>
   );
 }
+
+/** Full-width trend card wrapping TrendChart + a collapsible Compare disclosure. */
+function TrendCard({ projectId, onSelectRun, readyRuns, isGenerating }: {
+  projectId: string;
+  onSelectRun: (id: string) => void;
+  readyRuns: Run[];
+  isGenerating?: boolean;
+}) {
+  // Disclosure open state: default open when 2+ ready runs and no stored preference.
+  const storageKey = `compare-open:${projectId}`;
+  const defaultOpen = readyRuns.length >= 2;
+  const [compareOpen, setCompareOpen] = useState<boolean>(() => {
+    const stored = session.get(storageKey);
+    if (stored !== null) return stored === "true";
+    return defaultOpen;
+  });
+
+  // When the project changes, reset the disclosure to reflect the new project's preference.
+  useEffect(() => {
+    const stored = session.get(storageKey);
+    if (stored !== null) {
+      setCompareOpen(stored === "true");
+    } else {
+      setCompareOpen(readyRuns.length >= 2);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  // When readyRuns changes from <2 to >=2 and there's no stored preference, open by default.
+  useEffect(() => {
+    const stored = session.get(storageKey);
+    if (stored === null && readyRuns.length >= 2) {
+      setCompareOpen(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readyRuns.length >= 2]);
+
+  const handleToggle = (open: boolean) => {
+    // Carry-over fix: early-return on no-op toggles (programmatic/SSR) to avoid polluting storage.
+    if (open === compareOpen) return;
+    setCompareOpen(open);
+    session.set(storageKey, String(open));
+  };
+
+  return (
+    <Card className="w-full">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><TrendingUp className="size-5" /></span>
+          <div className="flex-1 min-w-0">
+            <TrendChart projectId={projectId} onSelectRun={onSelectRun} pollWhileGenerating={isGenerating} />
+          </div>
+        </div>
+        {readyRuns.length >= 2 && (
+          <details open={compareOpen} onToggle={(e) => handleToggle((e.currentTarget as HTMLDetailsElement).open)}>
+            <summary className="cursor-pointer select-none list-none text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-1">
+                <GitCompareArrows className="size-3.5" />
+                Compare runs…
+              </span>
+            </summary>
+            <div className="mt-3">
+              <ComparePanel projectId={projectId} readyRuns={readyRuns} />
+            </div>
+          </details>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 
 function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: Run[] }) {
   const [base, setBase] = useState<string>(() => readyRuns[1]?.id ?? "");
@@ -422,30 +492,27 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
     <SelectItem key={r.id} value={r.id}><span title={r.createdAt}>{runLabel(r)}</span></SelectItem>
   ));
   return (
-    <Card className="min-w-[300px] flex-1">
-      <CardContent className="space-y-3 p-4">
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><GitCompareArrows className="size-5" /></span>
-          <span className="mr-1 font-semibold">Compare</span>
-          <Select value={base} onValueChange={pick(setBase)}><SelectTrigger className="h-8 w-[180px]" aria-label="Base run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
-          <span className="text-muted-foreground">→</span>
-          <Select value={target} onValueChange={pick(setTarget)}><SelectTrigger className="h-8 w-[180px]" aria-label="Target run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
-        </div>
-        {base === target ? <p className="text-sm text-muted-foreground">Pick two different runs.</p>
-          : !diff ? <p className="text-sm text-muted-foreground">Loading comparison…</p>
-          : (
-            <div className="flex flex-wrap gap-4">
-              <Bucket label="Newly failing" color="text-status-fail" tests={diff.newlyFailing} onOpen={setSelected} />
-              <Bucket label="Fixed" color="text-status-pass" tests={diff.fixed} onOpen={setSelected} />
-              <Bucket label="Flaky" color="text-status-broken" tests={diff.flaky} onOpen={setSelected} />
-              <Bucket label="Still failing" color="text-status-fail" tests={diff.stillFailing} onOpen={setSelected} />
-              <Bucket label="Added" color="text-primary-text" tests={diff.added} onOpen={setSelected} />
-              <Bucket label="Removed" color="text-muted-foreground" tests={diff.removed} onOpen={setSelected} />
-            </div>
-          )}
-        <TestHistorySheet projectId={projectId} test={selected} onClose={() => setSelected(null)} />
-      </CardContent>
-    </Card>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="mr-1 font-semibold">Compare</span>
+        <Select value={base} onValueChange={pick(setBase)}><SelectTrigger className="h-8 w-[180px]" aria-label="Base run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
+        <span className="text-muted-foreground">→</span>
+        <Select value={target} onValueChange={pick(setTarget)}><SelectTrigger className="h-8 w-[180px]" aria-label="Target run"><SelectValue /></SelectTrigger><SelectContent>{runItems}</SelectContent></Select>
+      </div>
+      {base === target ? <p className="text-sm text-muted-foreground">Pick two different runs.</p>
+        : !diff ? <p className="text-sm text-muted-foreground">Loading comparison…</p>
+        : (
+          <div className="flex flex-wrap gap-4">
+            <Bucket label="Newly failing" color="text-status-fail-text" tests={diff.newlyFailing} onOpen={setSelected} />
+            <Bucket label="Fixed" color="text-status-pass-text" tests={diff.fixed} onOpen={setSelected} />
+            <Bucket label="Flaky" color="text-status-broken-text" tests={diff.flaky} onOpen={setSelected} />
+            <Bucket label="Still failing" color="text-status-fail-text" tests={diff.stillFailing} onOpen={setSelected} />
+            <Bucket label="Added" color="text-primary-text" tests={diff.added} onOpen={setSelected} />
+            <Bucket label="Removed" color="text-muted-foreground" tests={diff.removed} onOpen={setSelected} />
+          </div>
+        )}
+      <TestHistorySheet projectId={projectId} test={selected} onClose={() => setSelected(null)} />
+    </div>
   );
 }
 
@@ -486,7 +553,7 @@ function Bucket({ label, color, tests, onOpen }: { label: string; color: string;
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  passed: "text-status-pass", failed: "text-status-fail", broken: "text-status-broken",
+  passed: "text-status-pass-text", failed: "text-status-fail-text", broken: "text-status-broken-text",
   skipped: "text-muted-foreground", unknown: "text-muted-foreground",
 };
 
@@ -511,7 +578,7 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
                 <li key={e.runId} className="rounded-lg border p-2 text-sm">
                   <div className="flex items-center gap-2">
                     <span className={`font-semibold ${STATUS_COLOR[e.status]}`}>{e.status}</span>
-                    {e.flaky ? <span className="text-status-broken">flaky</span> : null}
+                    {e.flaky ? <span className="text-status-broken-text">flaky</span> : null}
                     <span className="text-muted-foreground" title={e.createdAt}>{relativeTime(e.createdAt)}</span>
                     {e.commit ? <span className="text-muted-foreground">· {e.commit.slice(0, 7)}</span> : null}
                     {e.ciUrl ? <a href={e.ciUrl} target="_blank" rel="noreferrer" className="text-primary-text hover:underline">CI</a> : null}
@@ -539,13 +606,13 @@ function RegressionHint({ regression, entries }: { regression: Regression; entri
   };
   if (regression.windowLimited) {
     return (
-      <p className="text-sm text-status-fail">
+      <p className="text-sm text-status-fail-text">
         Failing for at least the last {regression.failingRunCount} run{regression.failingRunCount === 1 ? "" : "s"} — no passing run in view.
       </p>
     );
   }
   return (
-    <p className="text-sm text-status-fail">
+    <p className="text-sm text-status-fail-text">
       Failing since {link(regression.firstFailed)}
       {regression.firstFailed.commit ? <span className="text-muted-foreground"> · {regression.firstFailed.commit.slice(0, 7)}</span> : null}
       {regression.lastPassed ? <> — last passed {link(regression.lastPassed)}</> : null}

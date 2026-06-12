@@ -73,6 +73,29 @@ The ring on the card (`88%`) and the line under it (`7/8 passed · 1m ago`) are 
 of the project's latest run. Click a card to open the project. The top bar has theme toggles
 (System / Light / Dark) and a **Sign in** button (used in [step 12](#12-turn-on-accounts--sign-in)).
 
+### Instance status strip
+
+Above the search bar, four live tiles give an **instance-wide triage snapshot**:
+
+| Tile | What it shows |
+|---|---|
+| **Failing projects** | Number of projects whose latest run has at least one failure. Clicking jumps straight to worst-first sort. |
+| **Gate breaches** | Number of projects whose latest run tripped a configured quality gate. Clicking also activates worst-first sort. |
+| **Runs (24h)** | Total runs created in the last 24 hours across all visible projects. |
+| **Generating** | Number of runs currently generating — pulses amber when non-zero. |
+
+The strip refreshes every 30 seconds so you can leave the page open as a health dashboard without reloading.
+
+### Project sort
+
+The **Sort** dropdown (to the right of the search input) controls the grid order:
+
+- **Name** (default) — alphabetical by project id.
+- **Worst first** — gate-breached projects first, then lowest pass-rate, then projects with no runs. Use this when triaging after a deploy.
+- **Recently active** — project whose latest run was pushed most recently first; useful for monitoring active pipelines.
+
+The selected sort is written to the URL (`?sort=worst` / `?sort=active`) so bookmarks and shared links preserve the view.
+
 ---
 
 ## 3. Create a project
@@ -170,8 +193,14 @@ Top to bottom:
   *failures 1 > 0, pass rate 87.5% < 95%*). A **Copy link** button produces a shareable URL that
   encodes the selected run (`?run=`) and the open test (`#report=`), so teammates land on exactly
   what you're looking at.
-- **Trend** card (left) and **Compare** card (right) — covered in steps 6–8. The Trend card shows
-  an empty‑state hint ("Trends appear after 2 successful runs…") until at least two ready runs exist.
+- **Stats row** — four tiles immediately below the run header, visible once a run has stats:
+  - **Pass rate** — a mini donut ring plus the percentage for the selected run.
+  - **Failures** — failure+broken count with a signed delta (e.g. `+2` in red, `−1` in green) vs. the previous ready run.
+  - **Duration** — total suite duration with a delta in seconds vs. the previous run.
+  - **Flaky** — number of flaky tests in this run.
+- **Trend + Compare card** — full-width card below the stats row, covered in steps 6–8. The card
+  shows an empty‑state hint ("Trends appear after 2 successful runs…") until at least two ready runs
+  exist. Once the series exists, an expandable **Compare runs…** disclosure appears beneath the chart.
 - **Report | Runs tabs** — the lower half of the page has two tabs:
   - **Report** — the embedded Allure 3 report (full official UI, served inline).
   - **Runs** — a paginated table of every run for this project with status, pass/fail stats, gate
@@ -240,11 +269,23 @@ Expand **▸ Stack trace** on any failing entry to read the full trace inline:
 
 ## 8. Trends
 
-The **Trend** card (top‑left of the project page) plots pass‑rate, flakiness, and duration across
-runs as a compact sparkline. Hover any bar for that run's exact numbers (e.g.
-`10/06/2026, 20:57:49 · 7/8 passed, 1 failed, 0 broken · 65.4s total`). It's the fastest way to spot a slide in
-health or a creeping slowdown over time. The raw series is also available at
-`GET /api/projects/demo-web/trends`.
+The **Trend chart** (inside the Trend + Compare card on the project page) plots pass‑rate, flakiness,
+and duration across runs.
+
+- **Reading the chart:** each bar represents one run, colored green (all passing) or red (at least one
+  failure). An amber sliver on top of a bar marks a flaky run. The thin line threading through the
+  bars tracks total suite duration on a secondary y‑axis.
+- **Hover / keyboard:** hover any bar for that run's exact numbers
+  (`10/06/2026, 20:57:49 · 7/8 passed, 1 failed, 0 broken · 65.4s total`). The chart is fully
+  keyboard-navigable — Tab into it, then use **←** / **→** to move between runs and **Enter** /
+  **Space** to open that run's report.
+- **Click to select:** clicking a bar switches the page to that run's report — the same as picking it
+  from the run selector in the header.
+- **Look-back window:** the **10 / 30 / 100** chip buttons above the chart control how many of the
+  most-recent runs are shown. The selection persists per project in session storage. The raw series
+  is also available at `GET /api/projects/demo-web/trends?limit=30`.
+
+It's the fastest way to spot a slide in health or a creeping slowdown over time without opening individual runs.
 
 ---
 
@@ -460,9 +501,23 @@ delete users.
 
 ![Users admin](images/09-users-admin.png)
 
-**Audit** (`/audit`) — the append‑only, instance‑wide audit trail: timestamp, actor (a user or
-`anonymous`/a token), action, target, project, and a details blob. Paginated. This is your
-"who changed what" record for logins, project creation, membership changes, token mints, and more.
+**Audit** (`/audit`) — the append‑only, instance‑wide audit trail. Each entry is shown as a plain
+English sentence (e.g. *"admin@example.com renamed demo-web to "Demo Web App""*) with expandable
+raw metadata underneath.
+
+Filter the log using the bar above the table:
+
+| Filter | Effect |
+|---|---|
+| **Event type** | Drop-down of every action kind (`project_created`, `token_created`, `user_deleted`, …). |
+| **Actor** | Substring match on the actor's label (email or token prefix). |
+| **From / To** | Narrow to a date range using the date pickers. |
+
+The **Export CSV** button downloads all matching entries (up to 10 000 rows) as a RFC 4180-compliant
+CSV with an `event` column containing the same human sentence — ready to open in a spreadsheet or
+pipe into a SIEM.
+
+The per-project **Audit** card in Project Settings shows the same interface scoped to that one project.
 
 ![Global audit log](images/10-audit-log.png)
 

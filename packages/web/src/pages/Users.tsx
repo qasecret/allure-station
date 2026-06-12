@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { GlobalRole } from "@allure-station/shared";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
+import { SortTh } from "@/components/SortTh";
 import { Topbar } from "@/components/Topbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+type UserSortKey = "email" | "role";
+type SortOrder = "asc" | "desc";
+
+function nextSort(current: UserSortKey | null, order: SortOrder | null, key: UserSortKey): { sortKey: UserSortKey | null; order: SortOrder | null } {
+  if (current !== key) return { sortKey: key, order: "asc" };
+  if (order === "asc") return { sortKey: key, order: "desc" };
+  return { sortKey: null, order: null };
+}
+
 export function Users() {
   const { user, isLoading } = useAuth();
   const qc = useQueryClient();
@@ -18,8 +28,27 @@ export function Users() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<GlobalRole>("user");
   const [error, setError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<UserSortKey | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder | null>(null);
 
-  const { data: users = [] } = useQuery({ queryKey: ["users"], queryFn: () => api.listUsers(), enabled: user?.role === "admin" });
+  const { data: rawUsers = [] } = useQuery({ queryKey: ["users"], queryFn: () => api.listUsers(), enabled: user?.role === "admin" });
+
+  const users = useMemo(() => {
+    if (!sortKey) return rawUsers;
+    return [...rawUsers].sort((a, b) => {
+      const av = sortKey === "email" ? a.email : a.role;
+      const bv = sortKey === "email" ? b.email : b.role;
+      const cmp = av.localeCompare(bv);
+      return sortOrder === "desc" ? -cmp : cmp;
+    });
+  }, [rawUsers, sortKey, sortOrder]);
+
+  const handleSort = (key: UserSortKey) => {
+    const next = nextSort(sortKey, sortOrder, key);
+    setSortKey(next.sortKey);
+    setSortOrder(next.order);
+  };
+
   const create = useMutation({
     mutationFn: () => api.createUser(email, password, role),
     onSuccess: () => { setEmail(""); setPassword(""); setError(null); qc.invalidateQueries({ queryKey: ["users"] }); },
@@ -69,7 +98,13 @@ export function Users() {
               {/* Desktop table — hidden below sm */}
               <div className="hidden sm:block">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Email</TableHead><TableHead>Role</TableHead><TableHead /></TableRow></TableHeader>
+                  <TableHeader>
+                    <TableRow>
+                      <SortTh label="Email" sortKey="email" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("email")} as={TableHead} />
+                      <SortTh label="Role" sortKey="role" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("role")} as={TableHead} />
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
                     {users.map((u) => (
                       <TableRow key={u.id}>

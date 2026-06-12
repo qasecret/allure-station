@@ -119,13 +119,6 @@ for (const backend of backends) {
     // -------------------------------------------------------------------------
 
     describe("ProjectRepository", () => {
-      it("creates, lists and gets projects", async () => {
-        await projects.create("team-a", "2026-06-06T00:00:00.000Z");
-        const all = await projects.list();
-        expect(all.map((p) => p.id)).toEqual(["team-a"]);
-        expect((await projects.get("team-a"))?.latestRunId).toBeNull();
-      });
-
       it("create is idempotent-safe (throws on duplicate)", async () => {
         await projects.create("dup", "2026-06-06T00:00:00.000Z");
         await expect(projects.create("dup", "2026-06-06T00:00:00.000Z")).rejects.toThrow();
@@ -142,30 +135,6 @@ for (const backend of backends) {
         expect(await runs.listByProject("del-p")).toEqual([]);
       });
 
-      it("list({q}) substring-searches by id with wildcards escaped", async () => {
-        for (const id of ["alpha", "a_b", "axb", "beta"]) await projects.create(id, "2026-06-06T00:00:00.000Z");
-        expect((await projects.list({ q: "lph" })).map((p) => p.id)).toEqual(["alpha"]);
-        // '_' must be escaped — search "a_b" matches only the literal "a_b", not "axb".
-        expect((await projects.list({ q: "a_b" })).map((p) => p.id)).toEqual(["a_b"]);
-        expect(await projects.count({ q: "a_b" })).toBe(1);
-        expect(await projects.count()).toBe(4);
-      });
-
-      it("visibility defaults to public, setVisibility flips it, and list/count scope filters", async () => {
-        await projects.create("pub", "2026-06-06T00:00:00.000Z");
-        await projects.create("prv", "2026-06-06T00:00:00.000Z");
-        await projects.setVisibility("prv", "private");
-        expect((await projects.get("pub"))?.visibility).toBe("public");
-        expect((await projects.get("prv"))?.visibility).toBe("private");
-
-        expect((await projects.list({ scope: { mode: "public" } })).map((p) => p.id)).toEqual(["pub"]);
-        expect(await projects.count({ scope: { mode: "public" } })).toBe(1);
-        expect((await projects.list({ scope: { mode: "all" } })).map((p) => p.id).sort()).toEqual(["prv", "pub"]);
-        expect((await projects.list({ scope: { mode: "member", projectIds: ["prv"] } })).map((p) => p.id).sort()).toEqual(["prv", "pub"]);
-        expect((await projects.list({ scope: { mode: "member", projectIds: [] } })).map((p) => p.id)).toEqual(["pub"]);
-        expect((await projects.list()).map((p) => p.id).sort()).toEqual(["prv", "pub"]); // no scope → all (back-compat)
-      });
-
       it("quality gate config round-trips and clears", async () => {
         await projects.create("qg", "2026-06-06T00:00:00.000Z");
         expect(await projects.getQualityGate("qg")).toBeNull();
@@ -175,13 +144,142 @@ for (const backend of backends) {
         expect(await projects.getQualityGate("qg")).toBeNull();
       });
 
-      it("list({limit,offset}) windows results in id order", async () => {
+      it("listEnriched: creates and lists projects (basic)", async () => {
+        await projects.create("team-a", "2026-06-06T00:00:00.000Z");
+        const { items, total } = await projects.listEnriched();
+        expect(total).toBe(1);
+        expect(items.map((p) => p.id)).toEqual(["team-a"]);
+        expect(items[0].latestRunId).toBeNull();
+        // get() still works via #withLatest
+        expect((await projects.get("team-a"))?.latestRunId).toBeNull();
+      });
+
+      it("listEnriched: q substring-searches by id with wildcards escaped", async () => {
+        for (const id of ["alpha", "a_b", "axb", "beta"]) await projects.create(id, "2026-06-06T00:00:00.000Z");
+        expect((await projects.listEnriched({ q: "lph" })).items.map((p) => p.id)).toEqual(["alpha"]);
+        // '_' must be escaped — search "a_b" matches only the literal "a_b", not "axb".
+        expect((await projects.listEnriched({ q: "a_b" })).items.map((p) => p.id)).toEqual(["a_b"]);
+        expect((await projects.listEnriched({ q: "a_b" })).total).toBe(1);
+        expect((await projects.listEnriched()).total).toBe(4);
+      });
+
+      it("listEnriched: scope filters visibility", async () => {
+        await projects.create("pub", "2026-06-06T00:00:00.000Z");
+        await projects.create("prv", "2026-06-06T00:00:00.000Z");
+        await projects.setVisibility("prv", "private");
+        expect((await projects.get("pub"))?.visibility).toBe("public");
+        expect((await projects.get("prv"))?.visibility).toBe("private");
+
+        expect((await projects.listEnriched({ scope: { mode: "public" } })).items.map((p) => p.id)).toEqual(["pub"]);
+        expect((await projects.listEnriched({ scope: { mode: "public" } })).total).toBe(1);
+        expect((await projects.listEnriched({ scope: { mode: "all" } })).items.map((p) => p.id).sort()).toEqual(["prv", "pub"]);
+        expect((await projects.listEnriched({ scope: { mode: "member", projectIds: ["prv"] } })).items.map((p) => p.id).sort()).toEqual(["prv", "pub"]);
+        expect((await projects.listEnriched({ scope: { mode: "member", projectIds: [] } })).items.map((p) => p.id)).toEqual(["pub"]);
+        // no scope → all (back-compat)
+        expect((await projects.listEnriched()).items.map((p) => p.id).sort()).toEqual(["prv", "pub"]);
+      });
+
+      it("listEnriched: limit/offset windows results", async () => {
         for (const id of ["p1", "p2", "p3", "p4", "p5"]) await projects.create(id, "2026-06-06T00:00:00.000Z");
-        expect((await projects.list({ limit: 2 })).map((p) => p.id)).toEqual(["p1", "p2"]);
-        expect((await projects.list({ limit: 2, offset: 2 })).map((p) => p.id)).toEqual(["p3", "p4"]);
-        expect((await projects.list({ limit: 2, offset: 4 })).map((p) => p.id)).toEqual(["p5"]);
-        // offset without limit must not emit OFFSET-without-LIMIT (a SQLite syntax error) — offset is ignored.
-        expect((await projects.list({ offset: 3 })).map((p) => p.id)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
+        expect((await projects.listEnriched({ limit: 2 })).items.map((p) => p.id)).toEqual(["p1", "p2"]);
+        expect((await projects.listEnriched({ limit: 2, offset: 2 })).items.map((p) => p.id)).toEqual(["p3", "p4"]);
+        expect((await projects.listEnriched({ limit: 2, offset: 4 })).items.map((p) => p.id)).toEqual(["p5"]);
+        // offset without limit: offset is ignored (listEnriched slices in JS — consistent with old list() behavior)
+        expect((await projects.listEnriched({ offset: 3 })).items.map((p) => p.id)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
+        // total is always the unsliced count
+        expect((await projects.listEnriched({ limit: 2 })).total).toBe(5);
+      });
+
+      it("listEnriched: embeds latestRun per project and sorts worst-first (covers window fn on both dialects)", async () => {
+        await projects.create("alpha", "2026-06-06T00:00:00.000Z");
+        await projects.create("beta", "2026-06-06T00:00:00.000Z");
+        // beta: healthy, all passed
+        await runs.create("beta", "b1", "R", "2026-06-11T01:00:00.000Z");
+        await runs.claimPending("b1", "2026-06-11T01:00:01.000Z");
+        await runs.markReady("b1", { total: 8, passed: 8, failed: 0, broken: 0, skipped: 0 }, "2026-06-11T01:00:02.000Z");
+        // alpha: gate breach (maxFailures=0 with 3 failures)
+        await projects.setQualityGate("alpha", { maxFailures: 0 });
+        await runs.create("alpha", "a1", "R", "2026-06-11T02:00:00.000Z");
+        await runs.claimPending("a1", "2026-06-11T02:00:01.000Z");
+        await runs.markReady("a1", { total: 8, passed: 5, failed: 3, broken: 0, skipped: 0 }, "2026-06-11T02:00:02.000Z");
+
+        const { items, total } = await projects.listEnriched();
+        expect(total).toBe(2);
+        const byId = Object.fromEntries(items.map((p) => [p.id, p]));
+        // alpha has a latestRun with gate breach
+        expect(byId.alpha.latestRun?.id).toBe("a1");
+        expect(byId.alpha.latestRun?.stats?.passed).toBe(5);
+        expect(byId.alpha.latestRun?.gatePassed).toBe(false);
+        // beta has a latestRun, no gate configured → gatePassed = null
+        expect(byId.beta.latestRun?.id).toBe("b1");
+        expect(byId.beta.latestRun?.stats?.passed).toBe(8);
+        expect(byId.beta.latestRun?.gatePassed).toBeNull();
+
+        // worst sort: gate-breached first, then by pass rate (lowest first)
+        const { items: worst } = await projects.listEnriched({ sort: "worst" });
+        expect(worst.map((p) => p.id)).toEqual(["alpha", "beta"]);
+
+        // active sort: newest run first (alpha's run is newer)
+        const { items: active } = await projects.listEnriched({ sort: "active" });
+        expect(active.map((p) => p.id)).toEqual(["alpha", "beta"]);
+
+        // pagination: limit 1, offset 0 → first item only, total still 2
+        const { items: paged, total: pagedTotal } = await projects.listEnriched({ sort: "worst", limit: 1, offset: 0 });
+        expect(paged.map((p) => p.id)).toEqual(["alpha"]);
+        expect(pagedTotal).toBe(2);
+      });
+
+      it("listEnriched: worst sort — generation-failed runs rank between gate-breached and healthy", async () => {
+        // gamma: gate breach; delta: latest run failed (generation); beta: healthy; alpha: no runs.
+        // Expected worst order: gamma → delta → beta → alpha.
+        await projects.create("alpha", "2026-06-06T00:00:00.000Z");
+        await projects.create("beta", "2026-06-06T00:00:00.000Z");
+        await projects.create("delta", "2026-06-06T00:00:00.000Z");
+        await projects.create("gamma", "2026-06-06T00:00:00.000Z");
+        // beta: healthy
+        await runs.create("beta", "b1", "R", "2026-06-11T01:00:00.000Z");
+        await runs.claimPending("b1", "2026-06-11T01:00:01.000Z");
+        await runs.markReady("b1", { total: 8, passed: 8, failed: 0, broken: 0, skipped: 0 }, "2026-06-11T01:00:02.000Z");
+        // gamma: gate breach
+        await projects.setQualityGate("gamma", { maxFailures: 0 });
+        await runs.create("gamma", "g1", "R", "2026-06-11T02:00:00.000Z");
+        await runs.claimPending("g1", "2026-06-11T02:00:01.000Z");
+        await runs.markReady("g1", { total: 8, passed: 5, failed: 3, broken: 0, skipped: 0 }, "2026-06-11T02:00:02.000Z");
+        // delta: generation failed
+        await runs.create("delta", "d1", "R", "2026-06-11T03:00:00.000Z");
+        await runs.claimPending("d1", "2026-06-11T03:00:01.000Z");
+        await runs.markFailed("d1", "2026-06-11T03:00:02.000Z", "crash");
+
+        const { items: worst } = await projects.listEnriched({ sort: "worst" });
+        expect(worst.map((p) => p.id)).toEqual(["gamma", "delta", "beta", "alpha"]);
+      });
+
+      it("listEnriched: lastReadyRun is the newest ready+stats run; null when no ready run exists", async () => {
+        // proj1: run1 ready → run2 generating (lastReadyRun=run1, latestRun=run2)
+        // proj2: no runs at all (lastReadyRun=null)
+        await projects.create("proj1", "2026-06-06T00:00:00.000Z");
+        await projects.create("proj2", "2026-06-06T00:00:00.000Z");
+
+        // proj1 run1: ready with stats
+        await runs.create("proj1", "r1", "R", "2026-06-11T01:00:00.000Z");
+        await runs.claimPending("r1", "2026-06-11T01:00:01.000Z");
+        await runs.markReady("r1", { total: 4, passed: 4, failed: 0, broken: 0, skipped: 0 }, "2026-06-11T01:00:02.000Z");
+        // proj1 run2: pending (in-flight)
+        await runs.create("proj1", "r2", "R", "2026-06-11T02:00:00.000Z");
+        await runs.claimPending("r2", "2026-06-11T02:00:01.000Z");
+
+        const { items } = await projects.listEnriched();
+        const byId = Object.fromEntries(items.map((p) => [p.id, p]));
+
+        // latestRun is the in-flight run2, lastReadyRun is the completed run1
+        expect(byId.proj1.latestRun?.id).toBe("r2");
+        expect(byId.proj1.latestRun?.status).toBe("generating");
+        expect(byId.proj1.lastReadyRun?.id).toBe("r1");
+        expect(byId.proj1.lastReadyRun?.stats?.passed).toBe(4);
+
+        // proj2 has no runs at all
+        expect(byId.proj2.latestRun).toBeNull();
+        expect(byId.proj2.lastReadyRun).toBeNull();
       });
     });
 
@@ -336,6 +434,29 @@ for (const backend of backends) {
         // newest-first; limit/offset window
         expect((await runs.listByProject("f", { limit: 1 })).map((r) => r.id)).toEqual(["f3"]);
         expect((await runs.listByProject("f", { limit: 1, offset: 1 })).map((r) => r.id)).toEqual(["f2"]);
+      });
+
+      it("markReady writes durationMs column; sort=duration puts nulls last on both dialects", async () => {
+        await projects.create("ds", "2026-06-11T00:00:00.000Z");
+        await runs.create("ds", "slow", "R", "2026-06-11T01:00:00.000Z");
+        await runs.claimPending("slow", "x");
+        await runs.markReady("slow", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0, durationMs: 9000 }, "x");
+        await runs.create("ds", "fast", "R", "2026-06-11T02:00:00.000Z");
+        await runs.claimPending("fast", "x");
+        await runs.markReady("fast", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0, durationMs: 1000 }, "x");
+        await runs.create("ds", "nodur", "R", "2026-06-11T03:00:00.000Z"); // never markReady → null durationMs
+
+        // duration DESC: slow first, fast second, nodur (null) last
+        const descList = await runs.listByProject("ds", { sort: "duration", order: "desc" });
+        expect(descList.map((r) => r.id)).toEqual(["slow", "fast", "nodur"]);
+
+        // duration ASC: fast first, slow second, nodur (null) still last (nulls-last semantics)
+        const ascList = await runs.listByProject("ds", { sort: "duration", order: "asc" });
+        expect(ascList.map((r) => r.id)).toEqual(["fast", "slow", "nodur"]);
+
+        // verify the denormalized column was written by markReady
+        const slowRun = await runs.get("slow");
+        expect(slowRun?.stats?.durationMs).toBe(9000);
       });
 
       it("failStaleGenerating fails only generating runs older than the cutoff, leaving others untouched", async () => {

@@ -222,6 +222,26 @@ export const projectSchema = z.object({
   canWrite: z.boolean().optional(),
 });
 
+export const latestRunSummarySchema = z.object({
+  id: z.string(),
+  status: runStatusSchema,
+  finishedAt: z.string().nullable(),
+  createdAt: z.string(),
+  stats: runStatsSchema.nullable(),
+  gatePassed: z.boolean().nullable(), // null = no gate configured or no stats
+});
+export const projectListItemSchema = projectSchema.extend({
+  latestRun: latestRunSummarySchema.nullable(),
+  // The most-recent run whose status is 'ready' AND has stats. Null when no such run exists.
+  // Unaffected by in-flight (pending/generating) or failed runs — lets UI always show the last
+  // good report stats even when a newer run is in progress or failed to generate.
+  lastReadyRun: latestRunSummarySchema.nullable(),
+});
+export const projectSortSchema = z.enum(["name", "worst", "active"]);
+export type LatestRunSummary = z.infer<typeof latestRunSummarySchema>;
+export type ProjectListItem = z.infer<typeof projectListItemSchema>;
+export type ProjectSort = z.infer<typeof projectSortSchema>;
+
 // Pushed to the UI over SSE on every run lifecycle transition (created/generating/ready/failed).
 // `deleted: true` signals that the run has been hard-deleted so live UIs can remove it rather
 // than upserting a stale row (the SSE handler upserts all other events).
@@ -353,3 +373,17 @@ export type SetMembershipRequest = z.infer<typeof setMembershipRequestSchema>;
 export type AuditAction = z.infer<typeof auditActionSchema>;
 export type AuditActorType = z.infer<typeof auditActorTypeSchema>;
 export type AuditEntry = z.infer<typeof auditEntrySchema>;
+
+export const overviewSchema = z.object({
+  projects: z.number().int(),
+  failing: z.number().int(),
+  gateBreached: z.number().int(),
+  runsLast24h: z.number().int(),
+  generating: z.number().int(),
+});
+export type Overview = z.infer<typeof overviewSchema>;
+
+export const runSortSchema = z.enum(["createdAt", "duration", "status"]);
+export const sortOrderSchema = z.enum(["asc", "desc"]);
+export type RunSort = z.infer<typeof runSortSchema>;
+export type SortOrder = z.infer<typeof sortOrderSchema>;

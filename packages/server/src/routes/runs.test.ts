@@ -202,3 +202,40 @@ describe("DELETE run — private-project existence-tell fix (A1)", () => {
     await app.close();
   });
 });
+
+describe("runs sorting + trends limit", () => {
+  it("sorts by duration desc with nulls last, and by status; validates params", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
+    await deps.runs.create("p", "slow", "R", "2026-06-11T01:00:00.000Z");
+    await deps.runs.claimPending("slow", "x"); await deps.runs.markReady("slow", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0, durationMs: 9000 }, "x");
+    await deps.runs.create("p", "fast", "R", "2026-06-11T02:00:00.000Z");
+    await deps.runs.claimPending("fast", "x"); await deps.runs.markReady("fast", { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0, durationMs: 1000 }, "x");
+    await deps.runs.create("p", "pend", "R", "2026-06-11T03:00:00.000Z"); // no stats → null duration
+
+    const dur = await app.inject({ method: "GET", url: "/api/projects/p/runs?sort=duration&order=desc" });
+    expect((dur.json() as Array<{ id: string }>).map((r) => r.id)).toEqual(["slow", "fast", "pend"]);
+    const st = await app.inject({ method: "GET", url: "/api/projects/p/runs?sort=status" });
+    expect(st.statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/api/projects/p/runs?sort=nope" })).statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/api/projects/p/runs?order=sideways" })).statusCode).toBe(400);
+    await app.close();
+  });
+
+  it("trends honors ?limit within 10..100", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
+    for (let i = 0; i < 12; i++) {
+      const id = `r${String(i).padStart(2, "0")}`;
+      await deps.runs.create("p", id, "R", `2026-06-11T0${Math.floor(i / 10)}:${String(i % 60).padStart(2, "0")}:00.000Z`);
+      await deps.runs.claimPending(id, "x");
+      await deps.runs.markReady(id, { total: 1, passed: 1, failed: 0, broken: 0, skipped: 0 }, "x");
+    }
+    expect(((await app.inject({ method: "GET", url: "/api/projects/p/trends?limit=10" })).json() as unknown[])).toHaveLength(10);
+    expect((await app.inject({ method: "GET", url: "/api/projects/p/trends?limit=5" })).statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/api/projects/p/trends" })).json()).toHaveLength(12); // default 30 cap
+    await app.close();
+  });
+});

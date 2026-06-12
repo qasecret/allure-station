@@ -3,9 +3,9 @@ import { severityChipClass } from "./severity.js";
 
 describe("severityChipClass", () => {
   it("returns classes for known levels", () => {
-    expect(severityChipClass("blocker")).toContain("text-status-fail");
-    expect(severityChipClass("critical")).toContain("text-status-fail");
-    expect(severityChipClass("normal")).toContain("text-status-broken");
+    expect(severityChipClass("blocker")).toContain("text-status-fail-text");
+    expect(severityChipClass("critical")).toContain("text-status-fail-text");
+    expect(severityChipClass("normal")).toContain("text-status-broken-text");
     expect(severityChipClass("minor")).toContain("text-muted-foreground");
     expect(severityChipClass("trivial")).toContain("text-muted-foreground");
   });

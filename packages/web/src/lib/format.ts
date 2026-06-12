@@ -39,6 +39,11 @@ export function formatDurationSec(ms: number, dir: "near" | "up" | "down" = "nea
   return `${round1(ms / 1000, dir).toFixed(1)}s`;
 }
 
+/** Signed delta string for comparison tiles: "+3", "-2", null for zero (omit from UI). */
+export function formatDelta(n: number): string | null {
+  return n === 0 ? null : n > 0 ? `+${n}` : String(n);
+}
+
 /** Human-friendly run label for selectors: relative time, status, pass ratio, branch@sha · env. */
 export function runLabel(r: Run, now: number = Date.now()): string {
   const base = `${relativeTime(r.createdAt, now)} — ${r.status}${r.stats ? ` (${r.stats.passed}/${r.stats.total})` : ""}`;

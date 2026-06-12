@@ -1,6 +1,7 @@
-import { and, asc, count, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import type { Project, ProjectVisibility, QualityGateConfig, Run, RunMetadata, RunStats, RunStatus } from "@allure-station/shared";
+import type { LatestRunSummary, Project, ProjectListItem, ProjectSort, ProjectVisibility, QualityGateConfig, Run, RunMetadata, RunStats, RunStatus } from "@allure-station/shared";
+import { evaluateGate } from "@allure-station/shared";
 
 // Who may see which projects in a listing. admin → all; member → public ∪ their projects;
 // public → public only (anonymous / token).
@@ -10,7 +11,7 @@ import { apiTokens, memberships, notifications, projects, runs, testResults } fr
 
 // Case-sensitive substring LIKE with wildcards escaped, so user input like "a_b" matches literally
 // rather than treating _/% as wildcards. Works on sqlite + pg via the ESCAPE clause.
-function likeContains(column: AnySQLiteColumn, q: string) {
+export function likeContains(column: AnySQLiteColumn, q: string) {
   const escaped = q.replace(/[\\%_]/g, (c) => `\\${c}`);
   return sql`${column} LIKE ${`%${escaped}%`} ESCAPE '\\'`;
 }
@@ -38,23 +39,6 @@ export class ProjectRepository {
         : eq(projects.visibility, "public"));
     }
     return clauses.length === 0 ? undefined : clauses.length === 1 ? clauses[0] : and(...clauses);
-  }
-
-  async list(opts: { q?: string; limit?: number; offset?: number; scope?: VisibilityScope } = {}): Promise<Project[]> {
-    let query = this.db.select().from(projects).where(this.#where(opts.q, opts.scope)).orderBy(projects.id).$dynamic();
-    // SQLite/libsql rejects OFFSET without LIMIT (syntax error), and LIMIT -1 isn't valid on pg —
-    // so offset only applies alongside a limit (which is how pagination is actually used).
-    if (opts.limit !== undefined) {
-      query = query.limit(opts.limit);
-      if (opts.offset !== undefined) query = query.offset(opts.offset);
-    }
-    const rows = await query;
-    return Promise.all(rows.map((r) => this.#withLatest(r.id, r.createdAt, r.visibility as ProjectVisibility, r.displayName ?? null)));
-  }
-
-  async count(opts: { q?: string; scope?: VisibilityScope } = {}): Promise<number> {
-    const [row] = await this.db.select({ c: count() }).from(projects).where(this.#where(opts.q, opts.scope));
-    return Number(row?.c ?? 0);
   }
 
   async get(id: string): Promise<Project | null> {
@@ -98,12 +82,127 @@ export class ProjectRepository {
     await this.db.update(projects).set({ qualityGate: config ? JSON.stringify(config) : null }).where(eq(projects.id, id));
   }
 
+  /** One-pass enriched listing: a drizzle CTE with ROW_NUMBER() picks each project's latest run
+   *  (rn=1) — both SQLite (≥3.25) and Postgres support ROW_NUMBER. A second CTE (ranked_ready)
+   *  picks the most-recent ready run with stats. Sorting happens in JS over the full filtered set
+   *  (instance project counts are small); pagination slices afterwards.
+   *
+   *  Judgment point resolution: instead of db.all() (libsql-only) we use drizzle's $with() CTE
+   *  which generates portable SQL on both dialects via the query builder — no raw db.all() call. */
+  async listEnriched(opts: { q?: string; scope?: VisibilityScope; sort?: ProjectSort; limit?: number; offset?: number } = {}): Promise<{ items: ProjectListItem[]; total: number }> {
+    const rows = await this.db.select().from(projects).where(this.#where(opts.q, opts.scope)).orderBy(projects.id);
+    if (rows.length === 0) return { items: [], total: 0 };
+
+    const ids = rows.map((p) => p.id);
+
+    // CTE: rank each run per project by (created_at DESC, id DESC) — rn=1 is the latest.
+    // ROW_NUMBER() is supported by SQLite ≥3.25 and Postgres; drizzle generates the correct
+    // SQL for each dialect from the same query builder call (no dialect-specific raw SQL).
+    const ranked = this.db.$with("ranked").as(
+      this.db.select({
+        projectId: runs.projectId,
+        id: runs.id,
+        status: runs.status,
+        createdAt: runs.createdAt,
+        finishedAt: runs.finishedAt,
+        statsJson: runs.statsJson,
+        rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${runs.projectId} ORDER BY ${runs.createdAt} DESC, ${runs.id} DESC)`.as("rn"),
+      })
+        .from(runs)
+        .where(inArray(runs.projectId, ids)),
+    );
+
+    // CTE: rank only ready runs that have stats — rn=1 is the most-recent ready+stats run.
+    // Used for lastReadyRun (the last run with a complete report, unaffected by in-flight runs).
+    const rankedReady = this.db.$with("ranked_ready").as(
+      this.db.select({
+        projectId: runs.projectId,
+        id: runs.id,
+        status: runs.status,
+        createdAt: runs.createdAt,
+        finishedAt: runs.finishedAt,
+        statsJson: runs.statsJson,
+        rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${runs.projectId} ORDER BY ${runs.createdAt} DESC, ${runs.id} DESC)`.as("rn"),
+      })
+        .from(runs)
+        .where(and(inArray(runs.projectId, ids), eq(runs.status, "ready"), isNotNull(runs.statsJson))),
+    );
+
+    const [latest, lastReady] = await Promise.all([
+      this.db.with(ranked).select().from(ranked).where(eq(ranked.rn, 1)),
+      this.db.with(rankedReady).select().from(rankedReady).where(eq(rankedReady.rn, 1)),
+    ]);
+
+    const latestByProject = new Map(latest.map((r) => [r.projectId, r]));
+    const lastReadyByProject = new Map(lastReady.map((r) => [r.projectId, r]));
+
+    const makeRunSummary = (lr: typeof latest[0], gateCfg: QualityGateConfig | null): LatestRunSummary => {
+      const stats = lr.statsJson ? (JSON.parse(lr.statsJson) as RunStats) : null;
+      const verdict = gateCfg && stats ? evaluateGate(stats, gateCfg) : null;
+      const gatePassed = verdict?.configured ? verdict.passed : null;
+      return { id: lr.id, status: lr.status as RunStatus, createdAt: lr.createdAt, finishedAt: lr.finishedAt ?? null, stats, gatePassed };
+    };
+
+    const items: ProjectListItem[] = rows.map((p) => {
+      const lr = latestByProject.get(p.id);
+      const lrr = lastReadyByProject.get(p.id);
+      const gateCfg = p.qualityGate ? (JSON.parse(p.qualityGate) as QualityGateConfig) : null;
+      return {
+        id: p.id,
+        displayName: p.displayName ?? null,
+        createdAt: p.createdAt,
+        visibility: p.visibility as ProjectVisibility,
+        latestRunId: lr?.id ?? null,
+        latestRun: lr ? makeRunSummary(lr, gateCfg) : null,
+        lastReadyRun: lrr ? makeRunSummary(lrr, gateCfg) : null,
+      };
+    });
+
+    const passRate = (i: ProjectListItem) =>
+      i.latestRun?.stats ? i.latestRun.stats.passed / Math.max(1, i.latestRun.stats.total) : null;
+
+    if (opts.sort === "worst") {
+      // Three tiers: 0 = gate breached, 1 = generation failed, 2 = everything else.
+      // Within tier 2: lowest pass-rate first, then no-runs last, then id.
+      const tier = (i: ProjectListItem) => {
+        if (i.latestRun?.gatePassed === false) return 0;
+        if (i.latestRun?.status === "failed") return 1;
+        return 2;
+      };
+      items.sort((a, b) => {
+        const ta = tier(a), tb = tier(b);
+        if (ta !== tb) return ta - tb;
+        if (ta < 2) return a.id.localeCompare(b.id); // within tier 0/1 sort by id
+        // tier 2: pass-rate ascending, no-runs last, then id
+        const ra = passRate(a), rb = passRate(b);
+        if (ra === null && rb === null) return a.id.localeCompare(b.id);
+        if (ra === null) return 1; // no-runs last
+        if (rb === null) return -1;
+        if (ra !== rb) return ra - rb; // lowest pass-rate first
+        return a.id.localeCompare(b.id);
+      });
+    } else if (opts.sort === "active") {
+      items.sort((a, b) => {
+        const ca = a.latestRun?.createdAt, cb = b.latestRun?.createdAt;
+        if (!ca && !cb) return a.id.localeCompare(b.id);
+        if (!ca) return 1;
+        if (!cb) return -1;
+        return cb.localeCompare(ca); // newest first
+      });
+    } // "name"/default: already ordered by id
+
+    const total = items.length;
+    const offset = opts.offset ?? 0;
+    const paged = opts.limit !== undefined ? items.slice(offset, offset + opts.limit) : items;
+    return { items: paged, total };
+  }
+
   async #withLatest(id: string, createdAt: string, visibility: ProjectVisibility, displayName: string | null): Promise<Project> {
     const [latest] = await this.db
       .select({ id: runs.id })
       .from(runs)
       .where(eq(runs.projectId, id))
-      .orderBy(desc(runs.createdAt))
+      .orderBy(desc(runs.createdAt), desc(runs.id))
       .limit(1);
     return { id, displayName, createdAt, latestRunId: latest?.id ?? null, visibility };
   }
@@ -157,7 +256,7 @@ export class RunRepository {
 
   async markReady(id: string, stats: RunStats, finishedAt: string): Promise<void> {
     await this.db.update(runs)
-      .set({ status: "ready", statsJson: JSON.stringify(stats), finishedAt, error: null }) // clear any prior failure (e.g. a retried run)
+      .set({ status: "ready", statsJson: JSON.stringify(stats), durationMs: stats.durationMs ?? null, finishedAt, error: null }) // clear any prior failure (e.g. a retried run)
       .where(eq(runs.id, id));
   }
 
@@ -194,14 +293,30 @@ export class RunRepository {
     return reset.length;
   }
 
-  async #selectRuns(opts: { projectId: string; readyOnly?: boolean; status?: RunStatus; branch?: string; order: "asc" | "desc"; limit?: number; offset?: number }): Promise<Run[]> {
+  async #selectRuns(opts: { projectId: string; readyOnly?: boolean; status?: RunStatus; branch?: string; sort?: "createdAt" | "duration" | "status"; order: "asc" | "desc"; limit?: number; offset?: number }): Promise<Run[]> {
     const conds = [eq(runs.projectId, opts.projectId)];
     if (opts.readyOnly) conds.push(eq(runs.status, "ready"));
     if (opts.status) conds.push(eq(runs.status, opts.status));
     if (opts.branch) conds.push(eq(runs.branch, opts.branch));
-    const ord = opts.order === "asc"
-      ? [asc(runs.createdAt), asc(runs.id)]
-      : [desc(runs.createdAt), desc(runs.id)];
+
+    let ord: ReturnType<typeof asc>[];
+    if (opts.sort === "duration") {
+      // Nulls-last: `(duration_ms IS NULL)` evaluates to 0 for non-null, 1 for null — always sorted
+      // ascending (nulls go last), regardless of the requested direction for the value column.
+      // Works identically on SQLite and Postgres.
+      const nullLast = sql<number>`(${runs.durationMs} IS NULL)`;
+      const durCol = opts.order === "asc" ? asc(runs.durationMs) : desc(runs.durationMs);
+      ord = [asc(nullLast), durCol, desc(runs.createdAt), desc(runs.id)];
+    } else if (opts.sort === "status") {
+      const statusCol = opts.order === "asc" ? asc(runs.status) : desc(runs.status);
+      ord = [statusCol, desc(runs.createdAt), desc(runs.id)];
+    } else {
+      // default: createdAt
+      ord = opts.order === "asc"
+        ? [asc(runs.createdAt), asc(runs.id)]
+        : [desc(runs.createdAt), desc(runs.id)];
+    }
+
     let query = this.db.select().from(runs).where(and(...conds)).orderBy(...ord).$dynamic();
     // offset only with limit — SQLite rejects OFFSET without LIMIT (see ProjectRepository.list).
     if (opts.limit !== undefined) {
@@ -220,8 +335,8 @@ export class RunRepository {
     return this.#selectRuns({ projectId, readyOnly: true, order: "asc" });
   }
 
-  async listByProject(projectId: string, opts: { status?: RunStatus; branch?: string; limit?: number; offset?: number } = {}): Promise<Run[]> {
-    return this.#selectRuns({ projectId, order: "desc", ...opts });
+  async listByProject(projectId: string, opts: { status?: RunStatus; branch?: string; sort?: "createdAt" | "duration" | "status"; order?: "asc" | "desc"; limit?: number; offset?: number } = {}): Promise<Run[]> {
+    return this.#selectRuns({ ...opts, projectId, order: opts.order ?? "desc" });
   }
 
   /** The newest ready run created strictly before `createdAt` (the run immediately prior). */
@@ -252,6 +367,17 @@ export class RunRepository {
   async remove(id: string): Promise<boolean> {
     const res = await this.db.delete(runs).where(and(eq(runs.id, id), ne(runs.status, "generating"))).returning({ id: runs.id });
     return res.length > 0;
+  }
+
+  /** Triage counts for the overview: runs created in the window + currently generating, limited to
+   *  the given (visibility-scoped) projects. */
+  async countTriage(projectIds: string[], since: string): Promise<{ last24h: number; generating: number }> {
+    if (projectIds.length === 0) return { last24h: 0, generating: 0 };
+    const [a] = await this.db.select({ c: count() }).from(runs)
+      .where(and(inArray(runs.projectId, projectIds), gte(runs.createdAt, since)));
+    const [b] = await this.db.select({ c: count() }).from(runs)
+      .where(and(inArray(runs.projectId, projectIds), eq(runs.status, "generating")));
+    return { last24h: Number(a?.c ?? 0), generating: Number(b?.c ?? 0) };
   }
 
   #toRun = (r: typeof runs.$inferSelect): Run => ({

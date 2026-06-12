@@ -55,7 +55,9 @@ export function UserMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="w-full justify-start gap-2 px-2 h-auto py-2">
-          <Avatar className="size-7"><AvatarFallback className="text-xs bg-primary/10 text-primary">{initials}</AvatarFallback></Avatar>
+          {/* Solid primary + primary-foreground (AA 7:1 per MASTER.md tokens): the tinted
+              bg-primary/10 + text-primary combo failed the axe color-contrast gate (authed.spec.ts). */}
+          <Avatar className="size-7"><AvatarFallback className="text-xs bg-primary text-primary-foreground">{initials}</AvatarFallback></Avatar>
           <span className="flex-1 truncate text-left text-sm">{user.email}</span>
           <ChevronsUpDown className="size-4 text-muted-foreground" />
         </Button>

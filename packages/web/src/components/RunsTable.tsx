@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { Run, RunStatus } from "@allure-station/shared";
 import { api } from "@/main";
 import { StatusBadge } from "@/components/StatusBadge";
+import { SortTh } from "@/components/SortTh";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { relativeTime, formatDurationSec } from "@/lib/format";
@@ -14,12 +15,22 @@ const FILTERS: Array<{ label: string; value?: RunStatus }> = [
   { label: "all" }, { label: "ready", value: "ready" }, { label: "failed", value: "failed" }, { label: "generating", value: "generating" },
 ];
 
+type SortKey = "createdAt" | "duration" | "status";
+type SortOrder = "asc" | "desc";
+
+// Cycle: desc → asc → default (remove sort)
+function nextSort(current: SortKey | null, order: SortOrder | null, key: SortKey): { sortKey: SortKey | null; order: SortOrder | null } {
+  if (current !== key) return { sortKey: key, order: "desc" };
+  if (order === "desc") return { sortKey: key, order: "asc" };
+  return { sortKey: null, order: null }; // third click: reset
+}
+
 function GateMark({ verdict }: { verdict: { passed: boolean; reasons: string[] } | null }) {
   if (!verdict) return <span aria-hidden className="text-muted-foreground">—</span>;
   const reasons = verdict.reasons.join(", ");
   return verdict.passed
-    ? <span role="img" aria-label="Gate passed" className="text-status-pass">✓</span>
-    : <span role="img" aria-label={`Gate failed: ${reasons}`} title={reasons} className="text-status-fail">✗</span>;
+    ? <span role="img" aria-label="Gate passed" className="text-status-pass-text">✓</span>
+    : <span role="img" aria-label={`Gate failed: ${reasons}`} title={reasons} className="text-status-fail-text">✗</span>;
 }
 
 function RowActions({ r, canWrite, onOpenRun, retry, setConfirming }: {
@@ -31,7 +42,7 @@ function RowActions({ r, canWrite, onOpenRun, retry, setConfirming }: {
     <span className="flex justify-end gap-1">
       <Button size="sm" variant="outline" onClick={() => onOpenRun(r.id)}>Open</Button>
       {r.status === "failed" && canWrite && <Button size="sm" variant="outline" disabled={retry.isPending} onClick={() => retry.mutate(r.id)}>Retry</Button>}
-      {canWrite && <Button size="sm" variant="outline" className="text-status-fail" disabled={r.status === "generating"} onClick={() => setConfirming(r)}>Delete</Button>}
+      {canWrite && <Button size="sm" variant="outline" className="text-status-fail-text" disabled={r.status === "generating"} onClick={() => setConfirming(r)}>Delete</Button>}
     </span>
   );
 }
@@ -47,10 +58,24 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
   const [status, setStatus] = useState<RunStatus | undefined>(undefined);
   const [page, setPage] = useState(0);
   const [confirming, setConfirming] = useState<Run | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder | null>(null);
+
+  const handleSort = (key: SortKey) => {
+    const next = nextSort(sortKey, sortOrder, key);
+    setSortKey(next.sortKey);
+    setSortOrder(next.order);
+    setPage(0);
+  };
 
   const { data } = useQuery({
-    queryKey: ["runs-page", projectId, status ?? "all", page],
-    queryFn: () => api.listRunsWithTotal(projectId, { status, limit: PAGE, offset: page * PAGE }),
+    queryKey: ["runs-page", projectId, status ?? "all", page, sortKey ?? "createdAt", sortOrder ?? "desc"],
+    queryFn: () => api.listRunsWithTotal(projectId, {
+      status,
+      limit: PAGE,
+      offset: page * PAGE,
+      ...(sortKey ? { sort: sortKey, order: sortOrder ?? "desc" } : {}),
+    }),
     placeholderData: keepPreviousData,
   });
   const { data: gate } = useQuery({ queryKey: ["quality-gate", projectId], queryFn: () => api.getQualityGate(projectId), retry: false });
@@ -99,7 +124,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2">
                   <StatusBadge status={r.status} />
-                  {r.stats && <span className="text-sm">{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail"> · {r.stats.failed} failed</span> : null}</span>}
+                  {r.stats && <span className="text-sm">{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail-text"> · {r.stats.failed} failed</span> : null}</span>}
                   <GateMark verdict={verdict} />
                 </span>
                 <span title={r.createdAt} className="text-xs text-muted-foreground">{relativeTime(r.createdAt)}</span>
@@ -122,9 +147,14 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
         <table className="w-full text-sm">
           <thead className="text-left text-muted-foreground">
             <tr className="border-b">
-              <th scope="col" className="p-2">Status</th><th scope="col" className="p-2">Result</th><th scope="col" className="p-2">Gate</th>
-              <th scope="col" className="p-2">Branch</th><th scope="col" className="p-2">Env</th><th scope="col" className="p-2">Duration</th>
-              <th scope="col" className="p-2">Age</th><th scope="col" className="p-2"><span className="sr-only">Actions</span></th>
+              <SortTh label="Status" sortKey="status" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("status")} />
+              <th scope="col" className="p-2">Result</th>
+              <th scope="col" className="p-2">Gate</th>
+              <th scope="col" className="p-2">Branch</th>
+              <th scope="col" className="p-2">Env</th>
+              <SortTh label="Duration" sortKey="duration" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("duration")} />
+              <SortTh label="Age" sortKey="createdAt" activeSortKey={sortKey} sortOrder={sortOrder} onSort={() => handleSort("createdAt")} />
+              <th scope="col" className="p-2"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -133,7 +163,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
               return (
                 <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40">
                   <td className="p-2"><StatusBadge status={r.status} /></td>
-                  <td className="p-2">{r.stats ? <>{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail"> · {r.stats.failed} failed</span> : null}</> : "—"}</td>
+                  <td className="p-2">{r.stats ? <>{r.stats.passed}/{r.stats.total}{r.stats.failed ? <span className="text-status-fail-text"> · {r.stats.failed} failed</span> : null}</> : "—"}</td>
                   <td className="p-2"><GateMark verdict={verdict} /></td>
                   <td className="p-2">{r.branch ? `${r.branch}${r.commit ? `@${r.commit.slice(0, 7)}` : ""}` : "—"}</td>
                   <td className="p-2">{r.environment ?? "—"}</td>

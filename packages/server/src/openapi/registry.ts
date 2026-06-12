@@ -5,8 +5,8 @@ import {
 } from "@asteasolutions/zod-to-openapi";
 import { z, type ZodTypeAny } from "zod";
 import {
-  projectSchema, createProjectSchema, setVisibilityRequestSchema, updateProjectRequestSchema,
-  runSchema, trendPointSchema, compareResultSchema,
+  projectSchema, projectListItemSchema, projectSortSchema, createProjectSchema, setVisibilityRequestSchema, updateProjectRequestSchema,
+  runSchema, runSortSchema, sortOrderSchema, trendPointSchema, compareResultSchema,
   qualityGateConfigSchema, runSummarySchema,
   testHistorySchema, testTraceSchema,
   apiTokenSchema, createdTokenSchema, createTokenRequestSchema,
@@ -14,7 +14,8 @@ import {
   loginRequestSchema, sessionUserSchema,
   userSchema, createUserRequestSchema,
   membershipSchema, membershipWithUserSchema, setMembershipRequestSchema,
-  auditEntrySchema,
+  auditEntrySchema, auditActionSchema,
+  overviewSchema,
 } from "@allure-station/shared";
 
 type OpenApiDocument = ReturnType<OpenApiGeneratorV31["generateDocument"]>;
@@ -90,11 +91,12 @@ const SESSION_ONLY: Array<"bearerToken" | "sessionCookie"> = ["sessionCookie"];
 const metaRoutes: RouteDecl[] = [
   { method: "get", path: "/api/version", tag: "meta", summary: "Server and embedded Allure versions", ok: { status: 200, schema: versionResponse } },
   { method: "get", path: "/api/config", tag: "meta", summary: "Public runtime configuration", ok: { status: 200, schema: configResponse } },
+  { method: "get", path: "/api/overview", tag: "meta", summary: "Instance triage counts", ok: { status: 200, schema: overviewSchema } },
 ];
 
 const projectRoutes: RouteDecl[] = [
   { method: "post", path: "/api/projects", tag: "projects", summary: "Create a project", security: WRITE_AUTH, body: createProjectSchema, ok: { status: 201, schema: projectSchema } },
-  { method: "get", path: "/api/projects", tag: "projects", summary: "List projects", query: pageQuery.extend({ q: z.string().optional() }), ok: { status: 200, schema: z.array(projectSchema) } },
+  { method: "get", path: "/api/projects", tag: "projects", summary: "List projects (enriched: each item embeds latestRun + gatePassed)", query: pageQuery.extend({ q: z.string().optional(), sort: projectSortSchema.optional() }), ok: { status: 200, schema: z.array(projectListItemSchema) } },
   { method: "get", path: "/api/projects/{id}", tag: "projects", summary: "Get a project", ok: { status: 200, schema: projectSchema } },
   { method: "delete", path: "/api/projects/{id}", tag: "projects", summary: "Delete a project", security: WRITE_AUTH, ok: { status: 204 } },
   { method: "patch", path: "/api/projects/{id}", tag: "projects", summary: "Set the project display name", security: WRITE_AUTH, body: updateProjectRequestSchema, ok: { status: 200, schema: projectSchema } },
@@ -108,8 +110,8 @@ const resultsRoutes: RouteDecl[] = [
 ];
 
 const runRoutes: RouteDecl[] = [
-  { method: "get", path: "/api/projects/{projectId}/trends", tag: "runs", summary: "Run trend points", ok: { status: 200, schema: z.array(trendPointSchema) } },
-  { method: "get", path: "/api/projects/{projectId}/runs", tag: "runs", summary: "List runs", query: pageQuery.extend({ status: z.string().optional(), branch: z.string().optional() }), ok: { status: 200, schema: z.array(runSchema) } },
+  { method: "get", path: "/api/projects/{projectId}/trends", tag: "runs", summary: "Run trend points (up to ?limit runs, 10–100, default 30)", query: z.object({ limit: z.coerce.number().int().min(10).max(100).optional() }), ok: { status: 200, schema: z.array(trendPointSchema) } },
+  { method: "get", path: "/api/projects/{projectId}/runs", tag: "runs", summary: "List runs", query: pageQuery.extend({ status: z.string().optional(), branch: z.string().optional(), sort: runSortSchema.optional(), order: sortOrderSchema.optional() }), ok: { status: 200, schema: z.array(runSchema) } },
   { method: "get", path: "/api/projects/{projectId}/runs/{runId}", tag: "runs", summary: "Get a run", ok: { status: 200, schema: runSchema } },
   { method: "delete", path: "/api/projects/{projectId}/runs/{runId}", tag: "runs", summary: "Delete a run and its artifacts", security: WRITE_AUTH, ok: { status: 204 } },
 ];
@@ -160,9 +162,16 @@ const memberRoutes: RouteDecl[] = [
   { method: "delete", path: "/api/projects/{projectId}/members/{userId}", tag: "members", summary: "Remove a member", security: SESSION_ONLY, ok: { status: 204 } },
 ];
 
+const auditFilterQuery = z.object({
+  action: auditActionSchema.optional(),
+  actor: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+}).merge(pageQuery);
+
 const auditRoutes: RouteDecl[] = [
-  { method: "get", path: "/api/audit", tag: "audit", summary: "Global audit log", security: SESSION_ONLY, query: pageQuery, ok: { status: 200, schema: z.array(auditEntrySchema) } },
-  { method: "get", path: "/api/projects/{projectId}/audit", tag: "audit", summary: "Project audit log", security: SESSION_ONLY, query: pageQuery, ok: { status: 200, schema: z.array(auditEntrySchema) } },
+  { method: "get", path: "/api/audit", tag: "audit", summary: "Global audit log", security: SESSION_ONLY, query: auditFilterQuery, ok: { status: 200, schema: z.array(auditEntrySchema) } },
+  { method: "get", path: "/api/projects/{projectId}/audit", tag: "audit", summary: "Project audit log", security: SESSION_ONLY, query: auditFilterQuery, ok: { status: 200, schema: z.array(auditEntrySchema) } },
 ];
 
 const allRoutes: RouteDecl[] = [

@@ -2,7 +2,7 @@ import type {
   Project, Run, TrendPoint, RunEvent, CompareResult, TestHistory, TestTrace,
   SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry, ProjectVisibility,
   ApiToken, CreatedToken, QualityGateConfig, RunSummary, Notification, NotificationKind, NotificationTrigger,
-  RunMetadata, UpdateProjectRequest,
+  RunMetadata, UpdateProjectRequest, ProjectListItem, ProjectSort, Overview,
 } from "@allure-station/shared";
 
 export interface AppConfigInfo {
@@ -13,20 +13,21 @@ export interface AppConfigInfo {
 
 export interface ApiClient {
   getConfig(): Promise<AppConfigInfo>;
-  listProjects(opts?: { q?: string; limit?: number; offset?: number }): Promise<{ items: Project[]; total: number }>;
+  listProjects(opts?: { q?: string; sort?: ProjectSort; limit?: number; offset?: number }): Promise<{ items: ProjectListItem[]; total: number }>;
+  getOverview(): Promise<Overview>;
   createProject(id: string, displayName?: string): Promise<Project>;
   updateProject(id: string, body: UpdateProjectRequest): Promise<Project>;
   getProject(id: string): Promise<Project>;
   deleteProject(id: string): Promise<void>;
   setVisibility(id: string, visibility: ProjectVisibility): Promise<Project>;
-  listRuns(projectId: string, opts?: { status?: string; limit?: number; offset?: number }): Promise<Run[]>;
-  listRunsWithTotal(projectId: string, opts?: { status?: string; limit?: number; offset?: number }): Promise<{ items: Run[]; total: number }>;
+  listRuns(projectId: string, opts?: { status?: string; sort?: string; order?: string; limit?: number; offset?: number }): Promise<Run[]>;
+  listRunsWithTotal(projectId: string, opts?: { status?: string; sort?: string; order?: string; limit?: number; offset?: number }): Promise<{ items: Run[]; total: number }>;
   deleteRun(projectId: string, runId: string): Promise<void>;
   getRunSummary(projectId: string, runId: string): Promise<RunSummary>;
   retryRun(projectId: string, runId: string): Promise<Run>;
   sendResults(projectId: string, files: File[], meta?: RunMetadata): Promise<{ runId: string }>;
   generate(projectId: string): Promise<Run>;
-  listTrends(projectId: string): Promise<TrendPoint[]>;
+  listTrends(projectId: string, limit?: number): Promise<TrendPoint[]>;
   compareRuns(projectId: string, base: string, target: string): Promise<CompareResult>;
   getTestHistory(projectId: string, params: { historyId?: string; fullName?: string; name?: string; limit?: number }): Promise<TestHistory>;
   getTestTrace(projectId: string, params: { runId: string; historyId?: string; fullName?: string }): Promise<TestTrace>;
@@ -42,8 +43,8 @@ export interface ApiClient {
   listUsers(): Promise<User[]>;
   createUser(email: string, password: string, role: GlobalRole): Promise<User>;
   deleteUser(id: string): Promise<void>;
-  listAudit(opts?: { limit?: number; offset?: number }): Promise<{ items: AuditEntry[]; total: number }>;
-  listProjectAudit(projectId: string, opts?: { limit?: number; offset?: number }): Promise<{ items: AuditEntry[]; total: number }>;
+  listAudit(opts?: { limit?: number; offset?: number; action?: string; actor?: string; from?: string; to?: string }): Promise<{ items: AuditEntry[]; total: number }>;
+  listProjectAudit(projectId: string, opts?: { limit?: number; offset?: number; action?: string; actor?: string; from?: string; to?: string }): Promise<{ items: AuditEntry[]; total: number }>;
   getQualityGate(projectId: string): Promise<QualityGateConfig>;
   setQualityGate(projectId: string, cfg: QualityGateConfig): Promise<QualityGateConfig>;
   listTokens(projectId: string): Promise<ApiToken[]>;
@@ -84,7 +85,8 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
   };
   return {
     getConfig: () => json<AppConfigInfo>("/config", { method: "GET" }),
-    listProjects: (opts = {}) => listWithTotal<Project>(`/projects${qs(opts)}`),
+    getOverview: () => json<Overview>("/overview", { method: "GET" }),
+    listProjects: (opts = {}) => listWithTotal<ProjectListItem>(`/projects${qs(opts)}`),
     createProject: (id, displayName) =>
       json<Project>("/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(displayName ? { id, displayName } : { id }) }),
     updateProject: (id: string, body: UpdateProjectRequest) =>
@@ -105,7 +107,7 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
       return json<{ runId: string }>(`/projects/${projectId}/send-results`, { method: "POST", body: fd });
     },
     generate: (projectId) => json<Run>(`/projects/${projectId}/generate`, { method: "POST" }),
-    listTrends: (projectId) => json<TrendPoint[]>(`/projects/${projectId}/trends`, { method: "GET" }),
+    listTrends: (projectId, limit) => json<TrendPoint[]>(`/projects/${projectId}/trends${limit !== undefined ? `?limit=${limit}` : ""}`, { method: "GET" }),
     compareRuns: (projectId, base, target) =>
       json<CompareResult>(`/projects/${projectId}/compare?base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`, { method: "GET" }),
     getTestHistory: (projectId, params) =>
