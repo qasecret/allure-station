@@ -88,10 +88,14 @@ export async function waitForReadyCount(page: Page, n: number): Promise<void> {
 export async function expectNoSeriousViolations(page: Page, label: string) {
   await page.mouse.move(0, 0);
   // Let enter-animations (--motion-fast = 150 ms) finish before axe measures contrast.
-  await page.waitForFunction(() => {
-    const animating = document.getAnimations().filter((a) => a.playState === "running");
-    return animating.length === 0;
-  }, { timeout: 2000 }).catch(() => { /* timed out — scan anyway */ });
+  // Infinite-iteration animations (animate-pulse, animate-spin) are never "done" — exclude
+  // them from the "still running" check so we don't silently degrade to a 2 s sleep.
+  await page.waitForFunction(() =>
+    document.getAnimations().every((a) => {
+      if (a.playState !== "running") return true;
+      return a.effect?.getTiming().iterations === Infinity; // pulse/spin never end — ignore
+    }),
+  { timeout: 2000 }).catch(() => {});
   const results = await new AxeBuilder({ page })
     .exclude('iframe[title="report"]')
     .analyze();

@@ -18,3 +18,25 @@ describe("trend geometry", () => {
     expect(labels[labels.length - 1].index).toBe(1);
   });
 });
+
+describe("xAxisLabels thinning", () => {
+  const mkPts = (days: number) =>
+    Array.from({ length: days }, (_, i) => ({
+      runId: `r${i}`,
+      createdAt: `2026-05-${String(i + 1).padStart(2, "0")}T10:00:00.000Z`,
+      stats: { total: 4, passed: 4, failed: 0, broken: 0, skipped: 0, durationMs: 1000 },
+    }));
+  it("keeps first and last, drops intermediates that would collide", () => {
+    const labels = xAxisLabels(mkPts(30), { plotWidth: 300, labelWidth: 70 });
+    expect(labels[0].index).toBe(0);
+    expect(labels[labels.length - 1].index).toBe(29);
+    expect(labels.length).toBeLessThanOrEqual(Math.floor(300 / 70) + 1); // budget honored
+  });
+  it("keeps all day boundaries when there is room", () => {
+    const labels = xAxisLabels(mkPts(3), { plotWidth: 600, labelWidth: 70 });
+    expect(labels).toHaveLength(3);
+  });
+  it("is backward compatible without a budget (no thinning)", () => {
+    expect(xAxisLabels(mkPts(3))).toHaveLength(3);
+  });
+});

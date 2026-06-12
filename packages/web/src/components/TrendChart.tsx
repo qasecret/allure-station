@@ -31,6 +31,11 @@ const SVG_PADDING_BOTTOM = 20; // room for x-axis labels
 const SVG_PADDING_RIGHT = 8;
 const SVG_PADDING_TOP = 8;
 
+// Measured width of "2026-06-12" rendered at text-[10px] font-mono (Geist Mono):
+// canvas.measureText("2026-06-12") at 10px Geist Mono ≈ 63px; we use 66px to include
+// half-a-character padding on each side so adjacent labels never touch.
+const X_LABEL_WIDTH = 66;
+
 function buildAriaLabel(p: TrendPoint): string {
   const s = p.stats;
   const dur = s.durationMs ? `, ${formatDurationSec(s.durationMs)}` : "";
@@ -75,7 +80,7 @@ function TrendChartInner({ points, onSelectRun }: TrendChartInnerProps) {
   const svgHeight = PLOT_HEIGHT + SVG_PADDING_TOP + SVG_PADDING_BOTTOM;
 
   const { bars, gridY } = barGeometry(points, { width: plotWidth, height: PLOT_HEIGHT });
-  const labels = xAxisLabels(points);
+  const labels = xAxisLabels(points, { plotWidth, labelWidth: X_LABEL_WIDTH });
 
   // Adjust bar x to account for left padding
   const barX = (i: number) => bars[i].x + SVG_PADDING_LEFT;

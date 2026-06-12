@@ -37,7 +37,10 @@ export function barGeometry(
   return { bars, gridY: [0.25, 0.5, 0.75].map((f) => Math.round(plot.height * (1 - f))) };
 }
 
-export function xAxisLabels(points: TrendPoint[]): Array<{ index: number; text: string }> {
+export function xAxisLabels(
+  points: TrendPoint[],
+  budget?: { plotWidth: number; labelWidth: number }
+): Array<{ index: number; text: string }> {
   if (points.length === 0) return [];
   const day = (iso: string) => iso.slice(0, 10);
   const labels: Array<{ index: number; text: string }> = [{ index: 0, text: day(points[0].createdAt) }];
@@ -50,5 +53,22 @@ export function xAxisLabels(points: TrendPoint[]): Array<{ index: number; text: 
   if (labels[labels.length - 1].index !== last) {
     labels.push({ index: last, text: day(points[last].createdAt) });
   }
+
+  // When a budget is provided and labels would collide, keep first + last and every k-th
+  // intermediate so the total fits within Math.floor(plotWidth / labelWidth) slots.
+  if (budget && labels.length * budget.labelWidth > budget.plotWidth) {
+    const maxSlots = Math.max(2, Math.floor(budget.plotWidth / budget.labelWidth));
+    const first = labels[0];
+    const lastLabel = labels[labels.length - 1];
+    const intermediates = labels.slice(1, -1);
+    const slots = maxSlots - 2; // slots available for intermediates
+    if (slots <= 0 || intermediates.length === 0) {
+      return [first, lastLabel];
+    }
+    const k = Math.ceil(intermediates.length / Math.max(1, slots));
+    const kept = intermediates.filter((_, idx) => idx % k === 0);
+    return [first, ...kept, lastLabel];
+  }
+
   return labels;
 }
