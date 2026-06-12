@@ -181,6 +181,8 @@ describe("account & sessions", () => {
 
     const cA = await loginGetCookie(app, email, pw, {});
     const cB = await loginGetCookie(app, email, pw, {});
+    // Extract just the token value of cB for later comparison
+    const oldCBValue = cB.split("=")[1];
 
     // Wrong current password → 400 invalid credentials
     const wrong = await app.inject({
@@ -192,7 +194,16 @@ describe("account & sessions", () => {
     expect(wrong.statusCode).toBe(400);
     expect(wrong.json().error).toBe("invalid credentials");
 
-    // Correct current password → 204, other session revoked
+    // Weak new password (< 8 chars) → 400
+    const weak = await app.inject({
+      method: "POST",
+      url: "/api/auth/password",
+      headers: { cookie: cB },
+      payload: { currentPassword: pw, newPassword: "short" },
+    });
+    expect(weak.statusCode).toBe(400);
+
+    // Correct current password → 204, session rotated
     const ok = await app.inject({
       method: "POST",
       url: "/api/auth/password",
@@ -200,13 +211,26 @@ describe("account & sessions", () => {
       payload: { currentPassword: pw, newPassword: "brand-new-pass-9" },
     });
     expect(ok.statusCode).toBe(204);
+    // Response must carry a new set-cookie (rotated session)
+    const newCookie = ok.cookies.find((c) => c.name === "as_session");
+    expect(newCookie).toBeDefined();
+    expect(newCookie!.value).not.toBe(oldCBValue); // fresh token — not the old one
+    const newCookieHeader = `as_session=${newCookie!.value}`;
+
     // cA (other session) is now dead
     expect((await app.inject({ method: "GET", url: "/api/auth/sessions", headers: { cookie: cA } })).statusCode).toBe(401);
-    // cB (current session) still works
-    expect((await app.inject({ method: "GET", url: "/api/auth/sessions", headers: { cookie: cB } })).statusCode).toBe(200);
+    // OLD cB cookie is now dead too (session was rotated)
+    expect((await app.inject({ method: "GET", url: "/api/auth/sessions", headers: { cookie: cB } })).statusCode).toBe(401);
+    // The NEW cookie from the password-change response works
+    expect((await app.inject({ method: "GET", url: "/api/auth/sessions", headers: { cookie: newCookieHeader } })).statusCode).toBe(200);
     // Re-login works with new password only
     expect((await app.inject({ method: "POST", url: "/api/auth/login", payload: { email, password: pw } })).statusCode).toBe(401);
     expect((await app.inject({ method: "POST", url: "/api/auth/login", payload: { email, password: "brand-new-pass-9" } })).statusCode).toBe(200);
+
+    // Audit log must contain password_changed
+    const auditEntries = await deps.audit.list({ limit: 100 });
+    expect(auditEntries.map((e) => e.action)).toContain("password_changed");
+
     await app.close();
   });
 

@@ -21,6 +21,7 @@ function testConfig(): AppConfig {
     publicUrl: undefined,
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
     cookieSecure: false,
+    trustProxy: false,
     adminEmail: undefined,
     adminPassword: undefined,
     oidc: undefined,

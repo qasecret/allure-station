@@ -336,6 +336,7 @@ export const auditActionSchema = z.enum([
   "notification_created", "notification_deleted",
   "run_deleted",
   "password_changed",
+  "password_change_failed",
   "session_revoked",
 ]);
 export const auditActorTypeSchema = z.enum(["user", "token", "anonymous"]);

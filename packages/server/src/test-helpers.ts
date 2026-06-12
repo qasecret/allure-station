@@ -40,6 +40,7 @@ export async function makeTestDeps(): Promise<AppDeps> {
     publicUrl: undefined,
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
     cookieSecure: false,
+    trustProxy: false,
     now: () => "2026-06-06T00:00:00.000Z",
     newId: (() => { let n = 0; return () => `id${++n}`; })(),
   };

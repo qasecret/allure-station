@@ -27,6 +27,7 @@ export interface AppConfig {
   cookieSecure: boolean;
   adminEmail: string | undefined;    // seeded/upserted as a global admin on startup (with adminPassword)
   adminPassword: string | undefined;
+  trustProxy: boolean;               // trust X-Forwarded-For/Proto headers (set true behind a load balancer/proxy)
   oidc: OidcConfig | undefined;      // external SSO; present only when OIDC_ISSUER is set
   storage: {
     backend: StorageBackend;
@@ -146,6 +147,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         : (env.PUBLIC_URL ?? "").startsWith("https://"),
     adminEmail: env.ADMIN_EMAIL || undefined,
     adminPassword: env.ADMIN_PASSWORD || undefined,
+    trustProxy: env.TRUST_PROXY === "true" || env.TRUST_PROXY === "1",
     oidc,
     storage,
   };

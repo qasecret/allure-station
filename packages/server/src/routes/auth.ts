@@ -131,12 +131,15 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
     // Verifying that placeholder will always fail, so they get the same 400 "invalid credentials" —
     // they must sign in via SSO and cannot change their password via this flow.
     if (!user || !(await verifyPassword(parsed.data.currentPassword, user.passwordHash))) {
+      await recordAudit(deps, { ...actorFromPrincipal(principal), action: "password_change_failed", targetType: "user", targetId: principal.userId });
       return reply.code(400).send({ error: "invalid credentials" }); // 400 not 401: the SESSION is valid
     }
     await deps.users.setPasswordHash(principal.userId, await hashPassword(parsed.data.newPassword));
-    const currentHash = hashSessionToken(req.cookies[SESSION_COOKIE]!);
-    const current = (await deps.sessions.listByUser(principal.userId)).find((s) => s.tokenHash === currentHash);
-    if (current) await deps.sessions.removeAllExcept(principal.userId, current.id);
+    // Revoke ALL sessions for this user (no race on "which is current"), then mint a fresh one.
+    // Using a nonexistent keepId ensures every existing session row is deleted — the new session
+    // created by startSession below becomes the only valid session for this user.
+    await deps.sessions.removeAllExcept(principal.userId, "");
+    await startSession(reply, deps, principal.userId, req);
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "password_changed", targetType: "user", targetId: principal.userId });
     return reply.code(204).send();
   });
