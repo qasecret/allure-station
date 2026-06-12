@@ -30,8 +30,8 @@ function depsWith(opts: { userCount?: number; tokenCount?: number; membership?: 
 }
 
 const anon: Principal = { kind: "anonymous" };
-const admin: Principal = { kind: "user", userId: "a", email: "a@x", role: "admin", createdAt: "t" };
-const plainUser: Principal = { kind: "user", userId: "u", email: "u@x", role: "user", createdAt: "t" };
+const admin: Principal = { kind: "user", userId: "a", email: "a@x", role: "admin", createdAt: "t", authProvider: null };
+const plainUser: Principal = { kind: "user", userId: "u", email: "u@x", role: "user", createdAt: "t", authProvider: null };
 const tokenFor = (projectId: string): Principal => ({ kind: "token", projectId, tokenId: "t1" });
 
 describe("authorizeProjectWrite", () => {

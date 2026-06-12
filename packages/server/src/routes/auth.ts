@@ -73,6 +73,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
       email: principal.email,
       role: principal.role,
       createdAt: principal.createdAt,
+      authProvider: principal.authProvider,
     };
     return reply.code(200).send(body);
   });
@@ -102,8 +103,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
     if (principal.kind !== "user") return denyAuth(reply, "unauthenticated");
     const { id } = req.params as { id: string };
     const currentHash = hashSessionToken(req.cookies[SESSION_COOKIE]!);
-    const rows = await deps.sessions.listByUser(principal.userId, deps.now());
-    const target = rows.find((s) => s.id === id);
+    const target = await deps.sessions.findById(id, principal.userId);
     if (!target) return reply.code(404).send({ error: "not found" }); // other users' sessions look identical
     await deps.sessions.removeById(id, principal.userId);
     if (target.tokenHash === currentHash) reply.clearCookie(SESSION_COOKIE, { path: "/" }); // revoking self ≡ logout

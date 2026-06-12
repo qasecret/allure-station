@@ -48,11 +48,26 @@ describe("auth routes", () => {
 
     const me = await app.inject({ method: "GET", url: "/api/auth/me", cookies: { as_session: cookie.value } });
     expect(me.json()).toMatchObject({ email: "admin@x.com", role: "admin" });
+    // A password-seeded (local) account reports no SSO provider.
+    expect(me.json().authProvider).toBeNull();
 
     const logout = await app.inject({ method: "POST", url: "/api/auth/logout", cookies: { as_session: cookie.value } });
     expect(logout.statusCode).toBe(204);
     // Session row is gone → the same cookie no longer authenticates.
     expect((await app.inject({ method: "GET", url: "/api/auth/me", cookies: { as_session: cookie.value } })).json()).toBeNull();
+    await app.close();
+  });
+
+  it("me reports authProvider 'oidc' for SSO-provisioned users (so the UI can hide the password form)", async () => {
+    const deps = await makeTestDeps();
+    // Mirror OIDC provisioning: create with the "oidc" provider + an unusable random password.
+    const user = await deps.users.create("sso@x.com", await hashPassword("unusable-placeholder"), "user", deps.now(), "oidc");
+    const token = generateSessionToken();
+    const expiresAt = new Date(Date.parse(deps.now()) + 3_600_000).toISOString();
+    await deps.sessions.create(hashSessionToken(token), user.id, deps.now(), expiresAt);
+    const app = buildApp(deps);
+    const me = await app.inject({ method: "GET", url: "/api/auth/me", cookies: { as_session: token } });
+    expect(me.json()).toMatchObject({ email: "sso@x.com", authProvider: "oidc" });
     await app.close();
   });
 

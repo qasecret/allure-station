@@ -155,6 +155,13 @@
       "when": 1781263926923,
       "tag": "0021_sour_silhouette",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1781279509800,
+      "tag": "0022_giant_shocker",
+      "breakpoints": true
     }
   ]
 }

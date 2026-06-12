@@ -118,3 +118,36 @@ export async function createProjectWithRun(page: Page, id: string) {
   await page.getByRole("tab", { name: "Runs" }).click();
   await waitForReady(page);
 }
+
+// ── Auth helpers (shared across authed specs) ─────────────────────────────────
+import { ADMIN_EMAIL, ADMIN_PASSWORD } from "../playwright.config.js";
+
+/** Sign in via the /login form as the given user; resolves after the redirect home. */
+export async function loginAs(page: Page, email: string, password: string) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.waitForURL("/");
+}
+
+/** Sign in as the seeded admin (secure-mode server). */
+export async function login(page: Page) {
+  await loginAs(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+}
+
+/** Sign out via the sidebar user-menu dropdown; resolves once the Sign-in button reappears. */
+export async function logout(page: Page) {
+  await page.getByRole("button", { name: /\w+@\w+/ }).last().click();
+  await page.getByRole("menuitem", { name: /Sign out/i }).click();
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible({ timeout: 10_000 });
+}
+
+/** Create a user via the /users admin UI (caller must be signed in as admin). */
+export async function createUserViaUI(page: Page, email: string, password: string) {
+  await page.goto("/users");
+  await page.getByLabel("New user email").fill(email);
+  await page.getByLabel("New user password").fill(password);
+  await page.getByRole("button", { name: "Add user" }).click();
+  await expect(visible(page.getByText(email))).toBeVisible();
+}

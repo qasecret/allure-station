@@ -23,7 +23,7 @@ export function denyAuth(reply: FastifyReply, verdict: Exclude<AuthzVerdict, "ok
 export type Principal =
   | { kind: "anonymous" }
   | { kind: "token"; projectId: string; tokenId: string }
-  | { kind: "user"; userId: string; email: string; role: GlobalRole; createdAt: string };
+  | { kind: "user"; userId: string; email: string; role: GlobalRole; createdAt: string; authProvider: "oidc" | null };
 
 /** Generate a new plaintext API token. High-entropy → safe to compare via sha256 hash equality. */
 export function generateToken(): string {
@@ -66,7 +66,7 @@ export async function authenticate(deps: AppDeps, req: FastifyRequest): Promise<
     const session = await deps.sessions.findByHash(hashSessionToken(cookie));
     if (session && session.expiresAt > deps.now()) {
       const user = await deps.users.findById(session.userId);
-      if (user) return { kind: "user", userId: user.id, email: user.email, role: user.role, createdAt: user.createdAt };
+      if (user) return { kind: "user", userId: user.id, email: user.email, role: user.role, createdAt: user.createdAt, authProvider: user.authProvider ?? null };
     }
   }
   const bearer = parseBearer(req.headers.authorization);

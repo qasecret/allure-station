@@ -12,7 +12,7 @@ const linkCls = ({ isActive }: { isActive: boolean }) =>
 
 export function SidebarContent() {
   const { user } = useAuth();
-  const { data: config } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
+  const { data: config } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig(), staleTime: Infinity });
   const brand = config?.branding;
   return (
     <div className="flex h-full flex-col gap-2 p-3">

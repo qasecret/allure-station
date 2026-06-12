@@ -20,7 +20,7 @@ import { ApiError } from "./lib/errors.js";
 import "./styles.css";
 
 function BrandTitle() {
-  const { data } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
+  const { data } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig(), staleTime: Infinity });
   useEffect(() => { if (data?.branding?.name) document.title = data.branding.name; }, [data?.branding?.name]);
   return null;
 }

@@ -62,6 +62,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: text("role").notNull(), // admin|user (global role)
   createdAt: text("created_at").notNull(),
+  authProvider: text("auth_provider"), // "oidc" for SSO-provisioned users (no usable password); null = local
 }, (t) => ({
   byEmail: uniqueIndex("idx_users_email").on(t.email),
 }));

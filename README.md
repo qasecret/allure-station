@@ -373,6 +373,8 @@ Prior to this release, all access-control rejections returned `401` with `{ "err
 |---|---|---|
 | **401** | `{ "error": "unauthenticated" }` | No valid session or bearer token — caller is anonymous (or the token is expired/invalid). |
 | **403** | `{ "error": "forbidden" }` | Valid session/token, but the principal lacks the required role or project scope. |
+| **404** | `{ "error": "not found" }` | Deliberate no-oracle response: a private project (or run) you may not see, and another user's session id, are indistinguishable from genuinely missing — existence is never confirmed. |
+| **400** | `{ "error": "invalid credentials" }` | Wrong **current** password on `POST /auth/password` (the session itself is valid, so this is a 400, not a 401). |
 
 **Consumers matching on the response body must update** — the string `"unauthorized"` is no longer returned. Match on `status === 401` / `status === 403` instead of the `error` field for reliable behavior.
 

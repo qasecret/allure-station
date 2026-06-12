@@ -17,7 +17,7 @@ export function Login() {
   const [error, setError] = useState<string | null>(params.get("error") === "sso" ? "Single sign-on failed. Try again or use a password." : null);
   const [busy, setBusy] = useState(false);
 
-  const { data: config } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
+  const { data: config } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig(), staleTime: Infinity });
   const brand = config?.branding;
 
   const submit = async (e: React.FormEvent) => {

@@ -269,9 +269,15 @@ export const apiTokenSchema = z.object({
 });
 // Returned ONCE on creation — includes the plaintext token.
 export const createdTokenSchema = apiTokenSchema.extend({ token: z.string() });
+/** Allowed API-token lifetimes (days). Single source: the zod union, the client param type, and the
+ *  UI's expiry options all derive from this — add a value here and every layer stays in sync. */
+export const TOKEN_EXPIRY_DAYS = [30, 90, 365] as const;
+export type TokenExpiryDays = (typeof TOKEN_EXPIRY_DAYS)[number];
 export const createTokenRequestSchema = z.object({
   name: z.string().min(1).max(64),
-  expiresInDays: z.union([z.literal(30), z.literal(90), z.literal(365)]).optional(),
+  expiresInDays: z
+    .union(TOKEN_EXPIRY_DAYS.map((d) => z.literal(d)) as [z.ZodLiteral<30>, z.ZodLiteral<90>, z.ZodLiteral<365>])
+    .optional(),
 });
 
 // --- Accounts & RBAC (Phase 5b) ---
@@ -283,6 +289,8 @@ export const userSchema = z.object({
   email: z.string().email(),
   role: globalRoleSchema,
   createdAt: z.string(),
+  // "oidc" when the account was provisioned via SSO (no usable local password); null/absent = local.
+  authProvider: z.enum(["oidc"]).nullable().optional(),
 });
 // The authenticated principal returned by GET /auth/me (or null when anonymous).
 export const sessionUserSchema = userSchema;

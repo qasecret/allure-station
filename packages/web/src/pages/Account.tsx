@@ -42,11 +42,29 @@ function ProfileCard() {
 }
 
 function PasswordCard() {
+  const { user } = useAuth();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [inlineError, setInlineError] = useState<string | null>(null);
   const qc = useQueryClient();
+
+  // SSO-provisioned accounts have no local password (the server's verify always fails), so the
+  // form would be an unrecoverable dead-end. Show an informational state instead.
+  if (user?.authProvider === "oidc") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Password</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Your account signs in through your identity provider (SSO). There's no password to change here.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   // Inline validation errors
   const nextTooShort = next.length > 0 && next.length < 8;
@@ -181,6 +199,31 @@ function SessionsCard() {
 
   const otherCount = sessions.filter((s) => !s.current).length;
 
+  // One revoke handler drives both the mobile card list and the desktop table.
+  async function onRevoke(s: SessionInfo) {
+    if (s.current) {
+      try {
+        await logout();
+        navigate("/login");
+      } catch {
+        toast.error("Sign out failed. Please try again.");
+      }
+    } else {
+      revoke.mutate(s);
+    }
+  }
+  const revokeButton = (s: SessionInfo) => (
+    <Button
+      variant="ghost"
+      size="sm"
+      aria-label={s.current ? "Sign out this session" : "Revoke session"}
+      disabled={revoke.isPending && revoke.variables?.id === s.id}
+      onClick={() => onRevoke(s)}
+    >
+      {s.current ? "Sign out" : "Revoke"}
+    </Button>
+  );
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
@@ -206,58 +249,53 @@ function SessionsCard() {
           </div>
         )}
         {!isLoading && !isError && (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Device</TableHead>
-                <TableHead className="hidden sm:table-cell">IP</TableHead>
-                <TableHead>Started</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <>
+            {/* Mobile: stacked cards (the dual-render convention from app-shell.md). */}
+            <ul role="list" className="divide-y sm:hidden">
               {sessions.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell>
+                <li key={s.id} className="flex items-center justify-between gap-2 px-4 py-3">
+                  <div className="min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm">{describeUserAgent(s.userAgent)}</span>
-                      {s.current && (
-                        <Badge variant="secondary" className="text-xs">Current</Badge>
-                      )}
+                      <span className="truncate text-sm">{describeUserAgent(s.userAgent)}</span>
+                      {s.current && <Badge variant="secondary" className="text-xs">Current</Badge>}
                     </div>
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
-                    {s.ip ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    <TimeStamp iso={s.createdAt} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-label={s.current ? "Sign out this session" : "Revoke session"}
-                      disabled={revoke.isPending && revoke.variables?.id === s.id}
-                      onClick={async () => {
-                        if (s.current) {
-                          try {
-                            await logout();
-                            navigate("/login");
-                          } catch {
-                            toast.error("Sign out failed. Please try again.");
-                          }
-                        } else {
-                          revoke.mutate(s);
-                        }
-                      }}
-                    >
-                      {s.current ? "Sign out" : "Revoke"}
-                    </Button>
-                  </TableCell>
-                </TableRow>
+                    <div className="text-xs text-muted-foreground">
+                      <TimeStamp iso={s.createdAt} />{s.ip ? ` · ${s.ip}` : ""}
+                    </div>
+                  </div>
+                  {revokeButton(s)}
+                </li>
               ))}
-            </TableBody>
-          </Table>
+            </ul>
+            {/* Desktop: full table. */}
+            <div className="hidden sm:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Device</TableHead>
+                    <TableHead>IP</TableHead>
+                    <TableHead>Started</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sessions.map((s) => (
+                    <TableRow key={s.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">{describeUserAgent(s.userAgent)}</span>
+                          {s.current && <Badge variant="secondary" className="text-xs">Current</Badge>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{s.ip ?? "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground"><TimeStamp iso={s.createdAt} /></TableCell>
+                      <TableCell className="text-right">{revokeButton(s)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

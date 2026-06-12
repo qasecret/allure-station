@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { ProjectRole, CreatedToken, NotificationKind, NotificationTrigger } from "@allure-station/shared";
+import { TOKEN_EXPIRY_DAYS } from "@allure-station/shared";
+import type { ProjectRole, CreatedToken, NotificationKind, NotificationTrigger, TokenExpiryDays } from "@allure-station/shared";
 import { TimeStamp } from "@/components/TimeStamp";
 import { describeAuditEntry } from "@/lib/audit-format";
 import { AuditFilterBar } from "@/components/AuditFilterBar";
@@ -342,10 +343,11 @@ function QualityGateCard({ projectId }: { projectId: string }) {
   );
 }
 
+const EXPIRY_LABEL: Record<number, string> = { 30: "30 days", 90: "90 days", 365: "1 year" };
+// Derived from the shared TOKEN_EXPIRY_DAYS so adding a lifetime is a one-line change in contracts.
+// 90 first (the default-nudge), then the rest, then "Never".
 const EXPIRES_OPTIONS: { label: string; value: string }[] = [
-  { label: "90 days", value: "90" },
-  { label: "30 days", value: "30" },
-  { label: "1 year", value: "365" },
+  ...[90, ...TOKEN_EXPIRY_DAYS.filter((d) => d !== 90)].map((d) => ({ label: EXPIRY_LABEL[d] ?? `${d} days`, value: String(d) })),
   { label: "Never", value: "never" },
 ];
 
@@ -370,7 +372,8 @@ function TokensCard({ projectId }: { projectId: string }) {
   const { data: tokens, isLoading: tokensLoading } = useQuery({ queryKey: ["tokens", projectId], queryFn: () => api.listTokens(projectId) });
   const create = useMutation({
     mutationFn: () => {
-      const expiresInDays = expiresValue !== "never" ? Number(expiresValue) as 30 | 90 | 365 : undefined;
+      const parsed = Number(expiresValue);
+      const expiresInDays = (TOKEN_EXPIRY_DAYS as readonly number[]).includes(parsed) ? (parsed as TokenExpiryDays) : undefined;
       return api.createToken(projectId, name, expiresInDays);
     },
     onSuccess: (t) => { setCreated(t); setName(""); setExpiresValue("90"); qc.invalidateQueries({ queryKey: ["tokens", projectId] }); },

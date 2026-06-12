@@ -100,7 +100,7 @@ export async function resolveOidcUser(
   if (existing) return { userId: existing.id, email: existing.email, provisioned: false };
   // Auto-provision: random unusable local password (they sign in via SSO; can reset to use local login).
   try {
-    const user = await deps.users.create(email, await hashPassword(randomBytes(32).toString("hex")), "user", deps.now());
+    const user = await deps.users.create(email, await hashPassword(randomBytes(32).toString("hex")), "user", deps.now(), "oidc");
     return { userId: user.id, email: user.email, provisioned: true };
   } catch (err) {
     // Lost a concurrent first-login race (unique-email violation) — the row now exists; link to it.

@@ -71,6 +71,24 @@ export class SessionRepository {
       .orderBy(desc(sessions.createdAt), desc(sessions.id));
   }
 
+  /** One session by id, scoped to the owning user (others' look identical → 404 upstream). Single
+   *  point lookup — used by the revoke route to read device/hash without listing all of a user's rows. */
+  async findById(id: string, userId: string): Promise<SessionRow | null> {
+    const [row] = await this.db
+      .select({
+        id: sessions.id,
+        tokenHash: sessions.tokenHash,
+        userId: sessions.userId,
+        createdAt: sessions.createdAt,
+        expiresAt: sessions.expiresAt,
+        userAgent: sessions.userAgent,
+        ip: sessions.ip,
+      })
+      .from(sessions)
+      .where(and(eq(sessions.id, id), eq(sessions.userId, userId)));
+    return row ?? null;
+  }
+
   /** Delete one session by id, scoped to the owning user (revoking others' is a silent no-op → 404 upstream). */
   async removeById(id: string, userId: string): Promise<boolean> {
     const rows = await this.db
