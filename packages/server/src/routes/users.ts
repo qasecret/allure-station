@@ -1,14 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import { createUserRequestSchema, type User } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
-import { authenticate, requireAdmin } from "../auth.js";
+import { authenticate, requireAdmin, denyAuth } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 import { hashPassword } from "../password.js";
 
 export function registerUserRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.post("/users", async (req, reply) => {
     const principal = await authenticate(deps, req);
-    if (requireAdmin(principal) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    const verdict = requireAdmin(principal);
+    if (verdict !== "ok") return denyAuth(reply, verdict);
     const parsed = createUserRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
     if (await deps.users.findByEmail(parsed.data.email)) return reply.code(409).send({ error: "email already in use" });
@@ -23,13 +24,15 @@ export function registerUserRoutes(app: FastifyInstance, deps: AppDeps): void {
   });
 
   app.get("/users", async (req, reply) => {
-    if (requireAdmin(await authenticate(deps, req)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    const verdict = requireAdmin(await authenticate(deps, req));
+    if (verdict !== "ok") return denyAuth(reply, verdict);
     return deps.users.list();
   });
 
   app.delete("/users/:id", async (req, reply) => {
     const principal = await authenticate(deps, req);
-    if (requireAdmin(principal) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    const verdict = requireAdmin(principal);
+    if (verdict !== "ok") return denyAuth(reply, verdict);
     const { id } = req.params as { id: string };
     // Block self-deletion: an admin removing their own account mid-session is an easy lockout.
     if (principal.kind === "user" && principal.userId === id) return reply.code(400).send({ error: "cannot delete your own account" });

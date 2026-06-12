@@ -44,6 +44,7 @@ describe("notification routes", () => {
     const app = buildApp(await makeTestDeps());
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" } });
     await app.inject({ method: "POST", url: "/api/projects/p/tokens", payload: { name: "ci" } }); // locks the project
+    // anonymous (no token) → 401 unauthenticated
     expect((await app.inject({ method: "GET", url: "/api/projects/p/notifications" })).statusCode).toBe(401);
     expect((await app.inject({ method: "POST", url: "/api/projects/p/notifications", payload: { kind: "webhook", url: "https://h/x" } })).statusCode).toBe(401);
     await app.close();

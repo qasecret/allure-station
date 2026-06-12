@@ -77,7 +77,8 @@ function declare(registry: OpenAPIRegistry, r: RouteDecl) {
     responses: {
       [okStatus]: { description: "Success", ...okContent },
       400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } },
-      401: { description: "Unauthorized", content: { "application/json": { schema: errorSchema } } },
+      401: { description: "Unauthenticated — missing or expired session/token", content: { "application/json": { schema: errorSchema } } },
+      ...(r.security ? { 403: { description: "Forbidden — authenticated but insufficient role/scope", content: { "application/json": { schema: errorSchema } } } } : {}),
       404: { description: "Not found", content: { "application/json": { schema: errorSchema } } },
     },
   });

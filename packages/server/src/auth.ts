@@ -1,10 +1,23 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type { GlobalRole, ProjectRole, ProjectVisibility } from "@allure-station/shared";
 import type { AppDeps } from "./app.js";
 import type { VisibilityScope } from "./db/repositories.js";
 
 export const SESSION_COOKIE = "as_session";
+
+/** Authorization verdict: distinguish "who are you?" (401) from "you may not" (403).
+ *  Anonymous principals (including invalid/expired bearer tokens, which authenticate()
+ *  resolves to anonymous — deliberate no-oracle) → unauthenticated. A known principal
+ *  (session user or valid token) with insufficient role/scope → forbidden. */
+export type AuthzVerdict = "ok" | "unauthenticated" | "forbidden";
+
+/** Map a non-ok verdict onto the HTTP reply. Usage: if (v !== "ok") return denyAuth(reply, v); */
+export function denyAuth(reply: FastifyReply, verdict: Exclude<AuthzVerdict, "ok">) {
+  return verdict === "unauthenticated"
+    ? reply.code(401).send({ error: "unauthenticated" })
+    : reply.code(403).send({ error: "forbidden" });
+}
 
 /** Who is making a request, resolved by {@link authenticate} from cookie session or bearer token. */
 export type Principal =
@@ -83,16 +96,16 @@ export async function authorizeProjectWrite(
   deps: AppDeps,
   principal: Principal,
   projectId: string,
-): Promise<"ok" | "unauthorized"> {
+): Promise<AuthzVerdict> {
   switch (principal.kind) {
     case "user":
       if (principal.role === "admin") return "ok";
-      return (await userProjectRank(deps, principal.userId, projectId)) >= PROJECT_RANK.maintainer ? "ok" : "unauthorized";
+      return (await userProjectRank(deps, principal.userId, projectId)) >= PROJECT_RANK.maintainer ? "ok" : "forbidden";
     case "token":
-      return principal.projectId === projectId ? "ok" : "unauthorized";
+      return principal.projectId === projectId ? "ok" : "forbidden";
     case "anonymous": {
-      if ((await deps.users.count()) > 0) return "unauthorized";
-      return (await deps.tokens.countByProject(projectId)) === 0 ? "ok" : "unauthorized";
+      if ((await deps.users.count()) > 0) return "unauthenticated";
+      return (await deps.tokens.countByProject(projectId)) === 0 ? "ok" : "unauthenticated";
     }
   }
 }
@@ -102,25 +115,27 @@ export async function authorizeProjectOwner(
   deps: AppDeps,
   principal: Principal,
   projectId: string,
-): Promise<"ok" | "unauthorized"> {
-  if (principal.kind !== "user") return "unauthorized";
+): Promise<AuthzVerdict> {
+  if (principal.kind === "anonymous") return "unauthenticated";
+  if (principal.kind === "token") return "forbidden"; // tokens are project-scoped credentials, cannot manage members
   if (principal.role === "admin") return "ok";
-  return (await userProjectRank(deps, principal.userId, projectId)) >= PROJECT_RANK.owner ? "ok" : "unauthorized";
+  return (await userProjectRank(deps, principal.userId, projectId)) >= PROJECT_RANK.owner ? "ok" : "forbidden";
 }
 
 /**
  * Authorize project creation. Global admin always; anonymous only in zero-config mode (no accounts).
  * Tokens are project-scoped credentials and cannot create projects.
  */
-export async function authorizeProjectCreate(deps: AppDeps, principal: Principal): Promise<"ok" | "unauthorized"> {
-  if (principal.kind === "user") return principal.role === "admin" ? "ok" : "unauthorized";
-  if (principal.kind === "token") return "unauthorized";
-  return (await deps.users.count()) === 0 ? "ok" : "unauthorized";
+export async function authorizeProjectCreate(deps: AppDeps, principal: Principal): Promise<AuthzVerdict> {
+  if (principal.kind === "user") return principal.role === "admin" ? "ok" : "forbidden";
+  if (principal.kind === "token") return "forbidden"; // tokens are project-scoped, cannot create projects
+  return (await deps.users.count()) === 0 ? "ok" : "unauthenticated";
 }
 
 /** Global-admin gate (user management). */
-export function requireAdmin(principal: Principal): "ok" | "unauthorized" {
-  return principal.kind === "user" && principal.role === "admin" ? "ok" : "unauthorized";
+export function requireAdmin(principal: Principal): AuthzVerdict {
+  if (principal.kind === "anonymous") return "unauthenticated";
+  return principal.kind === "user" && principal.role === "admin" ? "ok" : "forbidden";
 }
 
 /**
@@ -154,10 +169,10 @@ export async function visibilityScopeFor(deps: AppDeps, principal: Principal): P
 
 // --- Request-level convenience wrappers (authenticate + authorize in one call) ---
 
-export async function requireProjectWrite(deps: AppDeps, req: FastifyRequest, projectId: string): Promise<"ok" | "unauthorized"> {
+export async function requireProjectWrite(deps: AppDeps, req: FastifyRequest, projectId: string): Promise<AuthzVerdict> {
   return authorizeProjectWrite(deps, await authenticate(deps, req), projectId);
 }
 
-export async function requireProjectOwner(deps: AppDeps, req: FastifyRequest, projectId: string): Promise<"ok" | "unauthorized"> {
+export async function requireProjectOwner(deps: AppDeps, req: FastifyRequest, projectId: string): Promise<AuthzVerdict> {
   return authorizeProjectOwner(deps, await authenticate(deps, req), projectId);
 }

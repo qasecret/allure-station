@@ -53,8 +53,10 @@ describe("token routes + write authorization", () => {
     // b also gets a token so it's locked
     await app.inject({ method: "POST", url: "/api/projects/b/tokens", payload: { name: "ci" } });
 
+    // valid token but wrong project → 403 forbidden (holder knows their token is valid)
     const cross = await app.inject({ method: "POST", url: "/api/projects/b/generate", headers: { authorization: `Bearer ${aToken}` } });
-    expect(cross.statusCode).toBe(401);
+    expect(cross.statusCode).toBe(403);
+    expect(cross.json().error).toBe("forbidden");
     await app.close();
   });
 

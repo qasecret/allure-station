@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { AppDeps } from "../app.js";
-import { authenticate, requireAdmin, requireProjectOwner } from "../auth.js";
+import { authenticate, requireAdmin, requireProjectOwner, denyAuth } from "../auth.js";
 import { parsePage, type PageParams } from "./pagination.js";
 import { auditActionSchema, type AuditAction } from "@allure-station/shared";
 
@@ -56,7 +56,8 @@ function parseAuditFilters(query: Record<string, unknown>): AuditFilters | { err
 export function registerAuditRoutes(app: FastifyInstance, deps: AppDeps): void {
   // Global audit log — admin only.
   app.get("/audit", async (req, reply) => {
-    if (requireAdmin(await authenticate(deps, req)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    const auditVerdict = requireAdmin(await authenticate(deps, req));
+    if (auditVerdict !== "ok") return denyAuth(reply, auditVerdict);
     let page;
     try { page = pageWithDefault(req.query as Record<string, unknown>); }
     catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
@@ -73,7 +74,8 @@ export function registerAuditRoutes(app: FastifyInstance, deps: AppDeps): void {
     const { projectId } = req.params as { projectId: string };
     const project = await deps.projects.get(projectId);
     if (!project) return reply.code(404).send({ error: "project not found" });
-    if ((await requireProjectOwner(deps, req, projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    const projAuditVerdict = await requireProjectOwner(deps, req, projectId);
+    if (projAuditVerdict !== "ok") return denyAuth(reply, projAuditVerdict);
     let page;
     try { page = pageWithDefault(req.query as Record<string, unknown>); }
     catch (e) { return reply.code(400).send({ error: (e as Error).message }); }

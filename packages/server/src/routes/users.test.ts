@@ -56,8 +56,41 @@ describe("user routes (admin-gated)", () => {
     const app = buildApp(deps);
     const userCookie = await login(app, "u@x.com", "password123");
 
-    expect((await app.inject({ method: "GET", url: "/api/users" })).statusCode).toBe(401); // anonymous
-    expect((await app.inject({ method: "GET", url: "/api/users", cookies: { as_session: userCookie } })).statusCode).toBe(401); // plain user
+    const anon = await app.inject({ method: "GET", url: "/api/users" });
+    expect(anon.statusCode).toBe(401); // anonymous → 401 unauthenticated
+    expect(anon.json().error).toBe("unauthenticated");
+    const nonAdmin = await app.inject({ method: "GET", url: "/api/users", cookies: { as_session: userCookie } });
+    expect(nonAdmin.statusCode).toBe(403); // signed-in non-admin → 403 forbidden
+    expect(nonAdmin.json().error).toBe("forbidden");
+    await app.close();
+  });
+
+  it("splits 401 (anonymous) from 403 (insufficient role)", async () => {
+    const deps = await makeTestDeps();
+    await seedAdmin(deps);
+    await deps.users.create("viewer@example.com", await hashPassword("password123"), "user", deps.now());
+    const app = buildApp(deps);
+
+    // anonymous on an admin route → 401 unauthenticated
+    const anon = await app.inject({ method: "GET", url: "/api/users" });
+    expect(anon.statusCode).toBe(401);
+    expect(anon.json().error).toBe("unauthenticated");
+    // signed-in non-admin → 403 forbidden
+    const viewer = await login(app, "viewer@example.com", "password123");
+    const res = await app.inject({ method: "GET", url: "/api/users", cookies: { as_session: viewer } });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toBe("forbidden");
+    await app.close();
+  });
+
+  it("invalid bearer token stays 401 (no oracle)", async () => {
+    const deps = await makeTestDeps();
+    await seedAdmin(deps);
+    const app = buildApp(deps);
+    await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" }, cookies: { as_session: await login(app, "admin@x.com", "password123") } });
+    const res = await app.inject({ method: "POST", url: "/api/projects/p/generate", headers: { authorization: "Bearer ast_bogus" } });
+    expect([401, 404]).toContain(res.statusCode); // 401 unauthenticated, never 403
+    if (res.statusCode === 401) expect(res.json().error).toBe("unauthenticated");
     await app.close();
   });
 });

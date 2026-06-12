@@ -3,7 +3,7 @@ import { runSortSchema, sortOrderSchema, runStatusSchema, type RunSort, type Sor
 import type { AppDeps } from "../app.js";
 import { parsePage } from "./pagination.js";
 import { readGate } from "./read-gate.js";
-import { authenticate, authorizeProjectWrite } from "../auth.js";
+import { authenticate, authorizeProjectWrite, denyAuth } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 
 const ERR_RUN_GENERATING = "run is generating; wait or let the reconciler fail it first";
@@ -73,13 +73,15 @@ export function registerRunRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.delete("/projects/:projectId/runs/:runId", async (req, reply) => {
     const { projectId, runId } = req.params as { projectId: string; runId: string };
     const principal = await authenticate(deps, req);
-    if ((await authorizeProjectWrite(deps, principal, projectId)) === "unauthorized") {
+    const runDelVerdict = await authorizeProjectWrite(deps, principal, projectId);
+    if (runDelVerdict !== "ok") {
       const vis = await deps.projects.getVisibility(projectId);
       // Missing project (null) must be treated the same as private — both respond 404
       // so the response is indistinguishable and a missing project can't be fingerprinted
       // as "definitely doesn't exist" by the absence of a 404.
       const hide = !vis || vis.visibility === "private";
-      return reply.code(hide ? 404 : 401).send({ error: hide ? "not found" : "unauthorized" });
+      if (hide) return reply.code(404).send({ error: "not found" });
+      return denyAuth(reply, runDelVerdict);
     }
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "not found" });
     const run = await deps.runs.get(runId);

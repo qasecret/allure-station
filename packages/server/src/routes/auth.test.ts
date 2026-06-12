@@ -88,11 +88,11 @@ describe("auth routes", () => {
     // Anonymous cannot create projects now that accounts exist.
     expect((await app.inject({ method: "POST", url: "/api/projects", payload: { id: "nope" } })).statusCode).toBe(401);
 
-    // Maintainer can set the quality gate (a write); viewer cannot.
+    // Maintainer can set the quality gate (a write); viewer cannot (403 — signed-in but insufficient role).
     const maintCookie = await login(app, "maint@x.com", "password123");
     const viewCookie = await login(app, "view@x.com", "password123");
     expect((await app.inject({ method: "PUT", url: "/api/projects/proj/quality-gate", payload: { minTests: 1 }, cookies: { as_session: maintCookie } })).statusCode).toBe(200);
-    expect((await app.inject({ method: "PUT", url: "/api/projects/proj/quality-gate", payload: { minTests: 1 }, cookies: { as_session: viewCookie } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "PUT", url: "/api/projects/proj/quality-gate", payload: { minTests: 1 }, cookies: { as_session: viewCookie } })).statusCode).toBe(403);
     await app.close();
   });
 });
