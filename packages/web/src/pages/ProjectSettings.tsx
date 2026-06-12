@@ -9,6 +9,7 @@ import type { AuditFilters } from "@/components/AuditFilterBar";
 import { toast } from "sonner";
 import { humanizeError } from "@/lib/errors";
 import { QueryErrorState } from "@/components/QueryErrorState";
+import { CardSkeleton } from "@/components/skeletons";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
 import { settingsState } from "@/lib/settings-access";
@@ -45,7 +46,7 @@ export function ProjectSettings() {
           {projectError ? (
             <QueryErrorState error={projectErrorVal} onRetry={() => refetchProject()} />
           ) : (configLoading || authLoading) ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <><CardSkeleton /><CardSkeleton /></>
           ) : state === "signin" ? (
             <p className="text-sm text-muted-foreground">
               <Link to="/login" className="text-primary-text hover:underline">Sign in</Link> to manage this project's settings.
@@ -87,7 +88,7 @@ export function ProjectSettings() {
 
 function ProjectNameCard({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
-  const { data: project } = useQuery({ queryKey: ["project", projectId], queryFn: () => api.getProject(projectId) });
+  const { data: project, isLoading: projectLoading } = useQuery({ queryKey: ["project", projectId], queryFn: () => api.getProject(projectId) });
   const [name, setName] = useState(project?.displayName ?? "");
   useEffect(() => { setName(project?.displayName ?? ""); }, [project?.displayName]);
   const save = useMutation({
@@ -99,6 +100,7 @@ function ProjectNameCard({ projectId }: { projectId: string }) {
     },
     onError: (e) => toast.error(humanizeError(e)),
   });
+  if (projectLoading) return <CardSkeleton />;
   if (!project) return null;
   return (
     <Card>
@@ -116,12 +118,13 @@ function ProjectNameCard({ projectId }: { projectId: string }) {
 
 function VisibilityCard({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
-  const { data: project } = useQuery({ queryKey: ["project", projectId], queryFn: () => api.getProject(projectId) });
+  const { data: project, isLoading: projectLoading } = useQuery({ queryKey: ["project", projectId], queryFn: () => api.getProject(projectId) });
   const setVis = useMutation({
     mutationFn: (visibility: "public" | "private") => api.setVisibility(projectId, visibility),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["project", projectId] }); toast.success("Visibility updated"); },
     onError: (e) => toast.error(humanizeError(e)),
   });
+  if (projectLoading) return <CardSkeleton />;
   if (!project) return null;
   const next = project.visibility === "private" ? "public" : "private";
   return (
@@ -260,12 +263,14 @@ function AuditCard({ projectId, enabled }: { projectId: string; enabled: boolean
     ...(filters.to ? { to: filters.to } : {}),
   };
 
-  const { data } = useQuery({
+  const { data, isLoading: auditLoading, isError: auditError, error: auditErrorVal, refetch: refetchAudit } = useQuery({
     queryKey: ["project-audit", projectId, filters.action, filters.actor, filters.from, filters.to],
     queryFn: () => api.listProjectAudit(projectId, queryOpts),
     retry: false,
     enabled,
   });
+  if (auditLoading) return <CardSkeleton />;
+  if (auditError) return <QueryErrorState error={auditErrorVal} onRetry={() => refetchAudit()} />;
   if (data === undefined) return null;
   return (
     <Card>
@@ -295,7 +300,7 @@ function AuditCard({ projectId, enabled }: { projectId: string; enabled: boolean
 
 function QualityGateCard({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["quality-gate", projectId], queryFn: () => api.getQualityGate(projectId) });
+  const { data, isLoading: gateLoading } = useQuery({ queryKey: ["quality-gate", projectId], queryFn: () => api.getQualityGate(projectId) });
   const [form, setForm] = useState<QgForm>({ maxFailures: "", minTests: "", minPassRate: "", maxDurationSec: "" });
   useEffect(() => { if (data) setForm(qgConfigToForm(data)); }, [data]);
   const save = useMutation({
@@ -309,6 +314,7 @@ function QualityGateCard({ projectId }: { projectId: string }) {
       <Input type="number" min={0} step={1} value={form[key]} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))} placeholder={hint} className="max-w-[160px]" />
     </label>
   );
+  if (gateLoading) return <CardSkeleton />;
   if (data === undefined) return null;
   return (
     <Card>
@@ -335,7 +341,7 @@ function TokensCard({ projectId }: { projectId: string }) {
   const [created, setCreated] = useState<CreatedToken | null>(null);
   // Drop a revealed token if we navigate to another project (the route reuses this component).
   useEffect(() => { setCreated(null); }, [projectId]);
-  const { data: tokens } = useQuery({ queryKey: ["tokens", projectId], queryFn: () => api.listTokens(projectId) });
+  const { data: tokens, isLoading: tokensLoading } = useQuery({ queryKey: ["tokens", projectId], queryFn: () => api.listTokens(projectId) });
   const create = useMutation({
     mutationFn: () => api.createToken(projectId, name),
     onSuccess: (t) => { setCreated(t); setName(""); qc.invalidateQueries({ queryKey: ["tokens", projectId] }); },
@@ -346,6 +352,7 @@ function TokensCard({ projectId }: { projectId: string }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["tokens", projectId] }); toast.success("Token revoked"); },
     onError: (e) => toast.error(humanizeError(e)),
   });
+  if (tokensLoading) return <CardSkeleton />;
   if (tokens === undefined) return null;
   return (
     <Card>
@@ -395,7 +402,7 @@ function NotificationsCard({ projectId }: { projectId: string }) {
   const [events, setEvents] = useState<NotificationTrigger[]>(["failed", "gate_failed", "regression"]);
   // Clear a half-typed URL if we navigate to another project (the route reuses this component).
   useEffect(() => { setUrl(""); }, [projectId]);
-  const { data: notifs } = useQuery({ queryKey: ["notifications", projectId], queryFn: () => api.listNotifications(projectId) });
+  const { data: notifs, isLoading: notifsLoading } = useQuery({ queryKey: ["notifications", projectId], queryFn: () => api.listNotifications(projectId) });
   const create = useMutation({
     mutationFn: () => api.createNotification(projectId, { kind, url, events }),
     onSuccess: () => { setUrl(""); qc.invalidateQueries({ queryKey: ["notifications", projectId] }); toast.success("Notification added"); },
@@ -412,6 +419,7 @@ function NotificationsCard({ projectId }: { projectId: string }) {
     onError: (e) => toast.error(humanizeError(e)),
   });
   const toggle = (ev: NotificationTrigger) => setEvents((cur) => cur.includes(ev) ? cur.filter((x) => x !== ev) : [...cur, ev]);
+  if (notifsLoading) return <CardSkeleton />;
   if (notifs === undefined) return null;
   return (
     <Card>

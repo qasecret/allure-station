@@ -27,6 +27,8 @@ import { severityChipClass } from "@/lib/severity";
 import { RunsTable } from "@/components/RunsTable";
 import { QueryErrorState } from "@/components/QueryErrorState";
 import { humanizeError } from "@/lib/errors";
+import { TableSkeleton } from "@/components/skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TimeStamp } from "@/components/TimeStamp";
 import { session } from "@/lib/storage";
 
@@ -48,6 +50,7 @@ export function Project() {
   const [branchFilter, setBranchFilter] = useState("");
   const [tab, setTab] = useState<"report" | "runs">("report");
   const [focusReport, setFocusReport] = useState(false);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
   const [announcement, setAnnouncement] = useState<{ id: number; text: string }>({ id: 0, text: "" });
   const announceSeq = useRef(0);
   const { user } = useAuth();
@@ -124,6 +127,9 @@ export function Project() {
   const selectedVisible = selectedRun && visibleRuns.some((r) => r.id === selectedRun) ? selectedRun : null;
   const current = selectedVisible ?? visibleRuns.find((r) => r.status === "ready")?.id ?? visibleRuns[0]?.id ?? null;
   const cur = runs.find((r) => r.id === current);
+  // Reset iframe loaded state when the selected run changes so the shimmer shows on each run switch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setIframeLoaded(false); }, [current]);
   // The most-recent ready run strictly older than the current one — derived from visibleRuns so
   // deltas compare within the active branch filter, not across branches.
   const prevReady = visibleRuns
@@ -286,8 +292,12 @@ export function Project() {
             {cur?.status === "failed"
               ? <FailedRunPanel projectId={id} run={cur} />
               : current
-                ? <iframe ref={frameRef} title="report" className="min-h-0 flex-1 rounded-xl border bg-card shadow-sm"
-                    src={withReportHash(`/api/projects/${id}/runs/${current}/report/index.html`, current === initialDeepLink.current?.runId ? initialDeepLink.current.hash : null)} />
+                ? <div className="relative min-h-0 flex-1">
+                    {!iframeLoaded && <Skeleton className="absolute inset-0 rounded-xl" />}
+                    <iframe ref={frameRef} title="report" className="size-full min-h-0 rounded-xl border bg-card shadow-sm"
+                      src={withReportHash(`/api/projects/${id}/runs/${current}/report/index.html`, current === initialDeepLink.current?.runId ? initialDeepLink.current.hash : null)}
+                      onLoad={() => setIframeLoaded(true)} />
+                  </div>
                 : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use "Upload & generate" to create the first report.'} />}
           </TabsContent>
           <TabsContent value="runs" className="flex min-h-0 flex-1 flex-col">
@@ -479,7 +489,7 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
       setBase((b) => (ids.includes(b) ? b : ids[1] ?? ""));
     } else { setTarget(ids[0] ?? ""); setBase(ids[1] ?? ""); }
   }, [readyIds, touched]);
-  const { data: diff, isError: diffError, error: diffErrorVal, refetch: refetchDiff } = useQuery({
+  const { data: diff, isLoading: diffLoading, isError: diffError, error: diffErrorVal, refetch: refetchDiff } = useQuery({
     queryKey: ["compare", projectId, base, target],
     queryFn: () => api.compareRuns(projectId, base, target),
     enabled: !!base && !!target && base !== target,
@@ -501,7 +511,8 @@ function ComparePanel({ projectId, readyRuns }: { projectId: string; readyRuns: 
       </div>
       {base === target ? <p className="text-sm text-muted-foreground">Pick two different runs.</p>
         : diffError ? <QueryErrorState error={diffErrorVal} onRetry={() => refetchDiff()} />
-        : !diff ? <p className="text-sm text-muted-foreground">Loading comparison…</p>
+        : diffLoading ? <TableSkeleton rows={4} cols={3} />
+        : !diff ? null
         : (
           <div className="flex flex-wrap gap-4">
             <Bucket label="Newly failing" color="text-status-fail-text" tests={diff.newlyFailing} onOpen={setSelected} />
@@ -559,7 +570,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 function TestHistorySheet({ projectId, test, onClose }: { projectId: string; test: TestDiff | null; onClose: () => void }) {
-  const { data, isError: historyError, error: historyErrorVal, refetch: refetchHistory } = useQuery({
+  const { data, isLoading: historyLoading, isError: historyError, error: historyErrorVal, refetch: refetchHistory } = useQuery({
     queryKey: ["test-history", projectId, test?.historyId, test?.fullName],
     queryFn: () => api.getTestHistory(projectId, { historyId: test!.historyId ?? undefined, fullName: test!.fullName ?? undefined, name: test!.name, limit: 50 }),
     enabled: !!test && !!(test.historyId ?? test.fullName),
@@ -572,7 +583,7 @@ function TestHistorySheet({ projectId, test, onClose }: { projectId: string; tes
         </SheetHeader>
         {historyError ? (
           <div className="mt-4"><QueryErrorState error={historyErrorVal} onRetry={() => refetchHistory()} /></div>
-        ) : !data ? <p className="mt-4 text-sm text-muted-foreground">Loading history…</p> : (
+        ) : historyLoading ? <div className="mt-4"><TableSkeleton rows={6} cols={2} /></div> : !data ? null : (
           <div className="mt-4 space-y-3">
             <Badge variant="secondary">Flaky {Math.round(data.flakeRate * 100)}% over {data.window} run{data.window === 1 ? "" : "s"}</Badge>
             {data.regression ? <RegressionHint regression={data.regression} entries={data.entries} /> : null}

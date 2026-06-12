@@ -8,6 +8,7 @@ import { SortTh } from "@/components/SortTh";
 import { Topbar } from "@/components/Topbar";
 import { QueryErrorState } from "@/components/QueryErrorState";
 import { humanizeError } from "@/lib/errors";
+import { TableSkeleton } from "@/components/skeletons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +35,7 @@ export function Users() {
   const [sortKey, setSortKey] = useState<UserSortKey | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder | null>(null);
 
-  const { data: rawUsers = [], isError: usersError, error: usersErrorVal, refetch: refetchUsers } = useQuery({ queryKey: ["users"], queryFn: () => api.listUsers(), enabled: user?.role === "admin" });
+  const { data: rawUsers = [], isLoading: usersLoading, isError: usersError, error: usersErrorVal, refetch: refetchUsers } = useQuery({ queryKey: ["users"], queryFn: () => api.listUsers(), enabled: user?.role === "admin" });
 
   const users = useMemo(() => {
     if (!sortKey) return rawUsers;
@@ -86,6 +87,7 @@ export function Users() {
             </CardContent>
           </Card>
           {usersError && <QueryErrorState error={usersErrorVal} onRetry={() => refetchUsers()} />}
+          {usersLoading && <TableSkeleton rows={3} cols={3} />}
           <Card>
             <CardContent className="p-0">
               {/* Mobile list — visible below sm */}

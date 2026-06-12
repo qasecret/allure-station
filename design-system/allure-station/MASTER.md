@@ -149,6 +149,26 @@ All UI animation and transition durations are governed by three CSS-variable tok
 
 ---
 
+## Time
+
+All timestamps in the UI follow a single convention driven by the `TimeStamp` component (`src/components/TimeStamp.tsx`):
+
+- **Default (relative + tooltip):** the visible text is a compact relative string (`relativeTime`) — `just now`, `3m ago`, `2d ago`, or a short absolute date when the event is more than 7 days ago (with year when more than a year apart). The full local timestamp (`formatAbsolute`) is shown in a keyboard-accessible Radix `<Tooltip>` (the `title` attribute is not keyboard-reachable — never use it as the sole absolute timestamp source).
+- **Dense mode** (`dense` prop): renders both the relative and the full absolute timestamp inline, separated by ` · `. Use this on audit/compliance surfaces where hovering is unacceptable (e.g. the global Audit log Time column, the project-scoped AuditCard in ProjectSettings).
+- **ProjectCard exception:** `ProjectCard` keeps a plain `relativeTime` text with no tooltip — a `<Tooltip>` inside a `<Link>` creates a focus trap. Document any future exceptions with a comment at the call site.
+
+**Usage:**
+```tsx
+<TimeStamp iso={run.createdAt} />                          // relative + hover-to-absolute
+<TimeStamp iso={entry.at} dense />                         // audit rows: "2d ago · Jun 12, 2026, 09:44:11"
+<TimeStamp iso={entry.at} dense className="text-xs ..." /> // audit rows with custom class
+{t.lastUsedAt ? <TimeStamp iso={t.lastUsedAt} /> : "never"} // nullable timestamps
+```
+
+**`TooltipProvider`** is mounted once at the root in `main.tsx` with `delayDuration={300}` — do not add a second `<TooltipProvider>` in individual components.
+
+---
+
 ## Anti-patterns (do NOT use)
 
 - ❌ Playful design, AI purple/pink gradients, hidden credentials (off-brand for *Trust & Authority*)

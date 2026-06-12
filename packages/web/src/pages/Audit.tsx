@@ -14,6 +14,7 @@ import type { AuditFilters } from "@/components/AuditFilterBar";
 import { Topbar } from "@/components/Topbar";
 import { QueryErrorState } from "@/components/QueryErrorState";
 import { humanizeError } from "@/lib/errors";
+import { TableSkeleton } from "@/components/skeletons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -72,7 +73,7 @@ export function Audit() {
     ...(filters.to ? { to: filters.to } : {}),
   };
 
-  const { data, isError: auditError, error: auditErrorVal, refetch: refetchAudit } = useQuery({
+  const { data, isLoading: auditLoading, isError: auditError, error: auditErrorVal, refetch: refetchAudit } = useQuery({
     queryKey: ["audit", page, filters.action, filters.actor, filters.from, filters.to],
     queryFn: () => api.listAudit(queryOpts),
     enabled: user?.role === "admin",
@@ -157,6 +158,7 @@ export function Audit() {
           </div>
 
           {auditError && <QueryErrorState error={auditErrorVal} onRetry={() => refetchAudit()} />}
+          {auditLoading && <TableSkeleton rows={8} cols={3} />}
           <Card className="animate-fade-in">
             <CardContent className="p-0">
               {/* Mobile list — visible below sm */}

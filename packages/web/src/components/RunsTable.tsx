@@ -12,6 +12,7 @@ import { TimeStamp } from "@/components/TimeStamp";
 import { evaluateGate } from "@/lib/quality-gate-verdict";
 import { humanizeError } from "@/lib/errors";
 import { QueryErrorState } from "@/components/QueryErrorState";
+import { TableSkeleton } from "@/components/skeletons";
 
 const PAGE = 20;
 const FILTERS: Array<{ label: string; value?: RunStatus }> = [
@@ -71,7 +72,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
     setPage(0);
   };
 
-  const { data, isError: runsError, error: runsErrorVal, refetch: refetchRuns } = useQuery({
+  const { data, isLoading: runsLoading, isError: runsError, error: runsErrorVal, refetch: refetchRuns } = useQuery({
     queryKey: ["runs-page", projectId, status ?? "all", page, sortKey ?? "createdAt", sortOrder ?? "desc"],
     queryFn: () => api.listRunsWithTotal(projectId, {
       status,
@@ -119,6 +120,7 @@ export function RunsTable({ projectId, canWrite, onOpenRun }: {
         ))}
       </div>
       {runsError && <QueryErrorState error={runsErrorVal} onRetry={() => refetchRuns()} />}
+      {runsLoading && <TableSkeleton rows={5} cols={6} />}
       {/* Mobile card list — visible below sm */}
       <ul role="list" className="animate-fade-in space-y-2 sm:hidden">
         {items.map((r) => {
