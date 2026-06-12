@@ -671,7 +671,7 @@ for (const backend of backends) {
       it("remove deletes the user and cascades to its sessions and memberships", async () => {
         await projects.create("p", "2026-06-06T00:00:00.000Z");
         const u = await users.create("u@x.com", "h", "user", "2026-06-06T00:00:00.000Z");
-        await sessions.create("sess-hash", u.id, "2026-06-06T00:00:00.000Z", "2026-06-13T00:00:00.000Z");
+        await sessions.create("sess-hash", u.id, "2026-06-06T00:00:00.000Z", "2026-06-13T00:00:00.000Z", {});
         await members.upsert("p", u.id, "viewer", "2026-06-06T00:00:00.000Z");
 
         expect(await users.remove(u.id)).toBe(true);
@@ -695,6 +695,23 @@ for (const backend of backends) {
 
         await sessions.removeByHash("live");
         expect(await sessions.findByHash("live")).toBeNull();
+      });
+
+      it("sessions: stores device info, lists by user newest-first, revokes by id (user-scoped), revokes all-except", async () => {
+        const future = "2026-12-31T00:00:00.000Z";
+        const u1 = await users.create("a@x.com", "hash", "user", "2026-06-12T00:00:00.000Z");
+        const u2 = await users.create("b@x.com", "hash", "user", "2026-06-12T00:00:00.000Z");
+        const s1 = await sessions.create("h1", u1.id, "2026-06-12T01:00:00.000Z", future, { userAgent: "UA1", ip: "10.0.0.1" });
+        const s2 = await sessions.create("h2", u1.id, "2026-06-12T02:00:00.000Z", future, { userAgent: "UA2", ip: null });
+        const s3 = await sessions.create("h3", u2.id, "2026-06-12T03:00:00.000Z", future, {});
+        const list = await sessions.listByUser(u1.id);
+        expect(list.map((s) => s.id)).toEqual([s2.id, s1.id]);          // newest first, own only
+        expect(list[1]).toMatchObject({ userAgent: "UA1", ip: "10.0.0.1" });
+        expect(await sessions.removeById(s3.id, u1.id)).toBe(false);    // cannot revoke another user's
+        expect(await sessions.removeById(s1.id, u1.id)).toBe(true);
+        expect(await sessions.removeAllExcept(u1.id, s2.id)).toBe(0);   // only s2 left → nothing revoked
+        await sessions.create("h4", u1.id, "2026-06-12T04:00:00.000Z", future, {});
+        expect(await sessions.removeAllExcept(u1.id, s2.id)).toBe(1);
       });
     });
 

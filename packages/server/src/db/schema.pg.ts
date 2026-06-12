@@ -71,6 +71,8 @@ export const sessions = pgTable("sessions", {
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   createdAt: text("created_at").notNull(),
   expiresAt: text("expires_at").notNull(),
+  userAgent: text("user_agent"),
+  ip: text("ip"),
 }, (t) => ({
   byHash: uniqueIndex("idx_sessions_hash").on(t.tokenHash),
   byUser: index("idx_sessions_user").on(t.userId),

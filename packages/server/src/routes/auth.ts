@@ -27,7 +27,7 @@ function setSessionCookie(reply: FastifyReply, deps: AppDeps, token: string): vo
 async function startSession(reply: FastifyReply, deps: AppDeps, userId: string): Promise<void> {
   const token = generateSessionToken();
   const expiresAt = new Date(Date.parse(deps.now()) + deps.sessionTtlMs).toISOString();
-  await deps.sessions.create(hashSessionToken(token), userId, deps.now(), expiresAt);
+  await deps.sessions.create(hashSessionToken(token), userId, deps.now(), expiresAt, {});
   void deps.sessions.deleteExpired(deps.now()).catch(() => {}); // opportunistic, best-effort
   setSessionCookie(reply, deps, token);
 }
