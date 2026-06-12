@@ -46,6 +46,7 @@ function PasswordCard() {
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const qc = useQueryClient();
 
   // Inline validation errors
   const nextTooShort = next.length > 0 && next.length < 8;
@@ -60,6 +61,7 @@ function PasswordCard() {
       setNext("");
       setConfirm("");
       setInlineError(null);
+      qc.invalidateQueries({ queryKey: ["sessions"] });
       toast.success("Password changed — other sessions were signed out.");
     },
     onError: (e) => {
@@ -161,14 +163,8 @@ function SessionsCard() {
 
   const revoke = useMutation({
     mutationFn: (s: SessionInfo) => api.revokeSession(s.id),
-    onSuccess: async (_data, s) => {
-      if (s.current) {
-        // Revoking the current session → server cleared the cookie → go to login
-        await qc.invalidateQueries({ queryKey: ["me"] });
-        navigate("/login");
-      } else {
-        qc.invalidateQueries({ queryKey: ["sessions"] });
-      }
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sessions"] });
     },
     onError: (e) => toast.error(humanizeError(e)),
   });
@@ -242,10 +238,14 @@ function SessionsCard() {
                       size="sm"
                       aria-label={s.current ? "Sign out this session" : "Revoke session"}
                       disabled={revoke.isPending && revoke.variables?.id === s.id}
-                      onClick={() => {
+                      onClick={async () => {
                         if (s.current) {
-                          logout().catch(() => {});
-                          navigate("/login");
+                          try {
+                            await logout();
+                            navigate("/login");
+                          } catch {
+                            toast.error("Sign out failed. Please try again.");
+                          }
                         } else {
                           revoke.mutate(s);
                         }

@@ -29,6 +29,5 @@ describe("meta routes", () => {
     const app2 = buildApp(deps2);
     expect((await app2.inject({ method: "GET", url: "/api/config" })).json().branding.name).toBe("Acme QA");
     await app2.close();
-
   });
 });
