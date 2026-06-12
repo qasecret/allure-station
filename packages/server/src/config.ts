@@ -28,6 +28,11 @@ export interface AppConfig {
   adminEmail: string | undefined;    // seeded/upserted as a global admin on startup (with adminPassword)
   adminPassword: string | undefined;
   trustProxy: boolean;               // trust X-Forwarded-For/Proto headers (set true behind a load balancer/proxy)
+  branding: {
+    name: string;       // displayed in the UI title and login page (BRAND_NAME)
+    tagline: string;    // displayed on the login page (BRAND_TAGLINE)
+    logoUrl: string | null; // URL of a custom logo image (BRAND_LOGO_URL)
+  };
   oidc: OidcConfig | undefined;      // external SSO; present only when OIDC_ISSUER is set
   storage: {
     backend: StorageBackend;
@@ -148,6 +153,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     adminEmail: env.ADMIN_EMAIL || undefined,
     adminPassword: env.ADMIN_PASSWORD || undefined,
     trustProxy: env.TRUST_PROXY === "true" || env.TRUST_PROXY === "1",
+    branding: {
+      name: env.BRAND_NAME ?? "Allure Station",
+      tagline: env.BRAND_TAGLINE ?? "Your test reports, beautifully hosted.",
+      logoUrl: env.BRAND_LOGO_URL ?? null,
+    },
     oidc,
     storage,
   };

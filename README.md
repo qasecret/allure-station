@@ -240,7 +240,10 @@ Drizzle migrations apply automatically on startup. After a schema change, regene
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | _(none)_ | Seed/upsert a global admin on startup (idempotent). |
 | `SESSION_TTL_MS` | `604800000` (7d) | Session lifetime. |
 | `COOKIE_SECURE` | _(auto)_ | Force the Secure cookie flag; auto-on when `PUBLIC_URL` is `https`. |
-| `TRUST_PROXY` | `false` | Set `true` or `1` when the server runs behind a reverse-proxy/load-balancer that sets `X-Forwarded-For`/`X-Forwarded-Proto`. **Do not enable on a directly-exposed server** (spoofable headers). |
+| `TRUST_PROXY` | `false` | Set `true` or `1` when the server runs behind a reverse-proxy/load-balancer that sets `X-Forwarded-For`/`X-Forwarded-Proto`. **Do not enable on a directly-exposed server** (spoofable headers). Session IPs are only recorded when this is enabled. |
+| `BRAND_NAME` | `Allure Station` | White-label display name shown in the UI title, sidebar, and login page. |
+| `BRAND_TAGLINE` | `Your test reports, beautifully hosted.` | Tagline shown on the login page below the product name. |
+| `BRAND_LOGO_URL` | _(none)_ | URL of a custom logo image (shown on the login page). Falls back to the default Allure Station logo when unset. |
 | `OIDC_ISSUER` | _(none)_ | Issuer URL (OIDC discovery). Setting it enables SSO. |
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | _(required for oidc)_ | From your IdP's client registration. |
 | `OIDC_REDIRECT_URI` | from `PUBLIC_URL` | `…/api/auth/oidc/callback`; must match the IdP registration. |

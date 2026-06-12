@@ -42,6 +42,7 @@ export function buildDeps(config: AppConfig, queue: JobQueue, db: Db, bus: Event
     sessionTtlMs: config.sessionTtlMs,
     cookieSecure: config.cookieSecure,
     trustProxy: config.trustProxy,
+    branding: config.branding,
     now: () => new Date().toISOString(),
     newId: () => nanoid(12),
   };

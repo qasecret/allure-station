@@ -152,4 +152,63 @@ describe("token expiry", () => {
 
     await app.close();
   });
+
+  it("string '30' for expiresInDays is rejected with 400 (no coercion)", async () => {
+    const app = buildApp(await makeTestDeps());
+    await createProject(app, "p");
+
+    // Send expiresInDays as a string — zod literal(30) requires a number, not a string.
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/projects/p/tokens",
+      payload: { name: "ci", expiresInDays: "30" },
+    });
+    expect(res.statusCode).toBe(400);
+
+    await app.close();
+  });
+
+  it("an expired token's use does NOT bump lastUsedAt", async () => {
+    let nowMs = Date.parse(NOW);
+    const deps = await makeTestDeps({ now: () => new Date(nowMs).toISOString() });
+    const app = buildApp(deps);
+    await createProject(app, "p");
+
+    // Create a token that expires in 30 days; lastUsedAt starts null.
+    const tok = (await app.inject({ method: "POST", url: "/api/projects/p/tokens", payload: { name: "expiring", expiresInDays: 30 } })).json().token as string;
+
+    // Advance clock past expiry.
+    nowMs += 31 * 86_400_000;
+
+    // Attempt an authenticated call with the now-expired token — it resolves to anonymous.
+    await app.inject({ method: "POST", url: "/api/projects/p/generate", headers: { authorization: `Bearer ${tok}` } });
+
+    // Inspect directly: lastUsedAt must still be null — touchLastUsed is NOT called for expired tokens.
+    const tokens = await deps.tokens.listByProject("p");
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0].lastUsedAt).toBeNull();
+
+    await app.close();
+  });
+
+  it("sole-token-expired project stays locked to anonymous writes (zero-config mode)", async () => {
+    let nowMs = Date.parse(NOW);
+    const deps = await makeTestDeps({ now: () => new Date(nowMs).toISOString() });
+    const app = buildApp(deps);
+    await createProject(app, "p");
+
+    // No users; create a token with expiry — project becomes locked.
+    await app.inject({ method: "POST", url: "/api/projects/p/tokens", payload: { name: "ci", expiresInDays: 30 } });
+
+    // Advance clock past expiry.
+    nowMs += 31 * 86_400_000;
+
+    // An expired token still counts toward the project's token set (countByProject is expiry-agnostic),
+    // so zero-config open mode must NOT be restored: anonymous POST generate → 401, NOT reopened.
+    const res = await app.inject({ method: "POST", url: "/api/projects/p/generate" });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().error).toBe("unauthenticated");
+
+    await app.close();
+  });
 });

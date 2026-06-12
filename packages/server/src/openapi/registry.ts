@@ -35,6 +35,11 @@ const configResponse = z.object({
   securityEnabled: z.boolean(),
   oidc: z.object({ enabled: z.boolean(), label: z.string().optional() }),
   allure: z.string(),
+  branding: z.object({
+    name: z.string(),
+    tagline: z.string(),
+    logoUrl: z.string().nullable(),
+  }),
 });
 
 export interface OpenapiOptions {

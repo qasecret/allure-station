@@ -56,6 +56,11 @@ export interface AppDeps {
   sessionTtlMs: number;          // session cookie/row lifetime
   cookieSecure: boolean;         // mark the session cookie Secure (https-only) in prod
   trustProxy: boolean;           // trust X-Forwarded-For/Proto (set when behind a load balancer)
+  branding: {
+    name: string;
+    tagline: string;
+    logoUrl: string | null;
+  };
   now: () => string;
   newId: () => string;
 }
