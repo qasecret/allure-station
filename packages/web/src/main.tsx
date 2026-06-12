@@ -12,11 +12,13 @@ import { Users } from "./pages/Users.js";
 import { Audit } from "./pages/Audit.js";
 import { AppShell } from "@/components/AppShell";
 import { AuthProvider } from "./auth.js";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { applyTheme, getTheme } from "./theme.js";
 import "./styles.css";
 
 export const api = createClient(import.meta.env.VITE_API_BASE ?? "/api");
-const qc = new QueryClient();
+// retry once on transient query failures; mutations never auto-retry
+const qc = new QueryClient({ defaultOptions: { queries: { retry: 1 }, mutations: { retry: 0 } } });
 
 applyTheme(getTheme());
 if (typeof matchMedia !== "undefined") {
@@ -28,21 +30,23 @@ if (typeof matchMedia !== "undefined") {
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={qc}>
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route element={<AppShell><Outlet /></AppShell>}>
-              <Route path="/" element={<Projects />} />
-              <Route path="/projects/:id" element={<Project />} />
-              <Route path="/projects/:id/settings" element={<ProjectSettings />} />
-              <Route path="/users" element={<Users />} />
-              <Route path="/audit" element={<Audit />} />
-            </Route>
-          </Routes>
-          <Toaster richColors position="top-right" />
-        </AuthProvider>
-      </BrowserRouter>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <AuthProvider>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route element={<AppShell><Outlet /></AppShell>}>
+                <Route path="/" element={<Projects />} />
+                <Route path="/projects/:id" element={<Project />} />
+                <Route path="/projects/:id/settings" element={<ProjectSettings />} />
+                <Route path="/users" element={<Users />} />
+                <Route path="/audit" element={<Audit />} />
+              </Route>
+            </Routes>
+            <Toaster richColors position="top-right" />
+          </AuthProvider>
+        </BrowserRouter>
+      </ErrorBoundary>
     </QueryClientProvider>
   </React.StrictMode>,
 );
