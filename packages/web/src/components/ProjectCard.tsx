@@ -58,7 +58,7 @@ export function ProjectCard({ p }: { p: ProjectListItem }) {
               {!p.latestRunId
                 ? "No runs yet"
                 : lr
-                  ? <>{healthRun?.stats ? `${healthRun.stats.passed}/${healthRun.stats.total} passed` : lr.status}{lr.createdAt ? ` · ${relativeTime(lr.createdAt)}` : ""}</>
+                  ? <>{lr.status === "ready" && lr.stats ? `${lr.stats.passed}/${lr.stats.total} passed` : lr.status}{lr.createdAt ? ` · ${relativeTime(lr.createdAt)}` : ""}</>
                   : "No runs yet"}
             </p>
           </div>
