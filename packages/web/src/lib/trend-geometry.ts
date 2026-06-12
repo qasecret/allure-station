@@ -88,6 +88,9 @@ export function xAxisLabels(
   const first = candidates[0];
   const last = candidates[n - 1];
 
+  // If first and last are too close together, only show the last (newest date wins).
+  if ((last.index - first.index) * pitch < labelWidth) return [last];
+
   if (n === 2) return [first, last];
 
   const kept: Array<{ index: number; text: string }> = [first];

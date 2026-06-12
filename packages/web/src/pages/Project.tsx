@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -50,7 +50,6 @@ export function Project() {
   const [branchFilter, setBranchFilter] = useState("");
   const [tab, setTab] = useState<"report" | "runs">("report");
   const [focusReport, setFocusReport] = useState(false);
-  const [iframeLoaded, setIframeLoaded] = useState(false);
   const [announcement, setAnnouncement] = useState<{ id: number; text: string }>({ id: 0, text: "" });
   const announceSeq = useRef(0);
   const { user } = useAuth();
@@ -127,8 +126,6 @@ export function Project() {
   const selectedVisible = selectedRun && visibleRuns.some((r) => r.id === selectedRun) ? selectedRun : null;
   const current = selectedVisible ?? visibleRuns.find((r) => r.status === "ready")?.id ?? visibleRuns[0]?.id ?? null;
   const cur = runs.find((r) => r.id === current);
-  // Reset iframe loaded state when the selected run changes so the shimmer shows on each run switch.
-  useEffect(() => { setIframeLoaded(false); }, [current]);
   // The most-recent ready run strictly older than the current one — derived from visibleRuns so
   // deltas compare within the active branch filter, not across branches.
   const prevReady = visibleRuns
@@ -296,12 +293,12 @@ export function Project() {
             {cur?.status === "failed"
               ? <FailedRunPanel projectId={id} run={cur} />
               : current
-                ? <div className="relative min-h-0 flex-1">
-                    {!iframeLoaded && <Skeleton aria-hidden className="absolute inset-0 rounded-xl" />}
-                    <iframe ref={frameRef} title="report" className="size-full min-h-0 rounded-xl border bg-card shadow-sm"
-                      src={withReportHash(`/api/projects/${id}/runs/${current}/report/index.html`, current === initialDeepLink.current?.runId ? initialDeepLink.current.hash : null)}
-                      onLoad={() => setIframeLoaded(true)} />
-                  </div>
+                ? <ReportFrame
+                    key={current}
+                    ref={frameRef}
+                    src={withReportHash(`/api/projects/${id}/runs/${current}/report/index.html`, current === initialDeepLink.current?.runId ? initialDeepLink.current.hash : null)}
+                    title="report"
+                  />
                 : <EmptyState icon={FileBarChart} title="No ready report yet" description={'Use "Upload & generate" to create the first report.'} />}
           </TabsContent>
           <TabsContent value="runs" className="flex min-h-0 flex-1 flex-col">
@@ -312,6 +309,31 @@ export function Project() {
     </>
   );
 }
+
+// Owns the loaded/shimmer state for a single report iframe. Rendered with key={runId} by the
+// parent so a run switch remounts it with fresh state — no post-paint reset effect needed.
+// forwardRef keeps the parent's frameRef polling machinery intact.
+const ReportFrame = forwardRef<HTMLIFrameElement, { src: string; title: string }>(
+  function ReportFrame({ src, title }, ref) {
+    const [loaded, setLoaded] = useState(false);
+    return (
+      <div className="relative min-h-0 flex-1">
+        {!loaded && (
+          <div className="absolute inset-0 rounded-xl bg-card">
+            <Skeleton aria-hidden className="size-full rounded-xl" />
+          </div>
+        )}
+        <iframe
+          ref={ref}
+          title={title}
+          className="size-full min-h-0 rounded-xl border bg-card shadow-sm"
+          src={src}
+          onLoad={() => setLoaded(true)}
+        />
+      </div>
+    );
+  }
+);
 
 // A failed run has no report to embed; show the captured error and a one-click retry (which re-runs
 // generation against the still-staged results). SSE flips the run back to generating/ready live.

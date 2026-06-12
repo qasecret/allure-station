@@ -113,4 +113,28 @@ describe("xAxisLabels thinning", () => {
   it("is backward compatible without a budget (no thinning)", () => {
     expect(xAxisLabels(mkPts(3))).toHaveLength(3);
   });
+
+  it("2 points on different days (gap 22px < 66px): returns only the last label (newest)", () => {
+    // 2 points, plotWidth 558, labelWidth 66 → pitch=22, gap=22 < 66 → only last survives
+    const pts = [
+      { runId: "a", createdAt: "2026-06-09T23:50:00.000Z", stats: { total: 4, passed: 4, failed: 0, broken: 0, skipped: 0, durationMs: 1000 } },
+      { runId: "b", createdAt: "2026-06-10T00:05:00.000Z", stats: { total: 4, passed: 4, failed: 0, broken: 0, skipped: 0, durationMs: 1000 } },
+    ];
+    const labels = xAxisLabels(pts, { plotWidth: 558, labelWidth: 66 });
+    expect(labels).toHaveLength(1);
+    expect(labels[0].index).toBe(1);
+  });
+
+  it("3 points spanning midnight at index 2 (gap 44px < 66px): returns only the last label", () => {
+    // 3 points: indices 0,1 on 2026-06-09, index 2 on 2026-06-10
+    // barPitch(3, 558) = 22, candidates = [{index:0},{index:2}], gap=2*22=44 < 66 → only last survives
+    const pts = [
+      { runId: "a", createdAt: "2026-06-09T22:00:00.000Z", stats: { total: 4, passed: 4, failed: 0, broken: 0, skipped: 0, durationMs: 1000 } },
+      { runId: "b", createdAt: "2026-06-09T23:00:00.000Z", stats: { total: 4, passed: 4, failed: 0, broken: 0, skipped: 0, durationMs: 1000 } },
+      { runId: "c", createdAt: "2026-06-10T00:30:00.000Z", stats: { total: 4, passed: 4, failed: 0, broken: 0, skipped: 0, durationMs: 1000 } },
+    ];
+    const labels = xAxisLabels(pts, { plotWidth: 558, labelWidth: 66 });
+    expect(labels).toHaveLength(1);
+    expect(labels[0].index).toBe(2);
+  });
 });
