@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { createClient } from "./api/client.js";
@@ -18,6 +18,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { applyTheme, getTheme } from "./theme.js";
 import { ApiError } from "./lib/errors.js";
 import "./styles.css";
+
+function BrandTitle() {
+  const { data } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
+  useEffect(() => { if (data?.branding?.name) document.title = data.branding.name; }, [data?.branding?.name]);
+  return null;
+}
 
 export const api = createClient(import.meta.env.VITE_API_BASE ?? "/api");
 // Deterministic 4xx errors are never retried; transient network/5xx failures are retried once.
@@ -44,6 +50,7 @@ createRoot(document.getElementById("root")!).render(
       <ErrorBoundary>
         <BrowserRouter>
           <AuthProvider>
+            <BrandTitle />
             <TooltipProvider delayDuration={300}>
               <Routes>
                 <Route path="/login" element={<Login />} />

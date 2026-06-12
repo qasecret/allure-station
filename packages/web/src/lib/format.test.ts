@@ -120,4 +120,16 @@ describe("tokenExpiryStatus", () => {
     expect(tokenExpiryStatus("2026-06-20T00:00:00.000Z", now)).toEqual({ label: "expires in 8d", tone: "warn" });   // ≤14d
     expect(tokenExpiryStatus("2026-06-11T00:00:00.000Z", now)).toEqual({ label: "expired", tone: "expired" });
   });
+  it("exactly now+14d is warn (boundary inclusive)", () => {
+    const exactly14d = new Date(now + 14 * 86_400_000).toISOString();
+    expect(tokenExpiryStatus(exactly14d, now).tone).toBe("warn");
+  });
+  it("now+14d+60s is muted (just past the warn boundary)", () => {
+    const justOver14d = new Date(now + 14 * 86_400_000 + 60_000).toISOString();
+    expect(tokenExpiryStatus(justOver14d, now).tone).toBe("muted");
+  });
+  it("exactly now is expired (zero ms remaining)", () => {
+    const exactlyNow = new Date(now).toISOString();
+    expect(tokenExpiryStatus(exactlyNow, now)).toEqual({ label: "expired", tone: "expired" });
+  });
 });

@@ -352,7 +352,7 @@ const EXPIRES_OPTIONS: { label: string; value: string }[] = [
 function ExpiryCell({ expiresAt }: { expiresAt: string | null }) {
   const status = tokenExpiryStatus(expiresAt);
   if (status.tone === "expired") {
-    return <Badge variant="destructive" className="text-status-fail-text">{status.label}</Badge>;
+    return <Badge variant="outline" className="border-status-fail/30 bg-status-fail/15 text-status-fail-text">{status.label}</Badge>;
   }
   if (status.tone === "warn") {
     return <span className="text-sm text-status-broken-text">{status.label}</span>;
