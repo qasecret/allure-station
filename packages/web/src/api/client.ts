@@ -2,7 +2,7 @@ import type {
   Project, Run, TrendPoint, RunEvent, CompareResult, TestHistory, TestTrace,
   SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry, ProjectVisibility,
   ApiToken, CreatedToken, QualityGateConfig, RunSummary, Notification, NotificationKind, NotificationTrigger,
-  RunMetadata, UpdateProjectRequest, ProjectListItem, ProjectSort, Overview,
+  RunMetadata, UpdateProjectRequest, ProjectListItem, ProjectSort, Overview, SessionInfo,
 } from "@allure-station/shared";
 import { ApiError } from "../lib/errors.js";
 
@@ -55,6 +55,11 @@ export interface ApiClient {
   createNotification(projectId: string, body: { kind: NotificationKind; url: string; events: NotificationTrigger[] }): Promise<Notification>;
   testNotification(projectId: string, notificationId: string): Promise<{ ok: boolean; status?: number; error?: string }>;
   deleteNotification(projectId: string, notificationId: string): Promise<void>;
+  // --- Account & sessions ---
+  listSessions(): Promise<SessionInfo[]>;
+  revokeSession(id: string): Promise<void>;
+  revokeOtherSessions(): Promise<{ revoked: number }>;
+  changePassword(body: { currentPassword: string; newPassword: string }): Promise<void>;
 }
 
 export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
@@ -149,6 +154,11 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     testNotification: (projectId, notificationId) =>
       json<{ ok: boolean; status?: number; error?: string }>(`/projects/${projectId}/notifications/${notificationId}/test`, { method: "POST" }),
     deleteNotification: (projectId, notificationId) => noContent(`/projects/${projectId}/notifications/${notificationId}`, { method: "DELETE" }),
+    listSessions: () => json<SessionInfo[]>("/auth/sessions", { method: "GET" }),
+    revokeSession: (id) => noContent(`/auth/sessions/${id}`, { method: "DELETE" }),
+    revokeOtherSessions: () => json<{ revoked: number }>("/auth/sessions", { method: "DELETE" }),
+    changePassword: (body) =>
+      noContent("/auth/password", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
     subscribeRuns: (projectId, onEvent) => {
       // No-op where EventSource is unavailable (e.g. jsdom/SSR); the page still works via fetch.
       if (typeof EventSource === "undefined") return () => {};

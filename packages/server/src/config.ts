@@ -154,9 +154,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     adminPassword: env.ADMIN_PASSWORD || undefined,
     trustProxy: env.TRUST_PROXY === "true" || env.TRUST_PROXY === "1",
     branding: {
-      name: env.BRAND_NAME ?? "Allure Station",
+      name: env.BRAND_NAME || "Allure Station",
       tagline: env.BRAND_TAGLINE ?? "Your test reports, beautifully hosted.",
-      logoUrl: env.BRAND_LOGO_URL ?? null,
+      logoUrl: env.BRAND_LOGO_URL || null,
     },
     oidc,
     storage,

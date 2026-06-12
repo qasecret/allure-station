@@ -10,6 +10,7 @@ import { ProjectSettings } from "./pages/ProjectSettings.js";
 import { Login } from "./pages/Login.js";
 import { Users } from "./pages/Users.js";
 import { Audit } from "./pages/Audit.js";
+import { Account } from "./pages/Account.js";
 import { AppShell } from "@/components/AppShell";
 import { AuthProvider } from "./auth.js";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -52,6 +53,7 @@ createRoot(document.getElementById("root")!).render(
                   <Route path="/projects/:id/settings" element={<ProjectSettings />} />
                   <Route path="/users" element={<Users />} />
                   <Route path="/audit" element={<Audit />} />
+                  <Route path="/account" element={<Account />} />
                 </Route>
               </Routes>
             </TooltipProvider>

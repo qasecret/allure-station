@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { LogOut, Monitor, Sun, Moon, ChevronsUpDown } from "lucide-react";
+import { useNavigate, Link } from "react-router-dom";
+import { LogOut, Monitor, Sun, Moon, ChevronsUpDown, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/auth";
 import { getTheme, setTheme, type Theme } from "@/theme";
@@ -67,6 +67,9 @@ export function UserMenu() {
         <DropdownMenuSeparator />
         {themeRow}
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/account"><Settings className="size-4" /> Account settings</Link>
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={async () => {
           try { await logout(); navigate("/"); }
           catch { toast.error("Sign out failed. Please try again."); }
