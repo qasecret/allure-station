@@ -33,7 +33,8 @@ Docker single‑container setup). If it isn't up yet, jump to
 12. [Turn on accounts & sign in](#12-turn-on-accounts--sign-in)
 13. [Project settings — visibility, quality gate, tokens, notifications, members, audit](#13-project-settings--visibility-quality-gate-tokens-notifications-members-audit)
 14. [Admin — users & the global audit log](#14-admin--users--the-global-audit-log)
-15. [Appendices](#appendix-a--bring-it-up) — bring it up · manage the container · reproduce data · API reference · troubleshooting
+15. [Your account — password, sessions, and sign-out](#15-your-account--password-sessions-and-sign-out)
+16. [Appendices](#appendix-a--bring-it-up) — bring it up · manage the container · reproduce data · API reference · troubleshooting
 
 ---
 
@@ -357,7 +358,7 @@ require a token — that's how you lock CI ingestion down without standing up fu
 ```bash
 curl -XPOST localhost:5050/api/projects/demo-web/tokens \
   -H 'content-type: application/json' \
-  -d '{"name":"ci-pipeline"}'
+  -d '{"name":"ci-pipeline","expiresInDays":90}'
 ```
 
 ```jsonc
@@ -367,6 +368,7 @@ curl -XPOST localhost:5050/api/projects/demo-web/tokens \
   "name": "ci-pipeline",
   "prefix": "ast_aYEhCrPl",
   "createdAt": "2026-06-08T13:58:39.770Z",
+  "expiresAt": "2026-09-06T13:58:39.770Z",
   "lastUsedAt": null,
   "token": "ast_aYEhCrPlK83zOQeSSTTn4N9fKBZcUIgt"   // ← shown ONCE, store it now
 }
@@ -374,6 +376,16 @@ curl -XPOST localhost:5050/api/projects/demo-web/tokens \
 
 The plaintext `token` is shown **only in this response** (only its sha256 hash is stored). Use it from
 CI as a bearer token:
+
+#### Token expiry
+
+Pass `expiresInDays` when creating a token: `30`, `90`, or `365`. Omit it (or pass `null`) for a
+never-expiring token. Expired tokens behave exactly like invalid ones — they return `401` with no
+indication that expiry is the reason (no oracle). Rotate tokens before they expire, or re-create them.
+
+In the UI, the **CI tokens** card in Project Settings shows an **Expiry** column alongside each
+token's name and last-used date. Tokens expiring within 14 days display an amber warning; expired
+tokens show a red badge. The **Create token** form has an **Expires** select defaulting to **90 days**.
 
 ```bash
 curl -XPOST $API/projects/demo-web/send-results \
@@ -452,6 +464,19 @@ email). After signing in, the sidebar gains **Users** and **Audit**, and your ac
 > Rotating `ADMIN_PASSWORD` and restarting re‑sets the admin's password (it's an idempotent upsert) —
 > a simple recovery path.
 
+#### White-label branding
+
+Set `BRAND_NAME`, `BRAND_TAGLINE`, and `BRAND_LOGO_URL` in the environment to replace the default
+"Allure Station" identity across the UI — the login page heading, sidebar wordmark, and browser tab
+title all update automatically. Leave any unset to keep the default.
+
+```yaml
+environment:
+  BRAND_NAME: "Acme QA"
+  BRAND_TAGLINE: "Ship with confidence."
+  BRAND_LOGO_URL: "https://cdn.acme.example/logo.svg"
+```
+
 ---
 
 ## 13. Project settings — visibility, quality gate, tokens, notifications, members, audit
@@ -527,9 +552,47 @@ The per-project **Audit** card in Project Settings shows the same interface scop
 
 ---
 
+## 15. Your account — password, sessions, and sign-out
+
+The **Account** page (`/account`, accessible from the user menu bottom-left → *Account settings*) lets
+every signed-in user manage their own credentials and sessions without contacting an admin.
+
+### Change your password
+
+In the **Change password** card:
+
+1. Fill in **Current password**, **New password** (minimum 8 characters), and **Confirm new password**.
+2. Click **Change password**.
+3. A success toast confirms the change. All *other* sessions — any browser tab or device you were
+   signed into — are automatically signed out. Your current session is preserved so you don't have
+   to sign in again immediately.
+
+> If you sign in via OIDC/SSO, your password is managed by your identity provider. The password form
+> returns an error if no local password is set.
+
+### Active sessions
+
+The **Active sessions** card lists every current session:
+
+| Column | What it shows |
+|---|---|
+| **Device** | Browser and OS derived from the User-Agent (e.g. `Chrome · macOS`). |
+| **IP** | IP address recorded at login (requires `TRUST_PROXY=true` behind a reverse proxy for accurate client IPs; otherwise shows the proxy address). |
+| **Started** | When the session was created (relative + absolute on hover). |
+| **Current badge** | Marks the session you are in right now. |
+
+Actions:
+
+- **Revoke** — immediately invalidates a specific other session (the "Sign out" button on the current
+  row signs out the current tab and redirects to `/login`).
+- **Sign out everywhere else** — revokes all sessions except the current one in a single click.
+  Disabled when only one session is active.
+
+---
+
 You've now touched **every feature**: projects, ingest, the embedded report, compare, per‑test history
 with the regression hint, trends, quality gates, badges, CI tokens, notifications, auth/RBAC, settings,
-and the admin/audit surface. 🎉
+the admin/audit surface, and self-service account management.
 
 ---
 

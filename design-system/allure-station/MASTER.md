@@ -68,6 +68,8 @@ Teal-emerald accent on cool-slate neutrals. Values below are the canonical roles
 
 **Color notes:** Code-dark + run-green heritage; the teal reads as "passing/healthy" and doubles as the brand. Pass-rate donut thresholds: **≥90 teal, ≥60 amber, else red**.
 
+**Token expiry badge tones** (`tokenExpiryStatus` in `lib/format.ts`): `muted` = `text-muted-foreground` (plain label, >14 d or never); `warn` = `text-status-broken-text` (≤14 d, no background); `expired` = outlined badge with `border-status-fail/30 bg-status-fail/15 text-status-fail-text`. Color is never the sole differentiator — the label text (`"expires in Nd"` / `"expired"` / `"never expires"`) always carries the meaning.
+
 ---
 
 ## Typography

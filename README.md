@@ -50,6 +50,10 @@ gate pull requests, and control access with accounts, RBAC, and SSO — all in o
 | **CI/CD native** | Reusable GitHub Action, quality gates, PR status checks &amp; comments, status badges. |
 | **Notifications** | Slack &amp; generic-webhook on completion / failure / gate breach / regression. |
 | **Enterprise auth** | Accounts + per-project RBAC, scoped API tokens, **OIDC/SSO**, private projects. **Filterable audit log** (by action, actor, time window) with CSV export and humanized event descriptions. |
+| **Self-service account security** | Users change their own password (rotates other sessions automatically). The Account page lists every active session with device + IP and lets you revoke one or sign out everywhere else. |
+| **Expiring API tokens** | Tokens can be created with a 30 / 90 / 365-day lifetime. Expired tokens are treated exactly like invalid ones — no revocation oracle. Expiry badges warn when within 14 days. |
+| **White-label branding** | Operators set `BRAND_NAME`, `BRAND_TAGLINE`, and `BRAND_LOGO_URL` to customize the product name, tagline, and logo across the UI without touching code. |
+| **Honest error semantics** | Unauthenticated requests get **401** (`unauthenticated`); authenticated requests missing the required role get **403** (`forbidden`). No more ambiguous 401s for all access denials. |
 | **Responsive &amp; accessible** | Full mobile support (drawer nav, adaptive tables, report focus mode) with an axe-core accessibility gate in CI. All charts meet WCAG AA contrast and support keyboard navigation. |
 
 ## Screenshots
@@ -357,9 +361,20 @@ All endpoints are under `/api`. Reads are public unless the project is private; 
 | Quality gate | `GET/PUT /projects/:id/quality-gate` |
 | Tokens | `GET/POST /projects/:id/tokens` · `DELETE …/tokens/:tokenId` |
 | Notifications | `GET/POST /projects/:id/notifications` · `DELETE …/:notificationId` |
-| Auth | `POST /auth/login` · `POST /auth/logout` · `GET /auth/me` · `GET /auth/oidc/login` · `GET /auth/oidc/callback` |
+| Auth | `POST /auth/login` · `POST /auth/logout` · `GET /auth/me` · `GET /auth/sessions` · `DELETE /auth/sessions` · `DELETE /auth/sessions/:id` · `POST /auth/password` · `GET /auth/oidc/login` · `GET /auth/oidc/callback` |
 | Admin | `GET/POST /users` · `DELETE /users/:id` · `GET/PUT/DELETE /projects/:id/members` · `GET /audit` · `GET /projects/:id/audit` |
 | Meta | `GET /version` · `GET /config` · `GET /openapi.json` · `GET /docs` |
+
+### Authentication errors — breaking change (v2+)
+
+Prior to this release, all access-control rejections returned `401` with `{ "error": "unauthorized" }`. The API now disambiguates:
+
+| Status | Body | Meaning |
+|---|---|---|
+| **401** | `{ "error": "unauthenticated" }` | No valid session or bearer token — caller is anonymous (or the token is expired/invalid). |
+| **403** | `{ "error": "forbidden" }` | Valid session/token, but the principal lacks the required role or project scope. |
+
+**Consumers matching on the response body must update** — the string `"unauthorized"` is no longer returned. Match on `status === 401` / `status === 403` instead of the `error` field for reliable behavior.
 
 ### API documentation
 
@@ -410,7 +425,7 @@ pnpm --filter @allure-station/e2e test:e2e
 
 ## Project status
 
-All five roadmap phases are complete — **(1)** core ingest → generate → serve · **(2)** scale &amp; live (S3 / Postgres / BullMQ / SSE) · **(3)** modern UX (trends, comparison, search, dark mode, a11y) · **(4)** CI/DevOps (Action, gates, PR checks, badges) · **(5)** auth &amp; notifications (accounts + RBAC, audit log, OIDC/SSO) — plus **run metadata**, **private projects**, and **per-test history** from the follow-up slices.
+All five roadmap phases are complete — **(1)** core ingest → generate → serve · **(2)** scale &amp; live (S3 / Postgres / BullMQ / SSE) · **(3)** modern UX (trends, comparison, search, dark mode, a11y) · **(4)** CI/DevOps (Action, gates, PR checks, badges) · **(5)** auth &amp; notifications (accounts + RBAC, audit log, OIDC/SSO) — plus **run metadata**, **private projects**, **per-test history**, and the **enterprise surface** (self-service account security · session management · expiring tokens · white-label branding · honest 401/403 split) from the follow-up slices.
 
 Planned next steps and gap analysis (known-issue muting, sharded-run aggregation, a language-agnostic CLI, …) live in **[docs/FUTURE-WORK.md](docs/FUTURE-WORK.md)**.
 
