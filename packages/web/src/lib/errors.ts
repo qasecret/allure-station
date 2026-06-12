@@ -15,8 +15,19 @@ const CONFLICTS: Record<string, string> = {
 /** Server bodies may be plain text or a JSON {error} envelope — extract the human part. */
 function serverText(raw: string): string {
   try {
-    const parsed = JSON.parse(raw) as { error?: unknown };
-    return typeof parsed?.error === "string" ? parsed.error : "";
+    const parsed = JSON.parse(raw) as unknown;
+    // Zod issue arrays: [{code, message, path, …}, …]
+    if (Array.isArray(parsed)) {
+      const first = (parsed as Array<{ code?: unknown; message?: unknown; path?: unknown[] }>)[0];
+      if (!first?.message) return "";
+      const msg = String(first.message);
+      const path = Array.isArray(first.path) && first.path.length > 0
+        ? first.path.map(String).join(".")
+        : null;
+      return path ? `${path}: ${msg}` : msg;
+    }
+    const obj = parsed as { error?: unknown };
+    return typeof obj?.error === "string" ? obj.error : "";
   } catch {
     return raw;
   }
@@ -24,8 +35,8 @@ function serverText(raw: string): string {
 
 /** True for short prose the server wrote for humans (zod/validation messages qualify). */
 function readsLikeSentence(s: string): boolean {
-  const t = s.trimStart();
-  return s.length > 0 && s.length < 200 && !t.startsWith("{") && !t.startsWith("<") && !t.startsWith("[");
+  const t = s.trim();
+  return t.length > 0 && t.length < 200 && !t.startsWith("{") && !t.startsWith("<") && !t.startsWith("[");
 }
 
 /** Map any thrown value to a human sentence with a recovery hint. Never returns raw "409: …". */
@@ -33,10 +44,18 @@ export function humanizeError(e: unknown, context?: keyof typeof CONFLICTS | str
   if (!(e instanceof ApiError)) return "Something went wrong — try again.";
   const { status } = e;
   if (status === 0) return "Can't reach the server — check your connection and try again.";
-  if (status === 401) return "Your session has expired — sign in again.";
+  if (status === 401) {
+    if (serverText(e.serverMessage).toLowerCase() === "unauthorized")
+      return "You don't have permission to do that — ask an owner for write access or use a CI token.";
+    return "Your session has expired — sign in again.";
+  }
   if (status === 403) return "You don't have permission to do that.";
   if (status === 404) return "That no longer exists — it may have been deleted.";
-  if (status === 409) return (context && CONFLICTS[context]) || "That conflicts with something that already exists.";
+  if (status === 409) {
+    if (context && CONFLICTS[context]) return CONFLICTS[context];
+    const text = serverText(e.serverMessage);
+    return readsLikeSentence(text) ? text : "That conflicts with something that already exists.";
+  }
   if (status === 413) return "That upload is too large.";
   if (status === 400 || status === 422) {
     const text = serverText(e.serverMessage);

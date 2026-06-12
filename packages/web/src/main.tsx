@@ -15,11 +15,20 @@ import { AuthProvider } from "./auth.js";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { applyTheme, getTheme } from "./theme.js";
+import { ApiError } from "./lib/errors.js";
 import "./styles.css";
 
 export const api = createClient(import.meta.env.VITE_API_BASE ?? "/api");
-// retry once on transient query failures; mutations never auto-retry
-const qc = new QueryClient({ defaultOptions: { queries: { retry: 1 }, mutations: { retry: 0 } } });
+// Deterministic 4xx errors are never retried; transient network/5xx failures are retried once.
+const qc = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) =>
+        failureCount < 1 && !(error instanceof ApiError && error.status >= 400 && error.status < 500),
+    },
+    mutations: { retry: 0 },
+  },
+});
 
 applyTheme(getTheme());
 if (typeof matchMedia !== "undefined") {

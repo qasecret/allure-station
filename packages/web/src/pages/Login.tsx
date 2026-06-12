@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../main.js";
 import { useAuth } from "../auth.js";
+import { ApiError, humanizeError } from "@/lib/errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,8 +26,8 @@ export function Login() {
     try {
       await login(email, password);
       navigate("/");
-    } catch {
-      setError("Invalid email or password.");
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 401 ? "Invalid email or password." : humanizeError(e));
     } finally {
       setBusy(false);
     }

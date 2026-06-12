@@ -7,7 +7,7 @@ import { describeAuditEntry } from "@/lib/audit-format";
 import { AuditFilterBar } from "@/components/AuditFilterBar";
 import type { AuditFilters } from "@/components/AuditFilterBar";
 import { toast } from "sonner";
-import { humanizeError } from "@/lib/errors";
+import { humanizeError, ApiError } from "@/lib/errors";
 import { QueryErrorState } from "@/components/QueryErrorState";
 import { CardSkeleton } from "@/components/skeletons";
 import { api } from "../main.js";
@@ -212,7 +212,7 @@ function MembersCard({ projectId, members }: { projectId: string; members: { use
   const setMember = useMutation({
     mutationFn: () => api.setMember(projectId, email, role),
     onSuccess: () => { setEmail(""); qc.invalidateQueries({ queryKey: ["members", projectId] }); toast.success("Member saved"); },
-    onError: (e) => toast.error(humanizeError(e)),
+    onError: (e) => toast.error(e instanceof ApiError && e.status === 404 ? "No account exists with that email." : humanizeError(e)),
   });
   const removeMember = useMutation({
     mutationFn: (userId: string) => api.removeMember(projectId, userId),
