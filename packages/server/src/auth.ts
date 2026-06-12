@@ -102,10 +102,14 @@ export async function authorizeProjectWrite(
       if (principal.role === "admin") return "ok";
       return (await userProjectRank(deps, principal.userId, projectId)) >= PROJECT_RANK.maintainer ? "ok" : "forbidden";
     case "token":
-      return principal.projectId === projectId ? "ok" : "forbidden";
+      // A valid token on the wrong project responds identically to an invalid token — no oracle.
+      // "wrong-scope token is indistinguishable from no/invalid token — no token-validity oracle."
+      return principal.projectId === projectId ? "ok" : "unauthenticated";
     case "anonymous": {
       if ((await deps.users.count()) > 0) return "unauthenticated";
-      return (await deps.tokens.countByProject(projectId)) === 0 ? "ok" : "unauthenticated";
+      // Pass deps.now() so expired tokens are excluded — a project whose only token expired
+      // reopens to anonymous writes (consistent with the no-token state).
+      return (await deps.tokens.countByProject(projectId, deps.now())) === 0 ? "ok" : "unauthenticated";
     }
   }
 }

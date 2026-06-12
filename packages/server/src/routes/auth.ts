@@ -23,16 +23,17 @@ function setSessionCookie(reply: FastifyReply, deps: AppDeps, token: string): vo
   });
 }
 
-/** Create a DB-backed session for a user and set the session cookie. Shared by local + OIDC login. */
-async function startSession(reply: FastifyReply, deps: AppDeps, userId: string, req?: FastifyRequest): Promise<void> {
+/** Create a DB-backed session for a user, set the session cookie, and return the new session id. */
+async function startSession(reply: FastifyReply, deps: AppDeps, userId: string, req?: FastifyRequest): Promise<string> {
   const token = generateSessionToken();
   const expiresAt = new Date(Date.parse(deps.now()) + deps.sessionTtlMs).toISOString();
   const meta = req
     ? { userAgent: (req.headers["user-agent"] as string | undefined) ?? null, ip: req.ip ?? null }
     : {};
-  await deps.sessions.create(hashSessionToken(token), userId, deps.now(), expiresAt, meta);
+  const session = await deps.sessions.create(hashSessionToken(token), userId, deps.now(), expiresAt, meta);
   void deps.sessions.deleteExpired(deps.now()).catch(() => {}); // opportunistic, best-effort
   setSessionCookie(reply, deps, token);
+  return session.id;
 }
 
 export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
@@ -85,7 +86,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
     const principal = await authenticate(deps, req);
     if (principal.kind !== "user") return denyAuth(reply, "unauthenticated");
     const currentHash = hashSessionToken(req.cookies[SESSION_COOKIE]!);
-    const rows = await deps.sessions.listByUser(principal.userId);
+    const rows = await deps.sessions.listByUser(principal.userId, deps.now());
     return rows.map((s) => ({
       id: s.id,
       createdAt: s.createdAt,
@@ -101,7 +102,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
     if (principal.kind !== "user") return denyAuth(reply, "unauthenticated");
     const { id } = req.params as { id: string };
     const currentHash = hashSessionToken(req.cookies[SESSION_COOKIE]!);
-    const rows = await deps.sessions.listByUser(principal.userId);
+    const rows = await deps.sessions.listByUser(principal.userId, deps.now());
     const target = rows.find((s) => s.id === id);
     if (!target) return reply.code(404).send({ error: "not found" }); // other users' sessions look identical
     await deps.sessions.removeById(id, principal.userId);
@@ -114,7 +115,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
     const principal = await authenticate(deps, req);
     if (principal.kind !== "user") return denyAuth(reply, "unauthenticated");
     const currentHash = hashSessionToken(req.cookies[SESSION_COOKIE]!);
-    const current = (await deps.sessions.listByUser(principal.userId)).find((s) => s.tokenHash === currentHash);
+    const current = (await deps.sessions.listByUser(principal.userId, deps.now())).find((s) => s.tokenHash === currentHash);
     if (!current) return reply.code(401).send({ error: "unauthenticated" }); // race: current session just expired
     const revoked = await deps.sessions.removeAllExcept(principal.userId, current.id);
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "session_revoked", targetType: "session", targetId: "all-others", metadata: { revoked } });
@@ -134,12 +135,18 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
       await recordAudit(deps, { ...actorFromPrincipal(principal), action: "password_change_failed", targetType: "user", targetId: principal.userId });
       return reply.code(400).send({ error: "invalid credentials" }); // 400 not 401: the SESSION is valid
     }
+    // Safe reorder (no portable transaction across libsql+pg):
+    //   1. setPasswordHash — the new password is now active.
+    //   2. startSession — mint a fresh session for the caller FIRST, so if step 3 fails the caller
+    //      is still authenticated with the new password (not locked out).
+    //   3. removeAllExcept(userId, newSessionId) — kill all other sessions; the new one survives.
+    //   4. recordAudit — best-effort; a failure here is observable in the audit log but does not
+    //      affect authentication state.
+    // A failure after step 1 but before step 3 leaves the caller with a working new session and
+    // old sessions valid — clean-up happens on next password change or manual session revoke.
     await deps.users.setPasswordHash(principal.userId, await hashPassword(parsed.data.newPassword));
-    // Revoke ALL sessions for this user (no race on "which is current"), then mint a fresh one.
-    // Using a nonexistent keepId ensures every existing session row is deleted — the new session
-    // created by startSession below becomes the only valid session for this user.
-    await deps.sessions.removeAllExcept(principal.userId, "");
-    await startSession(reply, deps, principal.userId, req);
+    const newSessionId = await startSession(reply, deps, principal.userId, req);
+    await deps.sessions.removeAllExcept(principal.userId, newSessionId);
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "password_changed", targetType: "user", targetId: principal.userId });
     return reply.code(204).send();
   });

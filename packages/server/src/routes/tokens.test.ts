@@ -47,7 +47,9 @@ describe("token routes + write authorization", () => {
     await app.close();
   });
 
-  it("a token for one project cannot authorize writes to another", async () => {
+  it("a token for one project cannot authorize writes to another — wrong-scope token is indistinguishable from no/invalid token (401, not 403)", async () => {
+    // Fix #3: wrong-scope token → 401 "unauthenticated" (no token-validity oracle).
+    // A valid token on the wrong project now responds identically to an invalid token.
     const app = buildApp(await makeTestDeps());
     await createProject(app, "a");
     await createProject(app, "b");
@@ -55,10 +57,10 @@ describe("token routes + write authorization", () => {
     // b also gets a token so it's locked
     await app.inject({ method: "POST", url: "/api/projects/b/tokens", payload: { name: "ci" } });
 
-    // valid token but wrong project → 403 forbidden (holder knows their token is valid)
+    // valid token but wrong project → 401 unauthenticated (no-oracle: "is this token valid for something?" hidden)
     const cross = await app.inject({ method: "POST", url: "/api/projects/b/generate", headers: { authorization: `Bearer ${aToken}` } });
-    expect(cross.statusCode).toBe(403);
-    expect(cross.json().error).toBe("forbidden");
+    expect(cross.statusCode).toBe(401);
+    expect(cross.json().error).toBe("unauthenticated");
     await app.close();
   });
 
@@ -115,7 +117,10 @@ describe("token expiry", () => {
     await app.close();
   });
 
-  it("expired token is rejected exactly like an invalid one (401 unauthenticated)", async () => {
+  it("expired token cannot authenticate (resolves to anonymous); if it was the only token, project reopens in zero-config mode", async () => {
+    // authenticate() rejects expired tokens → anonymous. countByProject(now) excludes expired rows,
+    // so a project with only an expired token is indistinguishable from a project with no tokens →
+    // zero-config mode reopens (409 no-pending, not 401). A second live token would keep it locked.
     let nowMs = Date.parse(NOW);
     const deps = await makeTestDeps({ now: () => new Date(nowMs).toISOString() });
     const app = buildApp(deps);
@@ -126,14 +131,18 @@ describe("token expiry", () => {
     // Advance clock 31 days past expiry
     nowMs += 31 * 86_400_000;
 
+    // Using the expired token as auth → bearer is expired → authenticate returns anonymous.
+    // The only token is expired → countByProject(now) = 0 → zero-config reopens → 409 authorized.
     const res = await app.inject({ method: "POST", url: `/api/projects/p/generate`, headers: { authorization: `Bearer ${tok}` } });
-    expect(res.statusCode).toBe(401);
-    expect(res.json().error).toBe("unauthenticated");
+    expect(res.statusCode).toBe(409); // authorized (no pending run), not 401
+    void tok;
 
     await app.close();
   });
 
-  it("boundary: expiresAt === now is expired", async () => {
+  it("boundary: expiresAt === now — token cannot authenticate AND project reopens", async () => {
+    // authenticate() uses strict >: expiresAt === now → expired → anonymous.
+    // countByProject(now) uses strict gt: expiresAt === now → excluded → count = 0 → reopens.
     let nowMs = Date.parse(NOW);
     const deps = await makeTestDeps({ now: () => new Date(nowMs).toISOString() });
     const app = buildApp(deps);
@@ -146,9 +155,10 @@ describe("token expiry", () => {
     // Advance clock exactly to expiry moment
     nowMs = Date.parse(expiresAt);
 
+    // At the boundary: token can't authenticate AND is excluded from count → project reopens → 409.
     const res = await app.inject({ method: "POST", url: `/api/projects/p/generate`, headers: { authorization: `Bearer ${tok}` } });
-    expect(res.statusCode).toBe(401);
-    expect(res.json().error).toBe("unauthenticated");
+    expect(res.statusCode).toBe(409); // authorized (no pending run), not 401
+    void tok;
 
     await app.close();
   });
@@ -191,7 +201,10 @@ describe("token expiry", () => {
     await app.close();
   });
 
-  it("sole-token-expired project stays locked to anonymous writes (zero-config mode)", async () => {
+  it("sole-token-expired project reopens to anonymous writes (zero-config mode parity with no-token state)", async () => {
+    // Fix #2: countByProject now excludes expired tokens. A project whose only token has expired
+    // is indistinguishable from a project with no tokens → anonymous writes are re-allowed in
+    // zero-config mode (no users). This is consistent with the no-token state.
     let nowMs = Date.parse(NOW);
     const deps = await makeTestDeps({ now: () => new Date(nowMs).toISOString() });
     const app = buildApp(deps);
@@ -200,11 +213,34 @@ describe("token expiry", () => {
     // No users; create a token with expiry — project becomes locked.
     await app.inject({ method: "POST", url: "/api/projects/p/tokens", payload: { name: "ci", expiresInDays: 30 } });
 
+    // Verify it IS locked while the token is live.
+    expect((await app.inject({ method: "POST", url: "/api/projects/p/generate" })).statusCode).toBe(401);
+
     // Advance clock past expiry.
     nowMs += 31 * 86_400_000;
 
-    // An expired token still counts toward the project's token set (countByProject is expiry-agnostic),
-    // so zero-config open mode must NOT be restored: anonymous POST generate → 401, NOT reopened.
+    // Expired token no longer counts → zero-config reopens. Anonymous POST → 409 (no pending run,
+    // but authorized), not 401.
+    const res = await app.inject({ method: "POST", url: "/api/projects/p/generate" });
+    expect(res.statusCode).toBe(409); // authorized (no-pending-run, not 401)
+    expect(res.json().error).not.toBe("unauthenticated");
+
+    await app.close();
+  });
+
+  it("non-expired token still locks anonymous writes", async () => {
+    // Fix #2 guard: a live token MUST still lock the project. Only expired tokens are excluded.
+    let nowMs = Date.parse(NOW);
+    const deps = await makeTestDeps({ now: () => new Date(nowMs).toISOString() });
+    const app = buildApp(deps);
+    await createProject(app, "p");
+
+    // Create a token expiring in 30 days — project is locked while the token is live.
+    await app.inject({ method: "POST", url: "/api/projects/p/tokens", payload: { name: "ci", expiresInDays: 30 } });
+
+    // Advance clock 15 days (still within expiry) — project stays locked.
+    nowMs += 15 * 86_400_000;
+
     const res = await app.inject({ method: "POST", url: "/api/projects/p/generate" });
     expect(res.statusCode).toBe(401);
     expect(res.json().error).toBe("unauthenticated");

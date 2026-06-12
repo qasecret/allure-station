@@ -1,4 +1,4 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, gt, isNull, or } from "drizzle-orm";
 import type { ApiToken } from "@allure-station/shared";
 import type { Db } from "./client.js";
 import { apiTokens } from "./schema.sqlite.js";
@@ -19,8 +19,18 @@ export class ApiTokenRepository {
     }));
   }
 
-  async countByProject(projectId: string): Promise<number> {
-    const [row] = await this.db.select({ c: count() }).from(apiTokens).where(eq(apiTokens.projectId, projectId));
+  /**
+   * Count tokens for a project. When `now` is provided, only live tokens are counted (expired
+   * tokens excluded) so a project whose only token expired reopens to anonymous writes in
+   * zero-config mode — consistent with the no-token state.
+   */
+  async countByProject(projectId: string, now?: string): Promise<number> {
+    const projectFilter = eq(apiTokens.projectId, projectId);
+    const expiryFilter = now
+      ? or(isNull(apiTokens.expiresAt), gt(apiTokens.expiresAt, now))
+      : undefined;
+    const where = expiryFilter ? and(projectFilter, expiryFilter) : projectFilter;
+    const [row] = await this.db.select({ c: count() }).from(apiTokens).where(where);
     return Number(row?.c ?? 0);
   }
 

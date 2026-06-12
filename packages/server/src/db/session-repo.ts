@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, ne } from "drizzle-orm";
+import { and, desc, eq, gt, lt, ne } from "drizzle-orm";
 import type { Db } from "./client.js";
 import { sessions } from "./schema.sqlite.js";
 
@@ -50,8 +50,12 @@ export class SessionRepository {
     await this.db.delete(sessions).where(eq(sessions.tokenHash, tokenHash));
   }
 
-  /** All sessions for a user, newest first. Caller decides what's "current" by hash. */
-  async listByUser(userId: string): Promise<SessionRow[]> {
+  /**
+   * All NON-EXPIRED sessions for a user, newest first. `now` is required to filter out expired rows
+   * so they never appear in the Account sessions list or inflate the revoke-others count.
+   * (deleteExpired sweep timing is separate — this is the read-time correctness fix.)
+   */
+  async listByUser(userId: string, now: string): Promise<SessionRow[]> {
     return this.db
       .select({
         id: sessions.id,
@@ -63,7 +67,7 @@ export class SessionRepository {
         ip: sessions.ip,
       })
       .from(sessions)
-      .where(eq(sessions.userId, userId))
+      .where(and(eq(sessions.userId, userId), gt(sessions.expiresAt, now)))
       .orderBy(desc(sessions.createdAt), desc(sessions.id));
   }
 

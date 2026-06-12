@@ -236,6 +236,30 @@ describe("account & sessions", () => {
     await app.close();
   });
 
+  it("expired sessions are excluded from GET /auth/sessions list", async () => {
+    // Fix #4: listByUser must filter out expired rows so they never appear in the account sessions list.
+    let nowMs = Date.parse("2026-06-06T00:00:00.000Z");
+    const deps = await makeTestDeps({ now: () => new Date(nowMs).toISOString() });
+    await seedUser(deps, email, pw);
+    const app = buildApp(deps);
+
+    // Login at time T — produces a live session.
+    const liveCookie = await loginGetCookie(app, email, pw, {});
+
+    // Directly seed an expired session row (already expired when seeded).
+    const expiredToken = generateSessionToken();
+    const expiredHash = hashSessionToken(expiredToken);
+    const user = await deps.users.findByEmail(email);
+    await deps.sessions.create(expiredHash, user!.id, deps.now(), "2020-01-01T00:00:00.000Z"); // past
+
+    // GET /auth/sessions must only return the live session, not the expired one.
+    const res = await app.inject({ method: "GET", url: "/api/auth/sessions", headers: { cookie: liveCookie } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toHaveLength(1); // expired row excluded
+
+    await app.close();
+  });
+
   it("anonymous gets 401 on all account routes", async () => {
     const app = buildApp(await makeTestDeps());
     expect((await app.inject({ method: "GET", url: "/api/auth/sessions" })).statusCode).toBe(401);
@@ -250,6 +274,44 @@ describe("account & sessions", () => {
     ])) {
       expect(res.json().error).toBe("unauthenticated");
     }
+    await app.close();
+  });
+
+  it("password change: new cookie works, other sessions dead, password_changed audit row exists", async () => {
+    // Fix #1: safe reorder — setPasswordHash → startSession (new session minted FIRST) →
+    // removeAllExcept(userId, newSessionId) → audit. A failure after setPasswordHash still leaves
+    // the caller with a working new session; other sessions cleaned on success.
+    const deps = await makeTestDeps();
+    await seedUser(deps, email, pw);
+    const app = buildApp(deps);
+
+    const cA = await loginGetCookie(app, email, pw, {});
+    const cB = await loginGetCookie(app, email, pw, {});
+    const newPassword = "super-new-pass-42";
+
+    const ok = await app.inject({
+      method: "POST",
+      url: "/api/auth/password",
+      headers: { cookie: cB },
+      payload: { currentPassword: pw, newPassword },
+    });
+    expect(ok.statusCode).toBe(204);
+
+    // The response must set a fresh session cookie.
+    const newCookie = ok.cookies.find((c) => c.name === "as_session");
+    expect(newCookie).toBeDefined();
+    expect(newCookie!.value).not.toBe(cB.split("=")[1]);
+    const newCookieHeader = `as_session=${newCookie!.value}`;
+
+    // NEW cookie authenticates successfully.
+    expect((await app.inject({ method: "GET", url: "/api/auth/sessions", headers: { cookie: newCookieHeader } })).statusCode).toBe(200);
+    // OLD sessions (cA and cB) are dead.
+    expect((await app.inject({ method: "GET", url: "/api/auth/sessions", headers: { cookie: cA } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/api/auth/sessions", headers: { cookie: cB } })).statusCode).toBe(401);
+    // A password_changed audit row exists.
+    const auditActions = (await deps.audit.list({ limit: 100 })).map((e) => e.action);
+    expect(auditActions).toContain("password_changed");
+
     await app.close();
   });
 

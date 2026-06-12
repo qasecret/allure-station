@@ -726,7 +726,7 @@ for (const backend of backends) {
         const s1 = await sessions.create("h1", u1.id, "2026-06-12T01:00:00.000Z", future, { userAgent: "UA1", ip: "10.0.0.1" });
         const s2 = await sessions.create("h2", u1.id, "2026-06-12T02:00:00.000Z", future, { userAgent: "UA2", ip: null });
         const s3 = await sessions.create("h3", u2.id, "2026-06-12T03:00:00.000Z", future, {});
-        const list = await sessions.listByUser(u1.id);
+        const list = await sessions.listByUser(u1.id, "2026-06-12T00:00:00.000Z");
         expect(list.map((s) => s.id)).toEqual([s2.id, s1.id]);          // newest first, own only
         expect(list[1]).toMatchObject({ userAgent: "UA1", ip: "10.0.0.1" });
         expect(await sessions.removeById(s3.id, u1.id)).toBe(false);    // cannot revoke another user's
@@ -734,6 +734,51 @@ for (const backend of backends) {
         expect(await sessions.removeAllExcept(u1.id, s2.id)).toBe(0);   // only s2 left → nothing revoked
         await sessions.create("h4", u1.id, "2026-06-12T04:00:00.000Z", future, {});
         expect(await sessions.removeAllExcept(u1.id, s2.id)).toBe(1);
+      });
+
+      it("listByUser excludes expired sessions (Fix #4)", async () => {
+        // Fix #4: listByUser(userId, now) filters gt(expiresAt, now) so expired rows never appear
+        // in the Account sessions list or the revoke-others count.
+        const future = "2026-12-31T00:00:00.000Z";
+        const past = "2020-01-01T00:00:00.000Z";
+        const now = "2026-06-12T00:00:00.000Z";
+        const u = await users.create("c@x.com", "hash", "user", now);
+        const live = await sessions.create("live-h", u.id, now, future, {});
+        await sessions.create("expired-h", u.id, past, past, {}); // already expired
+
+        const list = await sessions.listByUser(u.id, now);
+        expect(list.map((s) => s.id)).toEqual([live.id]);  // expired row excluded
+      });
+    });
+
+    describe("ApiTokenRepository — countByProject excludes expired tokens (Fix #2)", () => {
+      beforeEach(async () => {
+        await projects.create("p", "2026-06-06T00:00:00.000Z");
+      });
+
+      it("countByProject(projectId, now) excludes expired tokens", async () => {
+        const now = "2026-06-06T00:00:00.000Z";
+        const future = "2026-07-06T00:00:00.000Z";
+        const past = "2026-05-01T00:00:00.000Z";
+        // Live token (no expiry)
+        await tokens.create("p", "never-expires", "h1", "pre1", now, null);
+        // Live token with future expiry
+        await tokens.create("p", "future-exp", "h2", "pre2", now, future);
+        // Expired token
+        await tokens.create("p", "expired", "h3", "pre3", now, past);
+
+        // Without now: all 3 counted (backward compat)
+        expect(await tokens.countByProject("p")).toBe(3);
+        // With now: only 2 live tokens (no-expiry + future-expiry); past-expired excluded
+        expect(await tokens.countByProject("p", now)).toBe(2);
+      });
+
+      it("countByProject with now: returns 0 when the only token is expired", async () => {
+        const now = "2026-06-06T00:00:00.000Z";
+        const past = "2026-05-01T00:00:00.000Z";
+        await tokens.create("p", "sole-expired", "h1", "pre1", now, past);
+
+        expect(await tokens.countByProject("p", now)).toBe(0);
       });
     });
 

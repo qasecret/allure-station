@@ -25,6 +25,7 @@ function depsWith(opts: { userCount?: number; tokenCount?: number; membership?: 
     users: { count: async () => opts.userCount ?? 0 },
     tokens: { countByProject: async () => opts.tokenCount ?? 0 },
     memberships: { find: async () => (opts.membership ? { role: opts.membership.role } : null) },
+    now: () => "2026-06-06T00:00:00.000Z",
   } as unknown as AppDeps;
 }
 
@@ -42,10 +43,12 @@ describe("authorizeProjectWrite", () => {
     expect(await authorizeProjectWrite(depsWith({ userCount: 1, tokenCount: 0 }), anon, "p")).toBe("unauthenticated");
   });
 
-  it("a project-scoped token authorizes its own project only", async () => {
+  it("a project-scoped token authorizes its own project only; wrong-scope token is indistinguishable from no/invalid token (unauthenticated, not forbidden)", async () => {
+    // Fix #3: wrong-scope token → "unauthenticated" (was "forbidden").
+    // A valid token on the wrong project now responds identically to an invalid token — no oracle.
+    // "wrong-scope token is indistinguishable from no/invalid token — no token-validity oracle."
     expect(await authorizeProjectWrite(depsWith(), tokenFor("p"), "p")).toBe("ok");
-    // valid token used on a different project → forbidden (holder knows their token is valid)
-    expect(await authorizeProjectWrite(depsWith(), tokenFor("p"), "other")).toBe("forbidden");
+    expect(await authorizeProjectWrite(depsWith(), tokenFor("p"), "other")).toBe("unauthenticated");
   });
 
   it("admin always; member needs maintainer+; viewer cannot write", async () => {
