@@ -4,6 +4,7 @@ import type {
   ApiToken, CreatedToken, QualityGateConfig, RunSummary, Notification, NotificationKind, NotificationTrigger,
   RunMetadata, UpdateProjectRequest, ProjectListItem, ProjectSort, Overview,
 } from "@allure-station/shared";
+import { ApiError } from "../lib/errors.js";
 
 export interface AppConfigInfo {
   securityEnabled: boolean;
@@ -59,20 +60,27 @@ export interface ApiClient {
 export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
   // credentials:"include" so the session cookie is sent even when the UI is served from a
   // different origin than the API in dev (same-origin prod sends it regardless).
+  async function send(path: string, init: RequestInit): Promise<Response> {
+    let res: Response;
+    try {
+      res = await f(`${base}${path}`, { credentials: "include", ...init });
+    } catch (e) {
+      throw new ApiError(0, e instanceof Error ? e.message : "network failure");
+    }
+    if (!res.ok) throw new ApiError(res.status, await res.text());
+    return res;
+  }
   async function json<T>(path: string, init: RequestInit): Promise<T> {
-    const res = await f(`${base}${path}`, { credentials: "include", ...init });
-    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    const res = await send(path, init);
     return res.json() as Promise<T>;
   }
   // For 204/no-body endpoints (logout, delete): assert ok without parsing a body.
   async function noContent(path: string, init: RequestInit): Promise<void> {
-    const res = await f(`${base}${path}`, { credentials: "include", ...init });
-    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    await send(path, init);
   }
   // GET a list endpoint, surfacing the X-Total-Count header for pagination UIs.
   async function listWithTotal<T>(path: string): Promise<{ items: T[]; total: number }> {
-    const res = await f(`${base}${path}`, { method: "GET", credentials: "include" });
-    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    const res = await send(path, { method: "GET" });
     const items = (await res.json()) as T[];
     const header = res.headers.get("X-Total-Count");
     return { items, total: header === null ? items.length : Number(header) };

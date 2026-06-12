@@ -278,4 +278,13 @@ describe("api client", () => {
     expect(url).toContain("action=run_deleted");
     expect(url).toContain("actor=bot");
   });
+
+  it("throws ApiError with status and serverMessage on failure, status 0 on network reject", async () => {
+    const failing = (async () => new Response("nope", { status: 403 })) as unknown as typeof fetch;
+    const c1 = createClient("/api", failing);
+    await expect(c1.listProjects({})).rejects.toMatchObject({ name: "ApiError", status: 403, serverMessage: "nope" });
+    const rejecting = (async () => { throw new TypeError("Failed to fetch"); }) as unknown as typeof fetch;
+    const c2 = createClient("/api", rejecting);
+    await expect(c2.listProjects({})).rejects.toMatchObject({ status: 0 });
+  });
 });
