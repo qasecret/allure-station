@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { createTokenRequestSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
-import { authenticate, authorizeProjectWrite, requireProjectWrite, generateToken, hashToken, tokenPrefix } from "../auth.js";
+import { authenticate, authorizeProjectWrite, requireProjectWrite, denyAuth, generateToken, hashToken, tokenPrefix } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 
 export function registerTokenRoutes(app: FastifyInstance, deps: AppDeps): void {
@@ -11,14 +11,16 @@ export function registerTokenRoutes(app: FastifyInstance, deps: AppDeps): void {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
     const principal = await authenticate(deps, req);
-    if ((await authorizeProjectWrite(deps, principal, projectId)) === "unauthorized") {
-      return reply.code(401).send({ error: "unauthorized" });
-    }
+    const verdict = await authorizeProjectWrite(deps, principal, projectId);
+    if (verdict !== "ok") return denyAuth(reply, verdict);
     const parsed = createTokenRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
 
     const token = generateToken();
-    const created = await deps.tokens.create(projectId, parsed.data.name, hashToken(token), tokenPrefix(token), deps.now());
+    const expiresAt = parsed.data.expiresInDays
+      ? new Date(Date.parse(deps.now()) + parsed.data.expiresInDays * 86_400_000).toISOString()
+      : null;
+    const created = await deps.tokens.create(projectId, parsed.data.name, hashToken(token), tokenPrefix(token), deps.now(), expiresAt);
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "token_created", targetType: "token", targetId: created.id, projectId, metadata: { name: created.name, prefix: created.prefix } });
     return reply.code(201).send({ ...created, token }); // plaintext returned ONCE
   });
@@ -26,9 +28,8 @@ export function registerTokenRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.get("/projects/:projectId/tokens", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
-    if ((await requireProjectWrite(deps, req, projectId)) === "unauthorized") {
-      return reply.code(401).send({ error: "unauthorized" });
-    }
+    const verdict = await requireProjectWrite(deps, req, projectId);
+    if (verdict !== "ok") return denyAuth(reply, verdict);
     return deps.tokens.listByProject(projectId);
   });
 
@@ -36,9 +37,8 @@ export function registerTokenRoutes(app: FastifyInstance, deps: AppDeps): void {
     const { projectId, tokenId } = req.params as { projectId: string; tokenId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
     const principal = await authenticate(deps, req);
-    if ((await authorizeProjectWrite(deps, principal, projectId)) === "unauthorized") {
-      return reply.code(401).send({ error: "unauthorized" });
-    }
+    const verdict = await authorizeProjectWrite(deps, principal, projectId);
+    if (verdict !== "ok") return denyAuth(reply, verdict);
     if (!(await deps.tokens.remove(projectId, tokenId))) return reply.code(404).send({ error: "token not found" });
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "token_deleted", targetType: "token", targetId: tokenId, projectId });
     return reply.code(204).send();

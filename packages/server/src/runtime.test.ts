@@ -21,6 +21,8 @@ function testConfig(): AppConfig {
     publicUrl: undefined,
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
     cookieSecure: false,
+    trustProxy: false,
+    branding: { name: "Allure Station", tagline: "Your test reports, beautifully hosted.", logoUrl: null },
     adminEmail: undefined,
     adminPassword: undefined,
     oidc: undefined,

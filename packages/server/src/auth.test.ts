@@ -25,60 +25,75 @@ function depsWith(opts: { userCount?: number; tokenCount?: number; membership?: 
     users: { count: async () => opts.userCount ?? 0 },
     tokens: { countByProject: async () => opts.tokenCount ?? 0 },
     memberships: { find: async () => (opts.membership ? { role: opts.membership.role } : null) },
+    now: () => "2026-06-06T00:00:00.000Z",
   } as unknown as AppDeps;
 }
 
 const anon: Principal = { kind: "anonymous" };
-const admin: Principal = { kind: "user", userId: "a", email: "a@x", role: "admin", createdAt: "t" };
-const plainUser: Principal = { kind: "user", userId: "u", email: "u@x", role: "user", createdAt: "t" };
+const admin: Principal = { kind: "user", userId: "a", email: "a@x", role: "admin", createdAt: "t", authProvider: null };
+const plainUser: Principal = { kind: "user", userId: "u", email: "u@x", role: "user", createdAt: "t", authProvider: null };
 const tokenFor = (projectId: string): Principal => ({ kind: "token", projectId, tokenId: "t1" });
 
 describe("authorizeProjectWrite", () => {
   it("zero-config: anonymous is allowed only when no users AND no tokens exist", async () => {
     expect(await authorizeProjectWrite(depsWith({ userCount: 0, tokenCount: 0 }), anon, "p")).toBe("ok");
-    expect(await authorizeProjectWrite(depsWith({ userCount: 0, tokenCount: 1 }), anon, "p")).toBe("unauthorized");
-    // Once any account exists, the open-token fallback is closed even for a token-less project.
-    expect(await authorizeProjectWrite(depsWith({ userCount: 1, tokenCount: 0 }), anon, "p")).toBe("unauthorized");
+    // Anonymous with a token-protected project → unauthenticated (no-oracle: "is there a token here?" hidden)
+    expect(await authorizeProjectWrite(depsWith({ userCount: 0, tokenCount: 1 }), anon, "p")).toBe("unauthenticated");
+    // Once any account exists, the open-token fallback is closed → anonymous is unauthenticated
+    expect(await authorizeProjectWrite(depsWith({ userCount: 1, tokenCount: 0 }), anon, "p")).toBe("unauthenticated");
   });
 
-  it("a project-scoped token authorizes its own project only", async () => {
+  it("a project-scoped token authorizes its own project only; wrong-scope token is indistinguishable from no/invalid token (unauthenticated, not forbidden)", async () => {
+    // Fix #3: wrong-scope token → "unauthenticated" (was "forbidden").
+    // A valid token on the wrong project now responds identically to an invalid token — no oracle.
+    // "wrong-scope token is indistinguishable from no/invalid token — no token-validity oracle."
     expect(await authorizeProjectWrite(depsWith(), tokenFor("p"), "p")).toBe("ok");
-    expect(await authorizeProjectWrite(depsWith(), tokenFor("p"), "other")).toBe("unauthorized");
+    expect(await authorizeProjectWrite(depsWith(), tokenFor("p"), "other")).toBe("unauthenticated");
   });
 
   it("admin always; member needs maintainer+; viewer cannot write", async () => {
     expect(await authorizeProjectWrite(depsWith({ userCount: 1 }), admin, "p")).toBe("ok");
     expect(await authorizeProjectWrite(depsWith({ userCount: 1, membership: { role: "maintainer" } }), plainUser, "p")).toBe("ok");
     expect(await authorizeProjectWrite(depsWith({ userCount: 1, membership: { role: "owner" } }), plainUser, "p")).toBe("ok");
-    expect(await authorizeProjectWrite(depsWith({ userCount: 1, membership: { role: "viewer" } }), plainUser, "p")).toBe("unauthorized");
-    expect(await authorizeProjectWrite(depsWith({ userCount: 1, membership: null }), plainUser, "p")).toBe("unauthorized");
+    // signed-in user with insufficient role → forbidden
+    expect(await authorizeProjectWrite(depsWith({ userCount: 1, membership: { role: "viewer" } }), plainUser, "p")).toBe("forbidden");
+    expect(await authorizeProjectWrite(depsWith({ userCount: 1, membership: null }), plainUser, "p")).toBe("forbidden");
   });
 });
 
 describe("authorizeProjectOwner", () => {
-  it("admin or owner only; tokens never qualify", async () => {
+  it("admin or owner only; tokens and non-owners get forbidden; anonymous gets unauthenticated", async () => {
     expect(await authorizeProjectOwner(depsWith(), admin, "p")).toBe("ok");
     expect(await authorizeProjectOwner(depsWith({ membership: { role: "owner" } }), plainUser, "p")).toBe("ok");
-    expect(await authorizeProjectOwner(depsWith({ membership: { role: "maintainer" } }), plainUser, "p")).toBe("unauthorized");
-    expect(await authorizeProjectOwner(depsWith(), tokenFor("p"), "p")).toBe("unauthorized");
+    // signed-in maintainer (insufficient role) → forbidden
+    expect(await authorizeProjectOwner(depsWith({ membership: { role: "maintainer" } }), plainUser, "p")).toBe("forbidden");
+    // token principal → forbidden (project-scoped, not a person)
+    expect(await authorizeProjectOwner(depsWith(), tokenFor("p"), "p")).toBe("forbidden");
+    // anonymous → unauthenticated
+    expect(await authorizeProjectOwner(depsWith(), anon, "p")).toBe("unauthenticated");
   });
 });
 
 describe("authorizeProjectCreate", () => {
-  it("admin always; anonymous only in zero-config; tokens never", async () => {
+  it("admin always; anonymous only in zero-config; tokens and non-admins get forbidden/unauthenticated", async () => {
     expect(await authorizeProjectCreate(depsWith({ userCount: 5 }), admin)).toBe("ok");
-    expect(await authorizeProjectCreate(depsWith({ userCount: 1 }), plainUser)).toBe("unauthorized");
+    // signed-in non-admin → forbidden
+    expect(await authorizeProjectCreate(depsWith({ userCount: 1 }), plainUser)).toBe("forbidden");
+    // anonymous in zero-config → ok
     expect(await authorizeProjectCreate(depsWith({ userCount: 0 }), anon)).toBe("ok");
-    expect(await authorizeProjectCreate(depsWith({ userCount: 1 }), anon)).toBe("unauthorized");
-    expect(await authorizeProjectCreate(depsWith(), tokenFor("p"))).toBe("unauthorized");
+    // anonymous with accounts → unauthenticated
+    expect(await authorizeProjectCreate(depsWith({ userCount: 1 }), anon)).toBe("unauthenticated");
+    // token → forbidden (project-scoped, cannot create projects)
+    expect(await authorizeProjectCreate(depsWith(), tokenFor("p"))).toBe("forbidden");
   });
 });
 
 describe("requireAdmin", () => {
-  it("only global admins pass", () => {
+  it("only global admins pass; non-admin signed-in → forbidden; anonymous → unauthenticated", () => {
     expect(requireAdmin(admin)).toBe("ok");
-    expect(requireAdmin(plainUser)).toBe("unauthorized");
-    expect(requireAdmin(anon)).toBe("unauthorized");
-    expect(requireAdmin(tokenFor("p"))).toBe("unauthorized");
+    expect(requireAdmin(plainUser)).toBe("forbidden");
+    expect(requireAdmin(anon)).toBe("unauthenticated");
+    // tokens are not admins → forbidden (they are a known principal type, just not admin)
+    expect(requireAdmin(tokenFor("p"))).toBe("forbidden");
   });
 });

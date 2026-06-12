@@ -67,6 +67,13 @@ const DESCRIBERS: Record<AuditAction, Describer> = {
   },
   notification_deleted: (e) => `${e.actorLabel} removed notification from ${e.projectId ?? "a project"}`,
 
+  password_changed: (e) => `${e.actorLabel} changed their password`,
+  password_change_failed: (e) => `${e.actorLabel} failed a password change attempt`,
+  session_revoked: (e) =>
+    e.targetId === "all-others"
+      ? `${e.actorLabel} signed out all other sessions${typeof (e.metadata as Record<string, unknown>)?.revoked === "number" ? ` (${(e.metadata as Record<string, unknown>).revoked})` : ""}`
+      : `${e.actorLabel} revoked a session`,
+
   run_deleted: (e) => {
     const m = meta(e);
     const project = e.projectId ?? "a project";

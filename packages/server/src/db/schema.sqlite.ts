@@ -37,6 +37,7 @@ export const apiTokens = sqliteTable("api_tokens", {
   prefix: text("prefix").notNull(),
   createdAt: text("created_at").notNull(),
   lastUsedAt: text("last_used_at"),
+  expiresAt: text("expires_at"),
 }, (t) => ({
   byProject: index("idx_api_tokens_project").on(t.projectId),
   byHash: uniqueIndex("idx_api_tokens_hash").on(t.tokenHash), // unique: a token credential resolves to exactly one row
@@ -60,6 +61,7 @@ export const users = sqliteTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: text("role").notNull(), // admin|user (global role)
   createdAt: text("created_at").notNull(),
+  authProvider: text("auth_provider"), // "oidc" for SSO-provisioned users (no usable password); null = local
 }, (t) => ({
   byEmail: uniqueIndex("idx_users_email").on(t.email),
 }));
@@ -70,6 +72,8 @@ export const sessions = sqliteTable("sessions", {
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   createdAt: text("created_at").notNull(),
   expiresAt: text("expires_at").notNull(),
+  userAgent: text("user_agent"),
+  ip: text("ip"),
 }, (t) => ({
   byHash: uniqueIndex("idx_sessions_hash").on(t.tokenHash), // unique: a cookie resolves to exactly one session
   byUser: index("idx_sessions_user").on(t.userId),

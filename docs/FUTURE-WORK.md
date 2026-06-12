@@ -111,11 +111,9 @@ test-isolation gap; worth fixing when next in the e2e files.)
 **Suggested next slice:** #1 (run metadata) — smallest contained change with the widest downstream
 payoff. #2 (private reports) is the likely adoption blocker. #3 + #4 are the daily-triage win.
 
-## Auth: split 401/403 on write routes
+## Auth: rate limiting
 
-The server currently returns the same `401 {"error":"unauthorized"}` for an expired/missing
-session AND for a signed-in user below the required role, so the web client cannot tell
-"sign in again" apart from "ask for write access" (`packages/web/src/lib/errors.ts` ships
-combined copy as a bridge). Fix at the server: keep `401` for unauthenticated principals,
-return `403` for authenticated-but-insufficient-role — then tighten the client mapping.
-Touches: `auth.ts` authorize helpers, route tests asserting 401, OpenAPI error declarations.
+`POST /auth/login` and `POST /auth/password` accept unlimited attempts. scrypt cost plus
+`login_failed`/`password_change_failed` audit entries mitigate, but a per-IP/per-account
+limiter (e.g. @fastify/rate-limit on the two routes) is the right next step.
+

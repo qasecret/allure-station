@@ -265,10 +265,20 @@ export const apiTokenSchema = z.object({
   prefix: z.string(),
   createdAt: z.string(),
   lastUsedAt: z.string().nullable(),
+  expiresAt: z.string().nullable(),
 });
 // Returned ONCE on creation — includes the plaintext token.
 export const createdTokenSchema = apiTokenSchema.extend({ token: z.string() });
-export const createTokenRequestSchema = z.object({ name: z.string().min(1).max(64) });
+/** Allowed API-token lifetimes (days). Single source: the zod union, the client param type, and the
+ *  UI's expiry options all derive from this — add a value here and every layer stays in sync. */
+export const TOKEN_EXPIRY_DAYS = [30, 90, 365] as const;
+export type TokenExpiryDays = (typeof TOKEN_EXPIRY_DAYS)[number];
+export const createTokenRequestSchema = z.object({
+  name: z.string().min(1).max(64),
+  expiresInDays: z
+    .union(TOKEN_EXPIRY_DAYS.map((d) => z.literal(d)) as [z.ZodLiteral<30>, z.ZodLiteral<90>, z.ZodLiteral<365>])
+    .optional(),
+});
 
 // --- Accounts & RBAC (Phase 5b) ---
 export const globalRoleSchema = z.enum(["admin", "user"]);
@@ -279,6 +289,8 @@ export const userSchema = z.object({
   email: z.string().email(),
   role: globalRoleSchema,
   createdAt: z.string(),
+  // "oidc" when the account was provisioned via SSO (no usable local password); null/absent = local.
+  authProvider: z.enum(["oidc"]).nullable().optional(),
 });
 // The authenticated principal returned by GET /auth/me (or null when anonymous).
 export const sessionUserSchema = userSchema;
@@ -307,6 +319,23 @@ export const setMembershipRequestSchema = z.object({
   role: projectRoleSchema,
 });
 
+// --- Session info (returned by GET /auth/sessions — no tokenHash exposed) ---
+export const sessionInfoSchema = z.object({
+  id: z.string(),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  userAgent: z.string().nullable(),
+  ip: z.string().nullable(),
+  current: z.boolean(),
+});
+export type SessionInfo = z.infer<typeof sessionInfoSchema>;
+
+export const changePasswordRequestSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
+
 // --- Audit log (Phase 5c) ---
 export const auditActionSchema = z.enum([
   "login", "login_failed", "logout",
@@ -318,6 +347,9 @@ export const auditActionSchema = z.enum([
   "quality_gate_set",
   "notification_created", "notification_deleted",
   "run_deleted",
+  "password_changed",
+  "password_change_failed",
+  "session_revoked",
 ]);
 export const auditActorTypeSchema = z.enum(["user", "token", "anonymous"]);
 export const auditEntrySchema = z.object({

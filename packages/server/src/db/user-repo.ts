@@ -17,11 +17,11 @@ function normalizeEmail(email: string): string {
 export class UserRepository {
   constructor(private readonly db: Db, private readonly newId: () => string) {}
 
-  async create(email: string, passwordHash: string, role: GlobalRole, now: string): Promise<User> {
+  async create(email: string, passwordHash: string, role: GlobalRole, now: string, authProvider: "oidc" | null = null): Promise<User> {
     const id = this.newId();
     const norm = normalizeEmail(email);
-    await this.db.insert(users).values({ id, email: norm, passwordHash, role, createdAt: now });
-    return { id, email: norm, role, createdAt: now };
+    await this.db.insert(users).values({ id, email: norm, passwordHash, role, createdAt: now, authProvider });
+    return { id, email: norm, role, createdAt: now, authProvider };
   }
 
   /**
@@ -50,12 +50,17 @@ export class UserRepository {
 
   async list(): Promise<User[]> {
     const rows = await this.db.select().from(users).orderBy(users.email);
-    return rows.map((r) => ({ id: r.id, email: r.email, role: r.role as GlobalRole, createdAt: r.createdAt }));
+    return rows.map((r) => ({ id: r.id, email: r.email, role: r.role as GlobalRole, createdAt: r.createdAt, authProvider: (r.authProvider as "oidc" | null) ?? null }));
   }
 
   async count(): Promise<number> {
     const [row] = await this.db.select({ c: count() }).from(users);
     return Number(row?.c ?? 0);
+  }
+
+  /** Update the user's stored password hash (e.g. after a password-change flow). */
+  async setPasswordHash(id: string, passwordHash: string): Promise<void> {
+    await this.db.update(users).set({ passwordHash }).where(eq(users.id, id));
   }
 
   /** Delete a user and (because libsql doesn't cascade) their sessions + memberships. */
@@ -67,6 +72,6 @@ export class UserRepository {
   }
 
   #toRow(r: typeof users.$inferSelect): UserRow {
-    return { id: r.id, email: r.email, role: r.role as GlobalRole, createdAt: r.createdAt, passwordHash: r.passwordHash };
+    return { id: r.id, email: r.email, role: r.role as GlobalRole, createdAt: r.createdAt, passwordHash: r.passwordHash, authProvider: (r.authProvider as "oidc" | null) ?? null };
   }
 }

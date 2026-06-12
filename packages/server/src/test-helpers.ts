@@ -16,7 +16,10 @@ import type { AppDeps } from "./app.js";
 import { InProcessBus } from "./events/bus.js";
 import { wireQueue } from "./generation.js";
 
-export async function makeTestDeps(): Promise<AppDeps> {
+export async function makeTestDeps(overrides: {
+  now?: () => string;
+  branding?: { name: string; tagline: string; logoUrl: string | null };
+} = {}): Promise<AppDeps> {
   const { db, migrate } = createDb("sqlite", { url: ":memory:" });
   await migrate();
   const root = mkdtempSync(join(tmpdir(), "as-srv-"));
@@ -40,7 +43,13 @@ export async function makeTestDeps(): Promise<AppDeps> {
     publicUrl: undefined,
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
     cookieSecure: false,
-    now: () => "2026-06-06T00:00:00.000Z",
+    trustProxy: false,
+    branding: overrides.branding ?? {
+      name: "Allure Station",
+      tagline: "Your test reports, beautifully hosted.",
+      logoUrl: null,
+    },
+    now: overrides.now ?? (() => "2026-06-06T00:00:00.000Z"),
     newId: (() => { let n = 0; return () => `id${++n}`; })(),
   };
   wireQueue(deps);

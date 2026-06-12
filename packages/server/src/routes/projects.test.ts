@@ -127,7 +127,7 @@ describe("PATCH /projects/:id — private-project existence-tell fix (A1)", () =
     const adminCookie = await loginAs(app, "admin@x.com");
 
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "open" }, cookies: { as_session: adminCookie } });
-    // public visibility (default) — unauthorized should get 401
+    // public visibility (default) — anonymous principal has no write rights → 401 unauthenticated
     const res = await app.inject({ method: "PATCH", url: "/api/projects/open", payload: { displayName: "x" } });
     expect(res.statusCode).toBe(401);
 

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { ProjectRole, CreatedToken, NotificationKind, NotificationTrigger } from "@allure-station/shared";
+import { TOKEN_EXPIRY_DAYS } from "@allure-station/shared";
+import type { ProjectRole, CreatedToken, NotificationKind, NotificationTrigger, TokenExpiryDays } from "@allure-station/shared";
 import { TimeStamp } from "@/components/TimeStamp";
 import { describeAuditEntry } from "@/lib/audit-format";
 import { AuditFilterBar } from "@/components/AuditFilterBar";
@@ -23,6 +24,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { qgConfigToForm, qgFormToConfig, type QgForm } from "@/lib/quality-gate-form";
+import { tokenExpiryStatus } from "@/lib/format";
 
 const PROJECT_ROLES: ProjectRole[] = ["viewer", "maintainer", "owner"];
 
@@ -341,16 +343,40 @@ function QualityGateCard({ projectId }: { projectId: string }) {
   );
 }
 
+const EXPIRY_LABEL: Record<number, string> = { 30: "30 days", 90: "90 days", 365: "1 year" };
+// Derived from the shared TOKEN_EXPIRY_DAYS so adding a lifetime is a one-line change in contracts.
+// 90 first (the default-nudge), then the rest, then "Never".
+const EXPIRES_OPTIONS: { label: string; value: string }[] = [
+  ...[90, ...TOKEN_EXPIRY_DAYS.filter((d) => d !== 90)].map((d) => ({ label: EXPIRY_LABEL[d] ?? `${d} days`, value: String(d) })),
+  { label: "Never", value: "never" },
+];
+
+function ExpiryCell({ expiresAt }: { expiresAt: string | null }) {
+  const status = tokenExpiryStatus(expiresAt);
+  if (status.tone === "expired") {
+    return <Badge variant="outline" className="border-status-fail/30 bg-status-fail/15 text-status-fail-text">{status.label}</Badge>;
+  }
+  if (status.tone === "warn") {
+    return <span className="text-sm text-status-broken-text">{status.label}</span>;
+  }
+  return <span className="text-sm text-muted-foreground">{status.label}</span>;
+}
+
 function TokensCard({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
   const [name, setName] = useState("");
+  const [expiresValue, setExpiresValue] = useState("90");
   const [created, setCreated] = useState<CreatedToken | null>(null);
   // Drop a revealed token if we navigate to another project (the route reuses this component).
   useEffect(() => { setCreated(null); }, [projectId]);
   const { data: tokens, isLoading: tokensLoading } = useQuery({ queryKey: ["tokens", projectId], queryFn: () => api.listTokens(projectId) });
   const create = useMutation({
-    mutationFn: () => api.createToken(projectId, name),
-    onSuccess: (t) => { setCreated(t); setName(""); qc.invalidateQueries({ queryKey: ["tokens", projectId] }); },
+    mutationFn: () => {
+      const parsed = Number(expiresValue);
+      const expiresInDays = (TOKEN_EXPIRY_DAYS as readonly number[]).includes(parsed) ? (parsed as TokenExpiryDays) : undefined;
+      return api.createToken(projectId, name, expiresInDays);
+    },
+    onSuccess: (t) => { setCreated(t); setName(""); setExpiresValue("90"); qc.invalidateQueries({ queryKey: ["tokens", projectId] }); },
     onError: (e) => toast.error(humanizeError(e, "token")),
   });
   const remove = useMutation({
@@ -366,6 +392,10 @@ function TokensCard({ projectId }: { projectId: string }) {
       <CardContent className="space-y-4">
         <form onSubmit={(e) => { e.preventDefault(); if (!name || create.isPending) return; create.mutate(); }} className="flex flex-wrap items-center gap-2">
           <Input aria-label="Token name" placeholder="token name (e.g. ci-pipeline)" value={name} onChange={(e) => setName(e.target.value)} maxLength={64} required className="max-w-xs" />
+          <Select value={expiresValue} onValueChange={setExpiresValue}>
+            <SelectTrigger aria-label="Expires" className="w-[120px]"><SelectValue /></SelectTrigger>
+            <SelectContent>{EXPIRES_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+          </Select>
           <Button type="submit" disabled={create.isPending}>Create token</Button>
         </form>
         {created && (
@@ -382,12 +412,13 @@ function TokensCard({ projectId }: { projectId: string }) {
           <p className="text-sm text-muted-foreground">No tokens yet — this project's writes are open until you add one.</p>
         ) : (
           <Table>
-            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Prefix</TableHead><TableHead>Last used</TableHead><TableHead /></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Prefix</TableHead><TableHead>Expiry</TableHead><TableHead>Last used</TableHead><TableHead /></TableRow></TableHeader>
             <TableBody>
               {tokens.map((t) => (
                 <TableRow key={t.id}>
                   <TableCell>{t.name}</TableCell>
                   <TableCell><code className="text-xs text-muted-foreground">{t.prefix}…</code></TableCell>
+                  <TableCell><ExpiryCell expiresAt={t.expiresAt} /></TableCell>
                   <TableCell className="text-muted-foreground">{t.lastUsedAt ? <TimeStamp iso={t.lastUsedAt} /> : "never"}</TableCell>
                   <TableCell className="text-right"><Button variant="ghost" size="sm" disabled={remove.isPending && remove.variables === t.id} onClick={() => remove.mutate(t.id)}>Revoke</Button></TableCell>
                 </TableRow>

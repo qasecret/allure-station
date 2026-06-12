@@ -55,8 +55,9 @@ describe("member routes (owner/admin-gated)", () => {
     await app.inject({ method: "PUT", url: "/api/projects/p/members", payload: { email: "owner@x.com", role: "maintainer" }, cookies: { as_session: adminCookie } });
 
     const maintCookie = await login(app, "owner@x.com");
-    expect((await app.inject({ method: "GET", url: "/api/projects/p/members", cookies: { as_session: maintCookie } })).statusCode).toBe(401);
-    expect((await app.inject({ method: "PUT", url: "/api/projects/p/members", payload: { email: "other@x.com", role: "viewer" }, cookies: { as_session: maintCookie } })).statusCode).toBe(401);
+    // signed-in maintainer (insufficient role for member management) → 403 forbidden
+    expect((await app.inject({ method: "GET", url: "/api/projects/p/members", cookies: { as_session: maintCookie } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "PUT", url: "/api/projects/p/members", payload: { email: "other@x.com", role: "viewer" }, cookies: { as_session: maintCookie } })).statusCode).toBe(403);
 
     // Granting a non-existent user is 404.
     expect((await app.inject({ method: "PUT", url: "/api/projects/p/members", payload: { email: "ghost@x.com", role: "viewer" }, cookies: { as_session: adminCookie } })).statusCode).toBe(404);

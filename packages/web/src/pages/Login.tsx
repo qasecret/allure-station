@@ -17,7 +17,8 @@ export function Login() {
   const [error, setError] = useState<string | null>(params.get("error") === "sso" ? "Single sign-on failed. Try again or use a password." : null);
   const [busy, setBusy] = useState(false);
 
-  const { data: config } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig() });
+  const { data: config } = useQuery({ queryKey: ["config"], queryFn: () => api.getConfig(), staleTime: Infinity });
+  const brand = config?.branding;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,16 +39,16 @@ export function Login() {
       {/* Panel bg uses the primary token (matches brand teal #1db980); text uses primary-foreground tokens for 7:1 AA contrast (tracks the tokens). */}
       <div className="relative hidden flex-col justify-between bg-primary p-10 lg:flex lg:p-14">
         <div className="flex items-center gap-3 text-lg font-bold tracking-tight text-primary-foreground">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-white/20 shadow-sm backdrop-blur-sm"><img src="/favicon.svg" alt="" className="size-6" /></span>
-          Allure Station
+          <span className="flex size-9 items-center justify-center rounded-lg bg-white/20 shadow-sm backdrop-blur-sm"><img src={brand?.logoUrl ?? "/favicon.svg"} alt="" className="size-6" /></span>
+          {brand?.name ?? "Allure Station"}
         </div>
-        <div><h2 className="text-3xl font-bold leading-tight tracking-tight text-primary-foreground lg:text-4xl">Your test reports, beautifully hosted.</h2><p className="mt-4 max-w-md text-lg leading-relaxed text-primary-foreground/90">Multi-project Allure 3 reports with trends, run comparison, and access control.</p></div>
+        <div><h2 className="text-3xl font-bold leading-tight tracking-tight text-primary-foreground lg:text-4xl">{brand?.tagline ?? "Your test reports, beautifully hosted."}</h2><p className="mt-4 max-w-md text-lg leading-relaxed text-primary-foreground/90">Multi-project Allure 3 reports with trends, run comparison, and access control.</p></div>
         <span className="text-sm font-medium text-primary-foreground/80">Self-hosted report hub</span>
       </div>
       <div className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm space-y-6">
-          <div className="text-center lg:hidden"><img src="/favicon.svg" alt="Allure Station" className="mx-auto size-12" /></div>
-          <div><h1 className="text-xl font-semibold">Sign in to Allure Station</h1><p className="mt-1 text-sm text-muted-foreground">Use SSO or your email and password.</p></div>
+          <div className="text-center lg:hidden"><img src={brand?.logoUrl ?? "/favicon.svg"} alt={brand?.name ?? "Allure Station"} className="mx-auto size-12" /></div>
+          <div><h1 className="text-xl font-semibold">Sign in to {brand?.name ?? "Allure Station"}</h1><p className="mt-1 text-sm text-muted-foreground">Use SSO or your email and password.</p></div>
           {config?.oidc.enabled && (
             <>
               <Button asChild variant="outline" className="w-full"><a href="/api/auth/oidc/login">Sign in with {config.oidc.label ?? "SSO"}</a></Button>

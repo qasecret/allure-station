@@ -105,6 +105,14 @@ describe("loadConfig", () => {
     expect(loadConfig({}).generateStaleMs).toBe(30 * 60 * 1000);
   });
 
+  it("BRAND_NAME='' falls back to default name (|| not ??)", () => {
+    expect(loadConfig({ BRAND_NAME: "" }).branding.name).toBe("Allure Station");
+  });
+
+  it("BRAND_LOGO_URL='' falls back to null (|| not ??)", () => {
+    expect(loadConfig({ BRAND_LOGO_URL: "" }).branding.logoUrl).toBeNull();
+  });
+
   it("populates credentials only when both key id and secret are present", () => {
     const cfgWithBoth = loadConfig({
       STORAGE_DRIVER: "s3",

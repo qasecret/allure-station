@@ -63,6 +63,7 @@ export default defineConfig({
         PORT: String(AUTHED_PORT),
         ADMIN_EMAIL,
         ADMIN_PASSWORD,
+        BRAND_NAME: "Acme QA",
       },
     },
   ],

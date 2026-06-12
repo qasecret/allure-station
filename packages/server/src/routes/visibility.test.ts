@@ -84,9 +84,9 @@ describe("private projects / read gating", () => {
     const admin = await login(app, "admin@x.com");
     await app.inject({ method: "POST", url: "/api/projects", payload: { id: "p" }, cookies: { as_session: admin } });
 
-    expect(sc(await app.inject({ method: "PUT", url: "/api/projects/p/visibility", payload: { visibility: "private" } }))).toBe(401); // anon
+    expect(sc(await app.inject({ method: "PUT", url: "/api/projects/p/visibility", payload: { visibility: "private" } }))).toBe(401); // anon → 401 unauthenticated
     const stranger = await login(app, "stranger@x.com");
-    expect(sc(await app.inject({ method: "PUT", url: "/api/projects/p/visibility", payload: { visibility: "private" }, cookies: { as_session: stranger } }))).toBe(401);
+    expect(sc(await app.inject({ method: "PUT", url: "/api/projects/p/visibility", payload: { visibility: "private" }, cookies: { as_session: stranger } }))).toBe(403); // signed-in non-owner → 403 forbidden
     expect(sc(await app.inject({ method: "PUT", url: "/api/projects/p/visibility", payload: { visibility: "bogus" }, cookies: { as_session: admin } }))).toBe(400);
     await app.close();
   });

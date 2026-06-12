@@ -2,7 +2,7 @@ import type {
   Project, Run, TrendPoint, RunEvent, CompareResult, TestHistory, TestTrace,
   SessionUser, User, GlobalRole, MembershipWithUser, ProjectRole, AuditEntry, ProjectVisibility,
   ApiToken, CreatedToken, QualityGateConfig, RunSummary, Notification, NotificationKind, NotificationTrigger,
-  RunMetadata, UpdateProjectRequest, ProjectListItem, ProjectSort, Overview,
+  RunMetadata, UpdateProjectRequest, ProjectListItem, ProjectSort, Overview, SessionInfo,
 } from "@allure-station/shared";
 import { ApiError } from "../lib/errors.js";
 
@@ -10,6 +10,11 @@ export interface AppConfigInfo {
   securityEnabled: boolean;
   oidc: { enabled: boolean; label?: string };
   allure: string;
+  branding?: {
+    name: string;
+    tagline: string;
+    logoUrl: string | null;
+  };
 }
 
 export interface ApiClient {
@@ -49,12 +54,17 @@ export interface ApiClient {
   getQualityGate(projectId: string): Promise<QualityGateConfig>;
   setQualityGate(projectId: string, cfg: QualityGateConfig): Promise<QualityGateConfig>;
   listTokens(projectId: string): Promise<ApiToken[]>;
-  createToken(projectId: string, name: string): Promise<CreatedToken>;
+  createToken(projectId: string, name: string, expiresInDays?: number): Promise<CreatedToken>;
   deleteToken(projectId: string, tokenId: string): Promise<void>;
   listNotifications(projectId: string): Promise<Notification[]>;
   createNotification(projectId: string, body: { kind: NotificationKind; url: string; events: NotificationTrigger[] }): Promise<Notification>;
   testNotification(projectId: string, notificationId: string): Promise<{ ok: boolean; status?: number; error?: string }>;
   deleteNotification(projectId: string, notificationId: string): Promise<void>;
+  // --- Account & sessions ---
+  listSessions(): Promise<SessionInfo[]>;
+  revokeSession(id: string): Promise<void>;
+  revokeOtherSessions(): Promise<{ revoked: number }>;
+  changePassword(body: { currentPassword: string; newPassword: string }): Promise<void>;
 }
 
 export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
@@ -140,8 +150,8 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     setQualityGate: (projectId, cfg) =>
       json<QualityGateConfig>(`/projects/${projectId}/quality-gate`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(cfg) }),
     listTokens: (projectId) => json<ApiToken[]>(`/projects/${projectId}/tokens`, { method: "GET" }),
-    createToken: (projectId, name) =>
-      json<CreatedToken>(`/projects/${projectId}/tokens`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) }),
+    createToken: (projectId, name, expiresInDays) =>
+      json<CreatedToken>(`/projects/${projectId}/tokens`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(expiresInDays !== undefined ? { name, expiresInDays } : { name }) }),
     deleteToken: (projectId, tokenId) => noContent(`/projects/${projectId}/tokens/${tokenId}`, { method: "DELETE" }),
     listNotifications: (projectId) => json<Notification[]>(`/projects/${projectId}/notifications`, { method: "GET" }),
     createNotification: (projectId, body) =>
@@ -149,6 +159,11 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     testNotification: (projectId, notificationId) =>
       json<{ ok: boolean; status?: number; error?: string }>(`/projects/${projectId}/notifications/${notificationId}/test`, { method: "POST" }),
     deleteNotification: (projectId, notificationId) => noContent(`/projects/${projectId}/notifications/${notificationId}`, { method: "DELETE" }),
+    listSessions: () => json<SessionInfo[]>("/auth/sessions", { method: "GET" }),
+    revokeSession: (id) => noContent(`/auth/sessions/${id}`, { method: "DELETE" }),
+    revokeOtherSessions: () => json<{ revoked: number }>("/auth/sessions", { method: "DELETE" }),
+    changePassword: (body) =>
+      noContent("/auth/password", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
     subscribeRuns: (projectId, onEvent) => {
       // No-op where EventSource is unavailable (e.g. jsdom/SSR); the page still works via fetch.
       if (typeof EventSource === "undefined") return () => {};

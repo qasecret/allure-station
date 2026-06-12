@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { createNotificationRequestSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
-import { authenticate, authorizeProjectWrite, requireProjectWrite } from "../auth.js";
+import { authenticate, authorizeProjectWrite, requireProjectWrite, denyAuth } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 import { checkWebhookUrl } from "../safe-url.js";
 import { sendTestNotification } from "../notify.js";
@@ -11,7 +11,8 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: AppDeps):
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
     const principal = await authenticate(deps, req);
-    if ((await authorizeProjectWrite(deps, principal, projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    const verdict = await authorizeProjectWrite(deps, principal, projectId);
+    if (verdict !== "ok") return denyAuth(reply, verdict);
     const parsed = createNotificationRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
     const { kind, url, events } = parsed.data;
@@ -25,7 +26,8 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: AppDeps):
   app.get("/projects/:projectId/notifications", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
-    if ((await requireProjectWrite(deps, req, projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    const verdict = await requireProjectWrite(deps, req, projectId);
+    if (verdict !== "ok") return denyAuth(reply, verdict);
     return deps.notifications.listByProject(projectId);
   });
 
@@ -35,7 +37,8 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: AppDeps):
     const { projectId, notificationId } = req.params as { projectId: string; notificationId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
     const principal = await authenticate(deps, req);
-    if ((await authorizeProjectWrite(deps, principal, projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    const verdict = await authorizeProjectWrite(deps, principal, projectId);
+    if (verdict !== "ok") return denyAuth(reply, verdict);
     const sub = await deps.notifications.get(projectId, notificationId);
     if (!sub) return reply.code(404).send({ error: "notification not found" });
     return reply.code(200).send(await sendTestNotification(sub, projectId));
@@ -45,7 +48,8 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: AppDeps):
     const { projectId, notificationId } = req.params as { projectId: string; notificationId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
     const principal = await authenticate(deps, req);
-    if ((await authorizeProjectWrite(deps, principal, projectId)) === "unauthorized") return reply.code(401).send({ error: "unauthorized" });
+    const verdict = await authorizeProjectWrite(deps, principal, projectId);
+    if (verdict !== "ok") return denyAuth(reply, verdict);
     if (!(await deps.notifications.remove(projectId, notificationId))) return reply.code(404).send({ error: "notification not found" });
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "notification_deleted", targetType: "notification", targetId: notificationId, projectId });
     return reply.code(204).send();

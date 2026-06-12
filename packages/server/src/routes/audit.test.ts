@@ -59,12 +59,12 @@ describe("audit routes + recording", () => {
     expect(ownerView.statusCode).toBe(200);
     expect((ownerView.json() as AuditEntry[]).every((e) => e.projectId === "p")).toBe(true);
 
-    // A non-owner user and anonymous are denied the per-project log.
-    expect((await app.inject({ method: "GET", url: "/api/projects/p/audit", cookies: { as_session: plainCookie } })).statusCode).toBe(401);
+    // A signed-in non-owner user is denied (403 forbidden); anonymous is 401 unauthenticated.
+    expect((await app.inject({ method: "GET", url: "/api/projects/p/audit", cookies: { as_session: plainCookie } })).statusCode).toBe(403);
     expect((await app.inject({ method: "GET", url: "/api/projects/p/audit" })).statusCode).toBe(401);
 
-    // The global log is admin-only.
-    expect((await app.inject({ method: "GET", url: "/api/audit", cookies: { as_session: ownerCookie } })).statusCode).toBe(401);
+    // The global log is admin-only: signed-in non-admin → 403, anonymous → 401.
+    expect((await app.inject({ method: "GET", url: "/api/audit", cookies: { as_session: ownerCookie } })).statusCode).toBe(403);
     expect((await app.inject({ method: "GET", url: "/api/audit" })).statusCode).toBe(401);
 
     // Missing project → 404.

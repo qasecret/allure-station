@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { runMetadataSchema } from "@allure-station/shared";
 import type { Run } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
-import { requireProjectWrite } from "../auth.js";
+import { requireProjectWrite, denyAuth } from "../auth.js";
 
 // Optional CI-metadata text fields accepted alongside the file parts.
 const META_FIELDS = new Set(["branch", "commit", "environment", "ciUrl"]);
@@ -32,9 +32,8 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
   app.post("/projects/:projectId/send-results", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
-    if ((await requireProjectWrite(deps, req, projectId)) === "unauthorized") {
-      return reply.code(401).send({ error: "unauthorized" });
-    }
+    const sendVerdict = await requireProjectWrite(deps, req, projectId);
+    if (sendVerdict !== "ok") return denyAuth(reply, sendVerdict);
 
     const runId = deps.newId(); // generated up front so files can stream before the row exists
     const parts = req.parts();
@@ -72,9 +71,8 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
     const { projectId } = req.params as { projectId: string };
     const { runId } = req.query as { runId?: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
-    if ((await requireProjectWrite(deps, req, projectId)) === "unauthorized") {
-      return reply.code(401).send({ error: "unauthorized" });
-    }
+    const genVerdict = await requireProjectWrite(deps, req, projectId);
+    if (genVerdict !== "ok") return denyAuth(reply, genVerdict);
     let pending;
     if (runId) {
       const run = await deps.runs.get(runId);
@@ -95,9 +93,8 @@ export function registerResultRoutes(app: FastifyInstance, deps: AppDeps): void 
   app.post("/projects/:projectId/runs/:runId/retry", async (req, reply) => {
     const { projectId, runId } = req.params as { projectId: string; runId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
-    if ((await requireProjectWrite(deps, req, projectId)) === "unauthorized") {
-      return reply.code(401).send({ error: "unauthorized" });
-    }
+    const retryVerdict = await requireProjectWrite(deps, req, projectId);
+    if (retryVerdict !== "ok") return denyAuth(reply, retryVerdict);
     const run = await deps.runs.get(runId);
     if (!run || run.projectId !== projectId) return reply.code(404).send({ error: "run not found" });
     if (run.status !== "failed") return reply.code(409).send({ error: `run is not failed (status: ${run.status})` });

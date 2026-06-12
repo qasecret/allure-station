@@ -10,5 +10,6 @@ export function registerMetaRoutes(app: FastifyInstance, deps: AppDeps): void {
     securityEnabled: (await deps.users.count()) > 0,
     oidc: deps.oidc ? { enabled: true, label: deps.oidc.label } : { enabled: false },
     allure: ALLURE_VERSION,
+    branding: deps.branding,
   }));
 }

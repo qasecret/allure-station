@@ -5,8 +5,8 @@ describe("humanizeError", () => {
   // For 409 we use JSON-garbage so the generic fallback is exercised (plain text prose is returned as-is per item 1).
   const cases: Array<[number, string, string | RegExp]> = [
     [0, "raw server text", /can't reach the server/i],
-    [401, "token expired", /session has expired/i],
-    [403, "raw server text", /don't have permission/i],
+    [401, "unauthenticated", /session has expired/i],
+    [403, "forbidden", /don't have permission/i],
     [404, "raw server text", /no longer exists/i],
     [409, '{"x":1}', /conflicts with something/i],
     [413, "raw server text", /too large/i],
@@ -54,15 +54,15 @@ describe("humanizeError", () => {
     );
   });
 
-  // --- item 2: 401 insufficient-role vs session-expired ---
-  it("401 with body 'unauthorized' shows a permission-denied copy, not session-expired", () => {
-    expect(humanizeError(new ApiError(401, "unauthorized"))).toMatch(/not authorized .* sign in again/i);
-    expect(humanizeError(new ApiError(401, "unauthorized"))).toMatch(/ask an owner/i);
-    expect(humanizeError(new ApiError(401, "unauthorized"))).not.toMatch(/session/i);
-  });
-  it("401 with any other body keeps the session-expired copy", () => {
+  // --- 401 always means session-expired (server now disambiguates via 403 for role failures) ---
+  it("401 always shows session-expired copy regardless of body", () => {
+    expect(humanizeError(new ApiError(401, "unauthenticated"))).toMatch(/session has expired/i);
     expect(humanizeError(new ApiError(401, "token expired"))).toMatch(/session has expired/i);
     expect(humanizeError(new ApiError(401, ""))).toMatch(/session has expired/i);
+  });
+  it("403 shows permission-denied copy with owner-access hint", () => {
+    expect(humanizeError(new ApiError(403, "forbidden"))).toMatch(/don't have permission/i);
+    expect(humanizeError(new ApiError(403, "forbidden"))).toMatch(/ask an owner/i);
   });
 
   // --- item 3: zod 400 arrays produce a field hint ---

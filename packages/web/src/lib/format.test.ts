@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { passRate, relativeTime, runLabel, formatPercent, formatDurationSec, formatDelta, absoluteDate, formatAbsolute } from "./format.js";
+import { passRate, relativeTime, runLabel, formatPercent, formatDurationSec, formatDelta, absoluteDate, formatAbsolute, tokenExpiryStatus } from "./format.js";
 
 describe("formatDelta", () => {
   it("renders signed deltas and omits zero", () => {
@@ -109,5 +109,27 @@ describe("runLabel", () => {
   it("shows branch without sha when commit is absent", () => {
     const noCommit = { ...run, commit: null } as unknown as import("@allure-station/shared").Run;
     expect(runLabel(noCommit, now)).toBe("just now — ready (7/8) — main · staging");
+  });
+});
+
+describe("tokenExpiryStatus", () => {
+  const now = Date.parse("2026-06-12T00:00:00.000Z");
+  it("never / far / soon / expired", () => {
+    expect(tokenExpiryStatus(null, now)).toEqual({ label: "never expires", tone: "muted" });
+    expect(tokenExpiryStatus("2026-09-12T00:00:00.000Z", now).tone).toBe("muted");
+    expect(tokenExpiryStatus("2026-06-20T00:00:00.000Z", now)).toEqual({ label: "expires in 8d", tone: "warn" });   // ≤14d
+    expect(tokenExpiryStatus("2026-06-11T00:00:00.000Z", now)).toEqual({ label: "expired", tone: "expired" });
+  });
+  it("exactly now+14d is warn (boundary inclusive)", () => {
+    const exactly14d = new Date(now + 14 * 86_400_000).toISOString();
+    expect(tokenExpiryStatus(exactly14d, now).tone).toBe("warn");
+  });
+  it("now+14d+60s is muted (just past the warn boundary)", () => {
+    const justOver14d = new Date(now + 14 * 86_400_000 + 60_000).toISOString();
+    expect(tokenExpiryStatus(justOver14d, now).tone).toBe("muted");
+  });
+  it("exactly now is expired (zero ms remaining)", () => {
+    const exactlyNow = new Date(now).toISOString();
+    expect(tokenExpiryStatus(exactlyNow, now)).toEqual({ label: "expired", tone: "expired" });
   });
 });

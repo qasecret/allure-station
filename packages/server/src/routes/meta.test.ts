@@ -17,4 +17,17 @@ describe("meta routes", () => {
     expect(res.json()).toMatchObject({ securityEnabled: false });
     await app.close();
   });
+
+  it("serves branding with zero-config defaults and env overrides", async () => {
+    const deps = await makeTestDeps();
+    const app = buildApp(deps);
+    const res = await app.inject({ method: "GET", url: "/api/config" });
+    expect(res.json().branding).toEqual({ name: "Allure Station", tagline: "Your test reports, beautifully hosted.", logoUrl: null });
+    await app.close();
+
+    const deps2 = await makeTestDeps({ branding: { name: "Acme QA", tagline: "Ship it.", logoUrl: "https://cdn.acme/logo.svg" } });
+    const app2 = buildApp(deps2);
+    expect((await app2.inject({ method: "GET", url: "/api/config" })).json().branding.name).toBe("Acme QA");
+    await app2.close();
+  });
 });

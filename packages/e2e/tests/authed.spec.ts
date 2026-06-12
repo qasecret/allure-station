@@ -8,19 +8,12 @@
  *   - /audit renders humanized audit sentences (lib/audit-format.ts describers:
  *     login → "<email> logged in", user_created → "<actor> created user <email> (role)").
  *   - The audit action filter narrows the list, and the page passes the axe gate.
+ *   - Account page: sessions list with Current badge, password change, branding (BRAND_NAME=Acme QA).
+ *   - Project settings: token expiry select visible with "90 days" default.
  */
-import { test, expect, type Page } from "@playwright/test";
-import { ADMIN_EMAIL, ADMIN_PASSWORD } from "../playwright.config.js";
-import { expectNoSeriousViolations, visible } from "./helpers.js";
-
-/** Sign in as the seeded admin via the /login form; resolves after the redirect home. */
-async function login(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Email").fill(ADMIN_EMAIL);
-  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.waitForURL("/");
-}
+import { test, expect } from "@playwright/test";
+import { ADMIN_EMAIL } from "../playwright.config.js";
+import { expectNoSeriousViolations, visible, createProject, login, logout, loginAs, createUserViaUI } from "./helpers.js";
 
 test("authed: users page + audit page render, humanize, filter, and pass axe", async ({ page }) => {
   // The login itself writes a `login` audit entry — that seeds the audit assertions below.
@@ -60,4 +53,60 @@ test("authed: users page + audit page render, humanize, filter, and pass axe", a
   await expect(visible(page.getByText(loginSentence))).toBeVisible();
 
   await expectNoSeriousViolations(page, "audit");
+});
+
+test("account: sessions visible, password change works, branding applied", async ({ page }) => {
+  test.setTimeout(60_000);
+
+  // ── Branding: authed server has BRAND_NAME=Acme QA ──
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: /Sign in to Acme QA/ })).toBeVisible();
+
+  // ── Create a dedicated test user — never mutate the seeded admin ──
+  // (Each run uses a timestamped email; un-wiped re-runs don't conflict because
+  //  we never try to re-create an existing account.)
+  await login(page);
+  const email = `account-${Date.now()}@e2e.local`;
+  await createUserViaUI(page, email, "first-pass-123");
+
+  // Sign out admin, sign in as the dedicated user
+  await logout(page);
+  await loginAs(page, email, "first-pass-123");
+
+  // ── Account page: current session badge is visible ──
+  await page.goto("/account");
+  // Dual-render (mobile card list + desktop table) means two "Current" badges in the DOM; one is visible.
+  await expect(visible(page.getByText("Current", { exact: true }))).toBeVisible();
+  await expectNoSeriousViolations(page, "account");
+
+  // ── Password change ──
+  await page.getByLabel("Current password").fill("first-pass-123");
+  await page.getByLabel("New password", { exact: true }).fill("second-pass-456");
+  await page.getByLabel("Confirm new password").fill("second-pass-456");
+  await page.getByRole("button", { name: /change password/i }).click();
+  // Success toast from PasswordCard
+  await expect(page.getByText(/Password changed/)).toBeVisible();
+
+  // ── New password works for sign-in ── (loginAs navigates to /login itself)
+  await loginAs(page, email, "second-pass-456");
+  await expect(page).toHaveURL("/");
+});
+
+test("project settings: token expiry select visible with 90-day default", async ({ page }) => {
+  test.setTimeout(60_000);
+
+  await login(page);
+
+  // Create a project so we can navigate to its settings
+  const id = `expiry-e2e-${Date.now()}`;
+  await createProject(page, id);
+
+  // Navigate to the project's settings page
+  await page.goto(`/projects/${id}/settings`);
+
+  // Wait for the settings page to settle (auth loads, config loads)
+  // The TokensCard renders a Select with aria-label "Expires"
+  await expect(page.getByLabel("Expires")).toBeVisible();
+  // Default value is "90 days"
+  await expect(page.getByLabel("Expires")).toContainText("90 days");
 });

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { qualityGateConfigSchema } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
-import { authenticate, authorizeProjectWrite } from "../auth.js";
+import { authenticate, authorizeProjectWrite, denyAuth } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 import { readGate } from "./read-gate.js";
 import { evaluateGate } from "../gate.js";
@@ -18,9 +18,8 @@ export function registerQualityGateRoutes(app: FastifyInstance, deps: AppDeps): 
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });
     const principal = await authenticate(deps, req);
-    if ((await authorizeProjectWrite(deps, principal, projectId)) === "unauthorized") {
-      return reply.code(401).send({ error: "unauthorized" });
-    }
+    const qgVerdict = await authorizeProjectWrite(deps, principal, projectId);
+    if (qgVerdict !== "ok") return denyAuth(reply, qgVerdict);
     const parsed = qualityGateConfigSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
     const config = Object.keys(parsed.data).length === 0 ? null : parsed.data;

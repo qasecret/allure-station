@@ -11,7 +11,7 @@ import {
   testHistorySchema, testTraceSchema,
   apiTokenSchema, createdTokenSchema, createTokenRequestSchema,
   notificationSchema, createNotificationRequestSchema,
-  loginRequestSchema, sessionUserSchema,
+  loginRequestSchema, sessionUserSchema, sessionInfoSchema, changePasswordRequestSchema,
   userSchema, createUserRequestSchema,
   membershipSchema, membershipWithUserSchema, setMembershipRequestSchema,
   auditEntrySchema, auditActionSchema,
@@ -35,6 +35,11 @@ const configResponse = z.object({
   securityEnabled: z.boolean(),
   oidc: z.object({ enabled: z.boolean(), label: z.string().optional() }),
   allure: z.string(),
+  branding: z.object({
+    name: z.string(),
+    tagline: z.string(),
+    logoUrl: z.string().nullable(),
+  }),
 });
 
 export interface OpenapiOptions {
@@ -48,6 +53,9 @@ interface RouteDecl {
   tag: string;
   summary: string;
   security?: Array<"bearerToken" | "sessionCookie">;
+  // Self-service routes gated only on "is a logged-in user" (the account routes) can never return
+  // 403 — every non-user principal is 401. Set this so the spec doesn't advertise an impossible 403.
+  selfAuth?: boolean;
   body?: ZodTypeAny;
   query?: z.AnyZodObject;
   ok?: { status: number; schema?: ZodTypeAny; contentType?: string };
@@ -77,7 +85,8 @@ function declare(registry: OpenAPIRegistry, r: RouteDecl) {
     responses: {
       [okStatus]: { description: "Success", ...okContent },
       400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } },
-      401: { description: "Unauthorized", content: { "application/json": { schema: errorSchema } } },
+      401: { description: "Unauthenticated — missing or expired session/token", content: { "application/json": { schema: errorSchema } } },
+      ...(r.security && !r.selfAuth ? { 403: { description: "Forbidden — authenticated but insufficient role/scope", content: { "application/json": { schema: errorSchema } } } } : {}),
       404: { description: "Not found", content: { "application/json": { schema: errorSchema } } },
     },
   });
@@ -146,8 +155,12 @@ const notificationRoutes: RouteDecl[] = [
 
 const authRoutes: RouteDecl[] = [
   { method: "post", path: "/api/auth/login", tag: "auth", summary: "Password login", body: loginRequestSchema, ok: { status: 200, schema: sessionUserSchema } },
-  { method: "post", path: "/api/auth/logout", tag: "auth", summary: "Log out", security: SESSION_ONLY, ok: { status: 204 } },
-  { method: "get", path: "/api/auth/me", tag: "auth", summary: "Current session user", security: SESSION_ONLY, ok: { status: 200, schema: sessionUserSchema } },
+  { method: "post", path: "/api/auth/logout", tag: "auth", summary: "Log out", security: SESSION_ONLY, selfAuth: true, ok: { status: 204 } },
+  { method: "get", path: "/api/auth/me", tag: "auth", summary: "Current session user", security: SESSION_ONLY, selfAuth: true, ok: { status: 200, schema: sessionUserSchema } },
+  { method: "get", path: "/api/auth/sessions", tag: "auth", summary: "List own sessions with device info and current flag", security: SESSION_ONLY, selfAuth: true, ok: { status: 200, schema: z.array(sessionInfoSchema) } },
+  { method: "delete", path: "/api/auth/sessions/{id}", tag: "auth", summary: "Revoke a specific session (own only)", security: SESSION_ONLY, selfAuth: true, ok: { status: 204 } },
+  { method: "delete", path: "/api/auth/sessions", tag: "auth", summary: "Revoke all sessions except the current one", security: SESSION_ONLY, selfAuth: true, ok: { status: 200, schema: z.object({ revoked: z.number() }) } },
+  { method: "post", path: "/api/auth/password", tag: "auth", summary: "Change password (revokes other sessions)", security: SESSION_ONLY, selfAuth: true, body: changePasswordRequestSchema, ok: { status: 204 } },
 ];
 
 const userRoutes: RouteDecl[] = [

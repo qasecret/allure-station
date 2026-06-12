@@ -55,12 +55,18 @@ export interface AppDeps {
   publicUrl: string | undefined; // absolute base for links in notifications (no trailing slash)
   sessionTtlMs: number;          // session cookie/row lifetime
   cookieSecure: boolean;         // mark the session cookie Secure (https-only) in prod
+  trustProxy: boolean;           // trust X-Forwarded-For/Proto (set when behind a load balancer)
+  branding: {
+    name: string;
+    tagline: string;
+    logoUrl: string | null;
+  };
   now: () => string;
   newId: () => string;
 }
 
 export function buildApp(deps: AppDeps): FastifyInstance {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, trustProxy: deps.trustProxy });
   // fieldSize caps text fields (run metadata) so an oversized value can't buffer up to busboy's 1 MB default.
   app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024, files: 5000, fieldSize: 16 * 1024 } });
   app.register(cookie); // parses req.cookies; we set Set-Cookie manually with explicit attributes

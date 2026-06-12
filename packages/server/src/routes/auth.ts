@@ -1,7 +1,7 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
-import { loginRequestSchema, type SessionUser } from "@allure-station/shared";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { loginRequestSchema, changePasswordRequestSchema, type SessionUser } from "@allure-station/shared";
 import type { AppDeps } from "../app.js";
-import { authenticate, generateSessionToken, hashSessionToken, SESSION_COOKIE } from "../auth.js";
+import { authenticate, denyAuth, generateSessionToken, hashSessionToken, SESSION_COOKIE } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 import { hashPassword, verifyPassword } from "../password.js";
 import { resolveOidcUser } from "../oidc.js";
@@ -23,13 +23,17 @@ function setSessionCookie(reply: FastifyReply, deps: AppDeps, token: string): vo
   });
 }
 
-/** Create a DB-backed session for a user and set the session cookie. Shared by local + OIDC login. */
-async function startSession(reply: FastifyReply, deps: AppDeps, userId: string): Promise<void> {
+/** Create a DB-backed session for a user, set the session cookie, and return the new session id. */
+async function startSession(reply: FastifyReply, deps: AppDeps, userId: string, req?: FastifyRequest): Promise<string> {
   const token = generateSessionToken();
   const expiresAt = new Date(Date.parse(deps.now()) + deps.sessionTtlMs).toISOString();
-  await deps.sessions.create(hashSessionToken(token), userId, deps.now(), expiresAt);
+  const meta = req
+    ? { userAgent: (req.headers["user-agent"] as string | undefined) ?? null, ip: req.ip ?? null }
+    : {};
+  const session = await deps.sessions.create(hashSessionToken(token), userId, deps.now(), expiresAt, meta);
   void deps.sessions.deleteExpired(deps.now()).catch(() => {}); // opportunistic, best-effort
   setSessionCookie(reply, deps, token);
+  return session.id;
 }
 
 export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
@@ -44,7 +48,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
       await recordAudit(deps, { actorType: "anonymous", actorId: null, actorLabel: "anonymous", action: "login_failed", metadata: { email: parsed.data.email } });
       return reply.code(401).send({ error: "invalid credentials" });
     }
-    await startSession(reply, deps, user.id);
+    await startSession(reply, deps, user.id, req);
     await recordAudit(deps, { actorType: "user", actorId: user.id, actorLabel: user.email, action: "login", targetType: "user", targetId: user.id, metadata: { via: "local" } });
     const body: SessionUser = { id: user.id, email: user.email, role: user.role, createdAt: user.createdAt };
     return reply.code(200).send(body);
@@ -69,8 +73,82 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
       email: principal.email,
       role: principal.role,
       createdAt: principal.createdAt,
+      authProvider: principal.authProvider,
     };
     return reply.code(200).send(body);
+  });
+
+  // --- Account & session management ---
+  // Non-user principals (anonymous, bearer token) get 401 unauthenticated for all account routes.
+  // Rationale: a token principal here is effectively unauthenticated for account purposes — tokens
+  // cannot manage sessions. Keep it simple: non-user → unauthenticated (not forbidden).
+
+  app.get("/auth/sessions", async (req, reply) => {
+    const principal = await authenticate(deps, req);
+    if (principal.kind !== "user") return denyAuth(reply, "unauthenticated");
+    const currentHash = hashSessionToken(req.cookies[SESSION_COOKIE]!);
+    const rows = await deps.sessions.listByUser(principal.userId, deps.now());
+    return rows.map((s) => ({
+      id: s.id,
+      createdAt: s.createdAt,
+      expiresAt: s.expiresAt,
+      userAgent: s.userAgent,
+      ip: s.ip,
+      current: s.tokenHash === currentHash,
+    }));
+  });
+
+  app.delete("/auth/sessions/:id", async (req, reply) => {
+    const principal = await authenticate(deps, req);
+    if (principal.kind !== "user") return denyAuth(reply, "unauthenticated");
+    const { id } = req.params as { id: string };
+    const currentHash = hashSessionToken(req.cookies[SESSION_COOKIE]!);
+    const target = await deps.sessions.findById(id, principal.userId);
+    if (!target) return reply.code(404).send({ error: "not found" }); // other users' sessions look identical
+    await deps.sessions.removeById(id, principal.userId);
+    if (target.tokenHash === currentHash) reply.clearCookie(SESSION_COOKIE, { path: "/" }); // revoking self ≡ logout
+    await recordAudit(deps, { ...actorFromPrincipal(principal), action: "session_revoked", targetType: "session", targetId: id, metadata: { userAgent: target.userAgent, ip: target.ip } });
+    return reply.code(204).send();
+  });
+
+  app.delete("/auth/sessions", async (req, reply) => {
+    const principal = await authenticate(deps, req);
+    if (principal.kind !== "user") return denyAuth(reply, "unauthenticated");
+    const currentHash = hashSessionToken(req.cookies[SESSION_COOKIE]!);
+    const current = (await deps.sessions.listByUser(principal.userId, deps.now())).find((s) => s.tokenHash === currentHash);
+    if (!current) return reply.code(401).send({ error: "unauthenticated" }); // race: current session just expired
+    const revoked = await deps.sessions.removeAllExcept(principal.userId, current.id);
+    await recordAudit(deps, { ...actorFromPrincipal(principal), action: "session_revoked", targetType: "session", targetId: "all-others", metadata: { revoked } });
+    return { revoked };
+  });
+
+  app.post("/auth/password", async (req, reply) => {
+    const principal = await authenticate(deps, req);
+    if (principal.kind !== "user") return denyAuth(reply, "unauthenticated");
+    const parsed = changePasswordRequestSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
+    const user = await deps.users.findById(principal.userId);
+    // OIDC-provisioned users have a random unusable passwordHash (see oidc.ts resolveOidcUser).
+    // Verifying that placeholder will always fail, so they get the same 400 "invalid credentials" —
+    // they must sign in via SSO and cannot change their password via this flow.
+    if (!user || !(await verifyPassword(parsed.data.currentPassword, user.passwordHash))) {
+      await recordAudit(deps, { ...actorFromPrincipal(principal), action: "password_change_failed", targetType: "user", targetId: principal.userId });
+      return reply.code(400).send({ error: "invalid credentials" }); // 400 not 401: the SESSION is valid
+    }
+    // Safe reorder (no portable transaction across libsql+pg):
+    //   1. setPasswordHash — the new password is now active.
+    //   2. startSession — mint a fresh session for the caller FIRST, so if step 3 fails the caller
+    //      is still authenticated with the new password (not locked out).
+    //   3. removeAllExcept(userId, newSessionId) — kill all other sessions; the new one survives.
+    //   4. recordAudit — best-effort; a failure here is observable in the audit log but does not
+    //      affect authentication state.
+    // A failure after step 1 but before step 3 leaves the caller with a working new session and
+    // old sessions valid — clean-up happens on next password change or manual session revoke.
+    await deps.users.setPasswordHash(principal.userId, await hashPassword(parsed.data.newPassword));
+    const newSessionId = await startSession(reply, deps, principal.userId, req);
+    await deps.sessions.removeAllExcept(principal.userId, newSessionId);
+    await recordAudit(deps, { ...actorFromPrincipal(principal), action: "password_changed", targetType: "user", targetId: principal.userId });
+    return reply.code(204).send();
   });
 
   // --- OIDC / SSO (Phase 5d) — registered only when a provider is configured ---
@@ -112,7 +190,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AppDeps): void {
         const claims = await provider.completeLogin({ query: req.query as Record<string, unknown>, state: flow.state, nonce: flow.nonce, codeVerifier: flow.codeVerifier });
         const resolved = await resolveOidcUser(deps, claims, oidcConfig);
         if ("error" in resolved) return fail(resolved.error);
-        await startSession(reply, deps, resolved.userId);
+        await startSession(reply, deps, resolved.userId, req);
         if (resolved.provisioned) {
           await recordAudit(deps, { actorType: "user", actorId: resolved.userId, actorLabel: resolved.email, action: "user_created", targetType: "user", targetId: resolved.userId, metadata: { via: "oidc" } });
         }
