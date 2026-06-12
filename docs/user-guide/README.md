@@ -387,6 +387,8 @@ In the UI, the **CI tokens** card in Project Settings shows an **Expiry** column
 token's name and last-used date. Tokens expiring within 14 days display an amber warning; expired
 tokens show a red badge. The **Create token** form has an **Expires** select defaulting to **90 days**.
 
+![CI tokens card — Expires select and per-token Expiry column](images/15-token-expiry.png)
+
 ```bash
 curl -XPOST $API/projects/demo-web/send-results \
   -H "authorization: Bearer ast_aYEhCrPlK83zOQeSSTTn4N9fKBZcUIgt" \
@@ -557,6 +559,8 @@ The per-project **Audit** card in Project Settings shows the same interface scop
 The **Account** page (`/account`, accessible from the user menu bottom-left → *Account settings*) lets
 every signed-in user manage their own credentials and sessions without contacting an admin.
 
+![Account page — profile, change password, and active sessions](images/14-account.png)
+
 ### Change your password
 
 In the **Change password** card:
@@ -721,6 +725,7 @@ All endpoints are under `/api`. Reads are public; writes follow the access model
 | Tokens | `GET/POST /projects/:id/tokens` · `DELETE …/tokens/:tokenId` |
 | Notifications | `GET/POST /projects/:id/notifications` · `POST …/:notificationId/test` · `DELETE …/:notificationId` |
 | Auth | `POST /auth/login` · `POST /auth/logout` · `GET /auth/me` · `GET /auth/oidc/login` · `GET /auth/oidc/callback` |
+| Account | `POST /auth/password` (change own password; revokes other sessions) · `GET /auth/sessions` · `DELETE /auth/sessions/:id` (revoke one) · `DELETE /auth/sessions` (revoke all others) |
 | Admin | `GET/POST /users` · `DELETE /users/:id` · `GET/PUT/DELETE /projects/:id/members` · `GET /audit` · `GET /projects/:id/audit` |
 | Meta | `GET /version` · `GET /config` |
 
