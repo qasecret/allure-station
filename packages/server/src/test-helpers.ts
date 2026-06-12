@@ -16,7 +16,7 @@ import type { AppDeps } from "./app.js";
 import { InProcessBus } from "./events/bus.js";
 import { wireQueue } from "./generation.js";
 
-export async function makeTestDeps(): Promise<AppDeps> {
+export async function makeTestDeps(overrides: { now?: () => string } = {}): Promise<AppDeps> {
   const { db, migrate } = createDb("sqlite", { url: ":memory:" });
   await migrate();
   const root = mkdtempSync(join(tmpdir(), "as-srv-"));
@@ -41,7 +41,7 @@ export async function makeTestDeps(): Promise<AppDeps> {
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
     cookieSecure: false,
     trustProxy: false,
-    now: () => "2026-06-06T00:00:00.000Z",
+    now: overrides.now ?? (() => "2026-06-06T00:00:00.000Z"),
     newId: (() => { let n = 0; return () => `id${++n}`; })(),
   };
   wireQueue(deps);

@@ -37,6 +37,7 @@ export const apiTokens = sqliteTable("api_tokens", {
   prefix: text("prefix").notNull(),
   createdAt: text("created_at").notNull(),
   lastUsedAt: text("last_used_at"),
+  expiresAt: text("expires_at"),
 }, (t) => ({
   byProject: index("idx_api_tokens_project").on(t.projectId),
   byHash: uniqueIndex("idx_api_tokens_hash").on(t.tokenHash), // unique: a token credential resolves to exactly one row

@@ -72,7 +72,7 @@ export async function authenticate(deps: AppDeps, req: FastifyRequest): Promise<
   const bearer = parseBearer(req.headers.authorization);
   if (bearer) {
     const token = await deps.tokens.findByHash(hashToken(bearer));
-    if (token) {
+    if (token && (token.expiresAt === null || token.expiresAt > deps.now())) {
       void deps.tokens.touchLastUsed(token.id, deps.now()).catch(() => {});
       return { kind: "token", projectId: token.projectId, tokenId: token.id };
     }

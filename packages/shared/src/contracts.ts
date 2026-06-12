@@ -265,10 +265,14 @@ export const apiTokenSchema = z.object({
   prefix: z.string(),
   createdAt: z.string(),
   lastUsedAt: z.string().nullable(),
+  expiresAt: z.string().nullable(),
 });
 // Returned ONCE on creation — includes the plaintext token.
 export const createdTokenSchema = apiTokenSchema.extend({ token: z.string() });
-export const createTokenRequestSchema = z.object({ name: z.string().min(1).max(64) });
+export const createTokenRequestSchema = z.object({
+  name: z.string().min(1).max(64),
+  expiresInDays: z.union([z.literal(30), z.literal(90), z.literal(365)]).optional(),
+});
 
 // --- Accounts & RBAC (Phase 5b) ---
 export const globalRoleSchema = z.enum(["admin", "user"]);

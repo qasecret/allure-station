@@ -589,7 +589,7 @@ for (const backend of backends) {
         expect(listed).toHaveLength(1);
         expect(listed[0]).not.toHaveProperty("tokenHash");
         expect(await tokens.countByProject("p")).toBe(1);
-        expect(await tokens.findByHash("hash-abc")).toEqual({ id: tok.id, projectId: "p" });
+        expect(await tokens.findByHash("hash-abc")).toMatchObject({ id: tok.id, projectId: "p", expiresAt: null });
         expect(await tokens.findByHash("nope")).toBeNull();
       });
 
@@ -604,6 +604,28 @@ for (const backend of backends) {
         await tokens.create("p", "ci", "h", "pre", "2026-06-06T00:00:01.000Z");
         await projects.remove("p");
         expect(await tokens.countByProject("p")).toBe(0);
+      });
+
+      it("create stores expiresAt (null or ISO string); findByHash returns it for auth expiry check", async () => {
+        // token with expiry
+        const withExpiry = await tokens.create("p", "expires", "hash-exp", "ast_exp", "2026-06-06T00:00:00.000Z", "2026-07-06T00:00:00.000Z");
+        expect(withExpiry.expiresAt).toBe("2026-07-06T00:00:00.000Z");
+        const found = await tokens.findByHash("hash-exp");
+        expect(found).not.toBeNull();
+        expect(found!.expiresAt).toBe("2026-07-06T00:00:00.000Z");
+
+        // token without expiry (null)
+        const noExpiry = await tokens.create("p", "never", "hash-nev", "ast_nev", "2026-06-06T00:00:00.000Z", null);
+        expect(noExpiry.expiresAt).toBeNull();
+        const foundNev = await tokens.findByHash("hash-nev");
+        expect(foundNev).not.toBeNull();
+        expect(foundNev!.expiresAt).toBeNull();
+
+        // listByProject also returns expiresAt
+        const list = await tokens.listByProject("p");
+        const byName = Object.fromEntries(list.map((t) => [t.name, t]));
+        expect(byName["expires"].expiresAt).toBe("2026-07-06T00:00:00.000Z");
+        expect(byName["never"].expiresAt).toBeNull();
       });
     });
 

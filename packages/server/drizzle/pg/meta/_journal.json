@@ -148,6 +148,13 @@
       "when": 1781262544588,
       "tag": "0020_high_korvac",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781263932113,
+      "tag": "0021_cute_barracuda",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,8 @@ import { buildApp } from "../app.js";
 import { makeTestDeps } from "../test-helpers.js";
 import { multipart } from "../test-multipart.js";
 
+const NOW = "2026-06-06T00:00:00.000Z";
+
 async function createProject(app: ReturnType<typeof buildApp>, id: string) {
   await app.inject({ method: "POST", url: "/api/projects", payload: { id } });
 }
@@ -88,6 +90,66 @@ describe("token routes + write authorization", () => {
     const del = await app.inject({ method: "DELETE", url: `/api/projects/p/tokens/${created.id}`, headers: { authorization: `Bearer ${created.token}` } });
     expect(del.statusCode).toBe(204);
     expect((await app.inject({ method: "POST", url: "/api/projects/p/generate" })).statusCode).toBe(409); // open again
+    await app.close();
+  });
+});
+
+describe("token expiry", () => {
+  it("creates with expiresInDays and lists expiresAt; rejects invalid values", async () => {
+    const app = buildApp(await makeTestDeps());
+    await createProject(app, "p");
+
+    const res = await app.inject({ method: "POST", url: "/api/projects/p/tokens", payload: { name: "ci", expiresInDays: 30 } });
+    expect(res.statusCode).toBe(201);
+    const ciToken = res.json().token as string;
+    const days = (Date.parse(res.json().expiresAt) - Date.parse(NOW)) / 86_400_000;
+    expect(days).toBeCloseTo(30, 1);
+
+    // Invalid value: 7 is not in {30, 90, 365} — project is locked, auth with the valid token
+    expect((await app.inject({ method: "POST", url: "/api/projects/p/tokens", payload: { name: "x", expiresInDays: 7 }, headers: { authorization: `Bearer ${ciToken}` } })).statusCode).toBe(400);
+
+    // No expiresInDays → expiresAt is null (never expires)
+    const never = await app.inject({ method: "POST", url: "/api/projects/p/tokens", payload: { name: "legacy" }, headers: { authorization: `Bearer ${ciToken}` } });
+    expect(never.json().expiresAt).toBeNull();
+
+    await app.close();
+  });
+
+  it("expired token is rejected exactly like an invalid one (401 unauthenticated)", async () => {
+    let nowMs = Date.parse(NOW);
+    const deps = await makeTestDeps({ now: () => new Date(nowMs).toISOString() });
+    const app = buildApp(deps);
+    await createProject(app, "p");
+
+    const tok = (await app.inject({ method: "POST", url: "/api/projects/p/tokens", payload: { name: "t", expiresInDays: 30 } })).json().token as string;
+
+    // Advance clock 31 days past expiry
+    nowMs += 31 * 86_400_000;
+
+    const res = await app.inject({ method: "POST", url: `/api/projects/p/generate`, headers: { authorization: `Bearer ${tok}` } });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().error).toBe("unauthenticated");
+
+    await app.close();
+  });
+
+  it("boundary: expiresAt === now is expired", async () => {
+    let nowMs = Date.parse(NOW);
+    const deps = await makeTestDeps({ now: () => new Date(nowMs).toISOString() });
+    const app = buildApp(deps);
+    await createProject(app, "p");
+
+    const created = (await app.inject({ method: "POST", url: "/api/projects/p/tokens", payload: { name: "t", expiresInDays: 30 } })).json();
+    const tok = created.token as string;
+    const expiresAt = created.expiresAt as string;
+
+    // Advance clock exactly to expiry moment
+    nowMs = Date.parse(expiresAt);
+
+    const res = await app.inject({ method: "POST", url: `/api/projects/p/generate`, headers: { authorization: `Bearer ${tok}` } });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().error).toBe("unauthenticated");
+
     await app.close();
   });
 });

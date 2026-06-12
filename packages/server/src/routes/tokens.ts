@@ -17,7 +17,10 @@ export function registerTokenRoutes(app: FastifyInstance, deps: AppDeps): void {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.message });
 
     const token = generateToken();
-    const created = await deps.tokens.create(projectId, parsed.data.name, hashToken(token), tokenPrefix(token), deps.now());
+    const expiresAt = parsed.data.expiresInDays
+      ? new Date(Date.parse(deps.now()) + parsed.data.expiresInDays * 86_400_000).toISOString()
+      : null;
+    const created = await deps.tokens.create(projectId, parsed.data.name, hashToken(token), tokenPrefix(token), deps.now(), expiresAt);
     await recordAudit(deps, { ...actorFromPrincipal(principal), action: "token_created", targetType: "token", targetId: created.id, projectId, metadata: { name: created.name, prefix: created.prefix } });
     return reply.code(201).send({ ...created, token }); // plaintext returned ONCE
   });
