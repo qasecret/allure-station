@@ -133,3 +133,31 @@ describe("loadConfig", () => {
     expect(cfgWithOnlyKey.storage.s3!.credentials).toBeUndefined();
   });
 });
+
+describe("retention config", () => {
+  it("defaults to 30 days and 50 max runs", () => {
+    const cfg = loadConfig({});
+    expect(cfg.retentionDays).toBe(30);
+    expect(cfg.retentionMaxRuns).toBe(50);
+  });
+
+  it("parses RETENTION_DAYS and RETENTION_MAX_RUNS", () => {
+    const cfg = loadConfig({ RETENTION_DAYS: "60", RETENTION_MAX_RUNS: "100" });
+    expect(cfg.retentionDays).toBe(60);
+    expect(cfg.retentionMaxRuns).toBe(100);
+  });
+
+  it("allows 0 to disable retention", () => {
+    const cfg = loadConfig({ RETENTION_DAYS: "0", RETENTION_MAX_RUNS: "0" });
+    expect(cfg.retentionDays).toBe(0);
+    expect(cfg.retentionMaxRuns).toBe(0);
+  });
+
+  it("rejects negative values", () => {
+    expect(() => loadConfig({ RETENTION_DAYS: "-1" })).toThrow();
+  });
+
+  it("rejects non-integer values", () => {
+    expect(() => loadConfig({ RETENTION_MAX_RUNS: "3.5" })).toThrow();
+  });
+});
