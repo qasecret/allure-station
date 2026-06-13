@@ -6,7 +6,7 @@ import { buildRuntime, installShutdown, safeClose } from "./runtime.js";
 const config = loadConfig();
 const { deps, queue, bus, stopReconciler, stopRetention } = await buildRuntime(config);
 
-const app = buildApp(deps);
+const app = buildApp(deps, config);
 
 // Wire the processor only for the in-process driver.
 // In bullmq mode the API process must NOT construct a Worker — only worker-main does.
