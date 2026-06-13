@@ -66,9 +66,9 @@ export interface AppDeps {
   newId: () => string;
 }
 
-const defaultConfig: Pick<AppConfig, "retentionDays" | "retentionMaxRuns"> = { retentionDays: 30, retentionMaxRuns: 50 };
+const defaultRetentionConfig: Pick<AppConfig, "retentionDays" | "retentionMaxRuns"> = { retentionDays: 30, retentionMaxRuns: 50 };
 
-export function buildApp(deps: AppDeps, config: AppConfig = defaultConfig as AppConfig): FastifyInstance {
+export function buildApp(deps: AppDeps, config: Pick<AppConfig, "retentionDays" | "retentionMaxRuns"> = defaultRetentionConfig): FastifyInstance {
   const app = Fastify({ logger: false, trustProxy: deps.trustProxy });
   // fieldSize caps text fields (run metadata) so an oversized value can't buffer up to busboy's 1 MB default.
   app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024, files: 5000, fieldSize: 16 * 1024 } });

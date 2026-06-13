@@ -77,8 +77,8 @@ const DESCRIBERS: Record<AuditAction, Describer> = {
   run_pruned: (e) => {
     const m = meta(e);
     const project = e.projectId ?? "a project";
-    const count = typeof m.count === "number" ? ` (${m.count} runs)` : "";
-    return `${e.actorLabel} pruned runs${count} in ${project}`;
+    const reason = typeof m.reason === "string" ? ` (${m.reason === "retention_age" ? "age limit" : "count limit"})` : "";
+    return `system pruned run ${e.targetId ?? "unknown"}${reason} in ${project}`;
   },
   retention_updated: (e) => `${e.actorLabel} updated retention policy for ${e.projectId ?? e.targetId ?? "a project"}`,
 

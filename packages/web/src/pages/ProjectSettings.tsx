@@ -359,8 +359,12 @@ function RetentionCard({ projectId }: { projectId: string }) {
   const save = useMutation({
     mutationFn: () => {
       const cfg: { retentionDays?: number | null; retentionMaxRuns?: number | null } = {};
-      cfg.retentionDays = form.retentionDays === "" ? null : Number(form.retentionDays);
-      cfg.retentionMaxRuns = form.retentionMaxRuns === "" ? null : Number(form.retentionMaxRuns);
+      const parsedDays = form.retentionDays === "" ? null : parseInt(form.retentionDays, 10);
+      const parsedMaxRuns = form.retentionMaxRuns === "" ? null : parseInt(form.retentionMaxRuns, 10);
+      if (parsedDays !== null && (isNaN(parsedDays) || parsedDays < 0)) { toast.error("Max age must be a non-negative integer"); return Promise.reject(); }
+      if (parsedMaxRuns !== null && (isNaN(parsedMaxRuns) || parsedMaxRuns < 0)) { toast.error("Max runs must be a non-negative integer"); return Promise.reject(); }
+      cfg.retentionDays = parsedDays;
+      cfg.retentionMaxRuns = parsedMaxRuns;
       return api.setRetention(projectId, cfg);
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["retention", projectId] }); toast.success("Retention saved"); },

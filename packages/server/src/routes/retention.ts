@@ -5,7 +5,7 @@ import type { AppConfig } from "../config.js";
 import { authenticate, authorizeProjectOwner, denyAuth } from "../auth.js";
 import { actorFromPrincipal, recordAudit } from "../audit.js";
 
-export function registerRetentionRoutes(app: FastifyInstance, deps: AppDeps, config: AppConfig): void {
+export function registerRetentionRoutes(app: FastifyInstance, deps: AppDeps, config: Pick<AppConfig, "retentionDays" | "retentionMaxRuns">): void {
   app.get("/projects/:projectId/retention", async (req, reply) => {
     const { projectId } = req.params as { projectId: string };
     if (!(await deps.projects.get(projectId))) return reply.code(404).send({ error: "project not found" });

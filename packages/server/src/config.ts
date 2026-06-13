@@ -161,8 +161,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       env.COOKIE_SECURE !== undefined && env.COOKIE_SECURE !== ""
         ? env.COOKIE_SECURE === "true"
         : (env.PUBLIC_URL ?? "").startsWith("https://"),
-    adminEmail: env.ADMIN_EMAIL || "admin@allure-station.local",
-    adminPassword: env.ADMIN_PASSWORD || "admin",
+    adminEmail: env.ADMIN_EMAIL || undefined,
+    adminPassword: env.ADMIN_PASSWORD || undefined,
     trustProxy: env.TRUST_PROXY === "true" || env.TRUST_PROXY === "1",
     branding: {
       name: env.BRAND_NAME || "Allure Station",

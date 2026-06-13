@@ -1,3 +1,4 @@
+import type { Run } from "@allure-station/shared";
 import type { AppDeps } from "./app.js";
 import type { AppConfig } from "./config.js";
 import { recordAudit } from "./audit.js";
@@ -13,10 +14,10 @@ export async function sweepRetention(deps: AppDeps, config: AppConfig): Promise<
 
     if (effectiveDays === 0 && effectiveMaxRuns === 0) continue;
 
-    const candidates = new Map<string, { run: { id: string; projectId: string }; reason: string }>();
+    const candidates = new Map<string, { run: Run; reason: string }>();
 
     if (effectiveDays > 0) {
-      const cutoff = new Date(Date.now() - effectiveDays * 24 * 60 * 60 * 1000).toISOString();
+      const cutoff = new Date(new Date(deps.now()).getTime() - effectiveDays * 24 * 60 * 60 * 1000).toISOString();
       const expired = await deps.runs.findExpiredByAge(projectId, cutoff);
       for (const run of expired) candidates.set(run.id, { run, reason: "retention_age" });
     }
@@ -33,6 +34,7 @@ export async function sweepRetention(deps: AppDeps, config: AppConfig): Promise<
         const removed = await deps.runs.remove(run.id);
         if (!removed) continue;
         try { await deps.storage.remove(`${projectId}/runs/${run.id}`); } catch { /* best-effort */ }
+        try { deps.bus.publish({ type: "run", projectId, run, deleted: true }); } catch { /* best-effort */ }
         await recordAudit(deps, {
           actorType: "system", actorId: null, actorLabel: "system",
           action: "run_pruned", targetType: "run", targetId: run.id, projectId,
@@ -52,9 +54,15 @@ export async function sweepRetention(deps: AppDeps, config: AppConfig): Promise<
 }
 
 export function startRetentionSweeper(deps: AppDeps, config: AppConfig, intervalMs = 60_000): () => void {
-  const timer = setInterval(() => {
-    sweepRetention(deps, config).catch((err) => console.error("retention sweep failed", err));
-  }, intervalMs);
+  let running = false;
+  const sweep = async () => {
+    if (running) return;
+    running = true;
+    try { await sweepRetention(deps, config); } catch (err) { console.error("retention sweep failed", err); }
+    finally { running = false; }
+  };
+  void sweep();
+  const timer = setInterval(sweep, intervalMs);
   timer.unref?.();
   return () => clearInterval(timer);
 }

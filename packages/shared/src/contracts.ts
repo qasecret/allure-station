@@ -180,8 +180,16 @@ export const qualityGateVerdictSchema = z.object({
 export const retentionConfigSchema = z.object({
   retentionDays: z.number().int().min(0).nullable().optional(),
   retentionMaxRuns: z.number().int().min(0).nullable().optional(),
-});
+}).strict();
 export type RetentionConfig = z.infer<typeof retentionConfigSchema>;
+
+export const retentionResponseSchema = z.object({
+  retentionDays: z.number().int().min(0).nullable(),
+  retentionMaxRuns: z.number().int().min(0).nullable(),
+  effectiveRetentionDays: z.number().int().min(0),
+  effectiveRetentionMaxRuns: z.number().int().min(0),
+});
+export type RetentionResponse = z.infer<typeof retentionResponseSchema>;
 
 export const runSummarySchema = z.object({
   run: runSchema,

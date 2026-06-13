@@ -394,7 +394,7 @@ export class RunRepository {
     const rows = await this.db.select().from(runs)
       .where(and(eq(runs.projectId, projectId), ne(runs.status, "generating")))
       .orderBy(desc(runs.createdAt), desc(runs.id))
-      .limit(999999).offset(maxRuns);
+      .limit(1_000_000).offset(maxRuns);
     return rows.map(this.#toRun);
   }
 
