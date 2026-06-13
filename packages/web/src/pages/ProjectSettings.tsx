@@ -70,6 +70,7 @@ export function ProjectSettings() {
               <VisibilityCard projectId={id} />
               <BadgeCard projectId={id} />
               <QualityGateCard projectId={id} />
+              <RetentionCard projectId={id} />
               <TokensCard projectId={id} />
               <NotificationsCard projectId={id} />
               {state === "manage" ? (
@@ -338,6 +339,53 @@ function QualityGateCard({ projectId }: { projectId: string }) {
           <Button type="submit" size="sm" disabled={save.isPending}>Save gate</Button>
         </form>
         <p className="text-xs text-muted-foreground">Leave a field blank to disable that rule. The run header and run summary reflect the verdict.</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface RetentionForm { retentionDays: string; retentionMaxRuns: string }
+
+function RetentionCard({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({ queryKey: ["retention", projectId], queryFn: () => api.getRetention(projectId) });
+  const [form, setForm] = useState<RetentionForm>({ retentionDays: "", retentionMaxRuns: "" });
+  useEffect(() => {
+    if (data) setForm({
+      retentionDays: data.retentionDays !== null ? String(data.retentionDays) : "",
+      retentionMaxRuns: data.retentionMaxRuns !== null ? String(data.retentionMaxRuns) : "",
+    });
+  }, [data]);
+  const save = useMutation({
+    mutationFn: () => {
+      const cfg: { retentionDays?: number | null; retentionMaxRuns?: number | null } = {};
+      cfg.retentionDays = form.retentionDays === "" ? null : Number(form.retentionDays);
+      cfg.retentionMaxRuns = form.retentionMaxRuns === "" ? null : Number(form.retentionMaxRuns);
+      return api.setRetention(projectId, cfg);
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["retention", projectId] }); toast.success("Retention saved"); },
+    onError: (e) => toast.error(humanizeError(e)),
+  });
+  if (isLoading) return <CardSkeleton />;
+  if (data === undefined) return null;
+  return (
+    <Card>
+      <CardHeader><CardTitle>Retention</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); if (!save.isPending) save.mutate(); }} className="space-y-4">
+          <div className="flex flex-wrap gap-4">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Max age (days)</span>
+              <Input type="number" min={0} step={1} value={form.retentionDays} onChange={(e) => setForm((f) => ({ ...f, retentionDays: e.target.value }))} placeholder={`e.g. ${data.effectiveRetentionDays}`} className="max-w-[160px]" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Max runs per project</span>
+              <Input type="number" min={0} step={1} value={form.retentionMaxRuns} onChange={(e) => setForm((f) => ({ ...f, retentionMaxRuns: e.target.value }))} placeholder={`e.g. ${data.effectiveRetentionMaxRuns}`} className="max-w-[160px]" />
+            </label>
+          </div>
+          <Button type="submit" size="sm" disabled={save.isPending}>Save retention</Button>
+        </form>
+        <p className="text-xs text-muted-foreground">Leave blank to use the global default. Set 0 to disable that rule for this project. Runs older than the age limit or exceeding the count limit are automatically deleted.</p>
       </CardContent>
     </Card>
   );
