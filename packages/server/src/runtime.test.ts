@@ -27,12 +27,14 @@ function testConfig(): AppConfig {
     adminPassword: undefined,
     oidc: undefined,
     storage: { backend: "local", localRoot: join(root, "storage") },
+    retentionDays: 30,
+    retentionMaxRuns: 50,
   };
 }
 
 describe("buildRuntime", () => {
   it("selects in-process drivers, migrates the DB, and returns working deps", async () => {
-    const { deps, queue, bus, stopReconciler } = await buildRuntime(testConfig());
+    const { deps, queue, bus, stopReconciler, stopRetention } = await buildRuntime(testConfig());
     try {
       expect(queue).toBeInstanceOf(InProcessQueue);
       expect(bus).toBeInstanceOf(InProcessBus);
@@ -44,6 +46,7 @@ describe("buildRuntime", () => {
       expect(await deps.users.count()).toBe(0);
     } finally {
       stopReconciler();
+      stopRetention();
       await bus.close();
       await queue.close();
     }
@@ -51,7 +54,7 @@ describe("buildRuntime", () => {
 
   it("seeds (and re-upserts) the global admin from ADMIN_EMAIL/ADMIN_PASSWORD", async () => {
     const cfg = { ...testConfig(), adminEmail: "boss@x.com", adminPassword: "supersecret1" };
-    const { deps, queue, bus, stopReconciler } = await buildRuntime(cfg);
+    const { deps, queue, bus, stopReconciler, stopRetention } = await buildRuntime(cfg);
     try {
       const admin = await deps.users.findByEmail("boss@x.com");
       expect(admin?.role).toBe("admin");
@@ -59,6 +62,7 @@ describe("buildRuntime", () => {
       expect(await deps.users.count()).toBe(1);
     } finally {
       stopReconciler();
+      stopRetention();
       await bus.close();
       await queue.close();
     }

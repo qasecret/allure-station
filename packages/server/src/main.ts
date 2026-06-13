@@ -4,7 +4,7 @@ import { wireQueue } from "./generation.js";
 import { buildRuntime, installShutdown, safeClose } from "./runtime.js";
 
 const config = loadConfig();
-const { deps, queue, bus, stopReconciler } = await buildRuntime(config);
+const { deps, queue, bus, stopReconciler, stopRetention } = await buildRuntime(config);
 
 const app = buildApp(deps);
 
@@ -16,6 +16,7 @@ if (config.queueDriver === "inprocess") {
 
 installShutdown(async () => {
   stopReconciler();
+  stopRetention();
   // Stop accepting new requests FIRST, then drain background jobs, then close the bus — otherwise a
   // /generate arriving mid-shutdown would hit an already-closed queue, get markFailed'd, and 503.
   await safeClose(() => app.close());
