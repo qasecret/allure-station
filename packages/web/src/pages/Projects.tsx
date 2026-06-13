@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { Search, FolderOpen } from "lucide-react";
+import { Search, FolderOpen, ArrowUpDown } from "lucide-react";
 import { projectSortSchema } from "@allure-station/shared";
 import type { ProjectSort } from "@allure-station/shared";
 import { api } from "../main.js";
@@ -94,17 +94,18 @@ export function Projects() {
     <>
       <Topbar title="Projects" actions={<NewProjectDialog />} />
       <main className="flex-1 overflow-auto p-6">
-        <div className="mx-auto max-w-5xl space-y-6">
+        <div className="mx-auto max-w-7xl space-y-6">
           <OverviewStrip onTriage={onTriage} />
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative max-w-sm flex-1">
+            <div className="relative min-w-[16rem] flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input aria-label="Search projects" placeholder="Search projects…" className="pl-9"
                 value={q} onChange={(e) => onSearch(e.target.value)} />
             </div>
             <Select value={sort} onValueChange={onSortChange}>
-              <SelectTrigger className="w-[160px]" aria-label="Sort projects">
+              <SelectTrigger className="w-[160px] shrink-0" aria-label="Sort projects">
+                <ArrowUpDown className="size-4 text-muted-foreground" />
                 <SelectValue placeholder="Sort…" />
               </SelectTrigger>
               <SelectContent>
@@ -116,8 +117,8 @@ export function Projects() {
           </div>
 
           {isLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[104px] rounded-xl" />)}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-[104px] rounded-xl" />)}
             </div>
           ) : projectsError ? (
             <QueryErrorState error={projectsErrorVal} onRetry={() => refetchProjects()} />
@@ -127,7 +128,7 @@ export function Projects() {
               description={q ? "Try a different search." : "Create a project, then push results from CI."}
               action={!q ? <NewProjectDialog /> : undefined} />
           ) : (
-            <div className="animate-fade-in grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="animate-fade-in grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {items.map((p) => <ProjectCard key={p.id} p={p} />)}
             </div>
           )}
