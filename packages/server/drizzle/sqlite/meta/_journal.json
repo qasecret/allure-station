@@ -162,6 +162,13 @@
       "when": 1781279509800,
       "tag": "0022_giant_shocker",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1781329112446,
+      "tag": "0023_loving_bug",
+      "breakpoints": true
     }
   ]
 }
