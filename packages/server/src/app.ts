@@ -13,7 +13,7 @@ import type { SessionRepository } from "./db/session-repo.js";
 import type { MembershipRepository } from "./db/membership-repo.js";
 import type { AuditRepository } from "./db/audit-repo.js";
 import type { OidcProvider } from "./oidc.js";
-import type { OidcConfig } from "./config.js";
+import type { AppConfig, OidcConfig } from "./config.js";
 import type { StorageDriver } from "./storage/driver.js";
 import type { JobQueue } from "@allure-station/worker";
 import type { EventBus } from "./events/bus.js";
@@ -26,6 +26,7 @@ import { registerCompareRoutes } from "./routes/compare.js";
 import { registerTokenRoutes } from "./routes/tokens.js";
 import { registerBadgeRoutes } from "./routes/badge.js";
 import { registerQualityGateRoutes } from "./routes/quality-gate.js";
+import { registerRetentionRoutes } from "./routes/retention.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerUserRoutes } from "./routes/users.js";
@@ -65,7 +66,9 @@ export interface AppDeps {
   newId: () => string;
 }
 
-export function buildApp(deps: AppDeps): FastifyInstance {
+const defaultRetentionConfig: Pick<AppConfig, "retentionDays" | "retentionMaxRuns"> = { retentionDays: 30, retentionMaxRuns: 50 };
+
+export function buildApp(deps: AppDeps, config: Pick<AppConfig, "retentionDays" | "retentionMaxRuns"> = defaultRetentionConfig): FastifyInstance {
   const app = Fastify({ logger: false, trustProxy: deps.trustProxy });
   // fieldSize caps text fields (run metadata) so an oversized value can't buffer up to busboy's 1 MB default.
   app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024, files: 5000, fieldSize: 16 * 1024 } });
@@ -88,6 +91,7 @@ export function buildApp(deps: AppDeps): FastifyInstance {
       registerTokenRoutes(api, deps);
       registerBadgeRoutes(api, deps);
       registerQualityGateRoutes(api, deps);
+      registerRetentionRoutes(api, deps, config);
       registerNotificationRoutes(api, deps);
       registerAuthRoutes(api, deps);
       registerUserRoutes(api, deps);

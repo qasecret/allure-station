@@ -197,6 +197,20 @@ export class ProjectRepository {
     return { items: paged, total };
   }
 
+  async listAllIds(): Promise<string[]> {
+    const rows = await this.db.select({ id: projects.id }).from(projects);
+    return rows.map((r) => r.id);
+  }
+
+  async getRetention(id: string): Promise<{ retentionDays: number | null; retentionMaxRuns: number | null }> {
+    const [row] = await this.db.select({ retentionDays: projects.retentionDays, retentionMaxRuns: projects.retentionMaxRuns }).from(projects).where(eq(projects.id, id));
+    return row ? { retentionDays: row.retentionDays, retentionMaxRuns: row.retentionMaxRuns } : { retentionDays: null, retentionMaxRuns: null };
+  }
+
+  async setRetention(id: string, retentionDays: number | null, retentionMaxRuns: number | null): Promise<void> {
+    await this.db.update(projects).set({ retentionDays, retentionMaxRuns }).where(eq(projects.id, id));
+  }
+
   async #withLatest(id: string, createdAt: string, visibility: ProjectVisibility, displayName: string | null): Promise<Project> {
     const [latest] = await this.db
       .select({ id: runs.id })
@@ -367,6 +381,21 @@ export class RunRepository {
   async remove(id: string): Promise<boolean> {
     const res = await this.db.delete(runs).where(and(eq(runs.id, id), ne(runs.status, "generating"))).returning({ id: runs.id });
     return res.length > 0;
+  }
+
+  async findExpiredByAge(projectId: string, cutoff: string): Promise<Run[]> {
+    const rows = await this.db.select().from(runs)
+      .where(and(eq(runs.projectId, projectId), lt(runs.createdAt, cutoff), ne(runs.status, "generating")))
+      .orderBy(asc(runs.createdAt));
+    return rows.map(this.#toRun);
+  }
+
+  async findExcessByCount(projectId: string, maxRuns: number): Promise<Run[]> {
+    const rows = await this.db.select().from(runs)
+      .where(and(eq(runs.projectId, projectId), ne(runs.status, "generating")))
+      .orderBy(desc(runs.createdAt), desc(runs.id))
+      .limit(1_000_000).offset(maxRuns);
+    return rows.map(this.#toRun);
   }
 
   /** Triage counts for the overview: runs created in the window + currently generating, limited to

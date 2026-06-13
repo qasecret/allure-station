@@ -74,6 +74,14 @@ const DESCRIBERS: Record<AuditAction, Describer> = {
       ? `${e.actorLabel} signed out all other sessions${typeof (e.metadata as Record<string, unknown>)?.revoked === "number" ? ` (${(e.metadata as Record<string, unknown>).revoked})` : ""}`
       : `${e.actorLabel} revoked a session`,
 
+  run_pruned: (e) => {
+    const m = meta(e);
+    const project = e.projectId ?? "a project";
+    const reason = typeof m.reason === "string" ? ` (${m.reason === "retention_age" ? "age limit" : "count limit"})` : "";
+    return `system pruned run ${e.targetId ?? "unknown"}${reason} in ${project}`;
+  },
+  retention_updated: (e) => `${e.actorLabel} updated retention policy for ${e.projectId ?? e.targetId ?? "a project"}`,
+
   run_deleted: (e) => {
     const m = meta(e);
     const project = e.projectId ?? "a project";

@@ -45,6 +45,8 @@ export interface AppConfig {
       credentials?: { accessKeyId: string; secretAccessKey: string };
     };
   };
+  retentionDays: number;
+  retentionMaxRuns: number;
 }
 
 function parseEnum<T extends string>(
@@ -67,6 +69,15 @@ function parsePositiveInt(name: string, value: string | undefined, def: number):
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) {
     throw new Error(`Invalid ${name} "${value}": must be a positive integer`);
+  }
+  return n;
+}
+
+function parseNonNegativeInt(name: string, value: string | undefined, def: number): number {
+  if (value === undefined || value === "") return def;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`Invalid ${name} "${value}": must be a non-negative integer`);
   }
   return n;
 }
@@ -160,5 +171,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     oidc,
     storage,
+    retentionDays: parseNonNegativeInt("RETENTION_DAYS", env.RETENTION_DAYS, 30),
+    retentionMaxRuns: parseNonNegativeInt("RETENTION_MAX_RUNS", env.RETENTION_MAX_RUNS, 50),
   };
 }

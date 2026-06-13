@@ -6,6 +6,8 @@ export const projects = sqliteTable("projects", {
   createdAt: text("created_at").notNull(),
   qualityGate: text("quality_gate"), // JSON QualityGateConfig | null
   visibility: text("visibility").notNull().default("public"), // public|private (read-gating)
+  retentionDays: integer("retention_days"),     // null = inherit global default, 0 = disable
+  retentionMaxRuns: integer("retention_max_runs"), // null = inherit global default, 0 = disable
 });
 
 export const runs = sqliteTable("runs", {

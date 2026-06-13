@@ -5,6 +5,7 @@ import { InProcessBus, RedisBus } from "./events/bus.js";
 import type { EventBus } from "./events/bus.js";
 import { buildDeps } from "./deps.js";
 import { reconcileStale, startReconciler } from "./reconcile.js";
+import { startRetentionSweeper } from "./retention.js";
 import { hashPassword } from "./password.js";
 import type { AppConfig } from "./config.js";
 import type { AppDeps } from "./app.js";
@@ -14,6 +15,7 @@ export interface Runtime {
   queue: JobQueue;
   bus: EventBus;
   stopReconciler: () => void;
+  stopRetention: () => void;
 }
 
 /**
@@ -39,7 +41,9 @@ export async function buildRuntime(config: AppConfig): Promise<Runtime> {
   await reconcileStale(deps.runs, config.generateStaleMs, Date.now());
   const stopReconciler = startReconciler(deps.runs, config.generateStaleMs);
 
-  return { deps, queue, bus, stopReconciler };
+  const stopRetention = startRetentionSweeper(deps, config);
+
+  return { deps, queue, bus, stopReconciler, stopRetention };
 }
 
 /**
