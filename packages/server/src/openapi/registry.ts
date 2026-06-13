@@ -7,7 +7,7 @@ import { z, type ZodTypeAny } from "zod";
 import {
   projectSchema, projectListItemSchema, projectSortSchema, createProjectSchema, setVisibilityRequestSchema, updateProjectRequestSchema,
   runSchema, runSortSchema, sortOrderSchema, trendPointSchema, compareResultSchema,
-  qualityGateConfigSchema, runSummarySchema,
+  qualityGateConfigSchema, runSummarySchema, retentionConfigSchema,
   testHistorySchema, testTraceSchema,
   apiTokenSchema, createdTokenSchema, createTokenRequestSchema,
   notificationSchema, createNotificationRequestSchema,
@@ -187,6 +187,16 @@ const auditRoutes: RouteDecl[] = [
   { method: "get", path: "/api/projects/{projectId}/audit", tag: "audit", summary: "Project audit log", security: SESSION_ONLY, query: auditFilterQuery, ok: { status: 200, schema: z.array(auditEntrySchema) } },
 ];
 
+const retentionResponseSchema = retentionConfigSchema.extend({
+  effectiveRetentionDays: z.number().int(),
+  effectiveRetentionMaxRuns: z.number().int(),
+});
+
+const retentionRoutes: RouteDecl[] = [
+  { method: "get", path: "/api/projects/{projectId}/retention", tag: "retention", summary: "Get retention config", security: SESSION_ONLY, ok: { status: 200, schema: retentionResponseSchema } },
+  { method: "put", path: "/api/projects/{projectId}/retention", tag: "retention", summary: "Set retention config", security: SESSION_ONLY, body: retentionConfigSchema, ok: { status: 200, schema: retentionResponseSchema } },
+];
+
 const allRoutes: RouteDecl[] = [
   ...metaRoutes,
   ...projectRoutes,
@@ -194,6 +204,7 @@ const allRoutes: RouteDecl[] = [
   ...runRoutes,
   ...compareRoutes,
   ...qualityGateRoutes,
+  ...retentionRoutes,
   ...testHistoryRoutes,
   ...tokenRoutes,
   ...notificationRoutes,
