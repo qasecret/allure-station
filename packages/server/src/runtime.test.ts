@@ -29,6 +29,7 @@ function testConfig(): AppConfig {
     storage: { backend: "local", localRoot: join(root, "storage") },
     retentionDays: 30,
     retentionMaxRuns: 50,
+    retentionSweepIntervalMs: 60_000,
   };
 }
 

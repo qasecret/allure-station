@@ -3,11 +3,15 @@ services:
     build: { context: .., dockerfile: docker/Dockerfile }
     ports: ["5050:5050"]
     volumes: ["allure-data:/data"]
-    # Default: zero-config, single-container, in-process job queue.
-    # No environment block needed for the default (QUEUE_DRIVER defaults to "inprocess").
-    #
-    # --- To use S3/MinIO as the storage backend, uncomment and configure: ---
+    # --- Admin credentials (seeded on first boot, upserted on restart) ---
+    # No admin is created unless you explicitly set both env vars.
+    # Override via shell:  ADMIN_EMAIL=me@co.com ADMIN_PASSWORD=s3cret docker compose up
     # environment:
+    #   ADMIN_EMAIL: me@co.com
+    #   ADMIN_PASSWORD: s3cret
+    # Default: zero-config, single-container, in-process job queue.
+    #
+    # --- To use S3/MinIO as the storage backend, uncomment and add to the environment block: ---
     #   STORAGE_DRIVER: s3
     #   S3_ENDPOINT: http://minio:9000
     #   S3_BUCKET: allure

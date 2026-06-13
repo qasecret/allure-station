@@ -10,15 +10,13 @@ if (config.queueDriver !== "bullmq") {
   process.exit(1);
 }
 
-const { deps, queue, bus, stopReconciler, stopRetention } = await buildRuntime(config);
+const { deps, queue, bus } = await buildRuntime(config, "worker");
 
 // Construct the BullMQ Worker — only the worker process calls start, never the API process.
 // wireQueue is the single binding of processor → queue, shared with the in-process path.
 wireQueue(deps);
 
 installShutdown(async () => {
-  stopReconciler();
-  stopRetention();
   await safeClose(() => queue.close());
   await safeClose(() => bus.close());
 });

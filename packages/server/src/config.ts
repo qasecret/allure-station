@@ -47,6 +47,7 @@ export interface AppConfig {
   };
   retentionDays: number;
   retentionMaxRuns: number;
+  retentionSweepIntervalMs: number;
 }
 
 function parseEnum<T extends string>(
@@ -173,5 +174,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     storage,
     retentionDays: parseNonNegativeInt("RETENTION_DAYS", env.RETENTION_DAYS, 30),
     retentionMaxRuns: parseNonNegativeInt("RETENTION_MAX_RUNS", env.RETENTION_MAX_RUNS, 50),
+    retentionSweepIntervalMs: parsePositiveInt("RETENTION_SWEEP_INTERVAL_MS", env.RETENTION_SWEEP_INTERVAL_MS, 60_000),
   };
 }

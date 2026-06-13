@@ -13,6 +13,7 @@ function makeDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     runs: { findExpiredByAge: vi.fn().mockResolvedValue([]), findExcessByCount: vi.fn().mockResolvedValue([]), remove: vi.fn().mockResolvedValue(true) } as any,
     storage: { remove: vi.fn().mockResolvedValue(undefined) } as any,
     audit: { record: vi.fn().mockResolvedValue(undefined) } as any,
+    bus: { publish: vi.fn() } as any,
     now: () => "2026-06-13T00:00:00.000Z",
     newId: () => "audit-id",
     ...overrides,
@@ -20,7 +21,7 @@ function makeDeps(overrides: Partial<AppDeps> = {}): AppDeps {
 }
 
 function makeConfig(overrides: Partial<AppConfig> = {}): AppConfig {
-  return { retentionDays: 30, retentionMaxRuns: 50, ...overrides } as AppConfig;
+  return { retentionDays: 30, retentionMaxRuns: 50, retentionSweepIntervalMs: 60_000, ...overrides } as AppConfig;
 }
 
 describe("sweepRetention", () => {
