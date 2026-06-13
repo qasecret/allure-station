@@ -17,6 +17,13 @@ export interface AppConfigInfo {
   };
 }
 
+export interface RetentionInfo {
+  retentionDays: number | null;
+  retentionMaxRuns: number | null;
+  effectiveRetentionDays: number;
+  effectiveRetentionMaxRuns: number;
+}
+
 export interface ApiClient {
   getConfig(): Promise<AppConfigInfo>;
   listProjects(opts?: { q?: string; sort?: ProjectSort; limit?: number; offset?: number }): Promise<{ items: ProjectListItem[]; total: number }>;
@@ -53,6 +60,8 @@ export interface ApiClient {
   listProjectAudit(projectId: string, opts?: { limit?: number; offset?: number; action?: string; actor?: string; from?: string; to?: string }): Promise<{ items: AuditEntry[]; total: number }>;
   getQualityGate(projectId: string): Promise<QualityGateConfig>;
   setQualityGate(projectId: string, cfg: QualityGateConfig): Promise<QualityGateConfig>;
+  getRetention(projectId: string): Promise<RetentionInfo>;
+  setRetention(projectId: string, cfg: { retentionDays?: number | null; retentionMaxRuns?: number | null }): Promise<RetentionInfo>;
   listTokens(projectId: string): Promise<ApiToken[]>;
   createToken(projectId: string, name: string, expiresInDays?: number): Promise<CreatedToken>;
   deleteToken(projectId: string, tokenId: string): Promise<void>;
@@ -149,6 +158,9 @@ export function createClient(base: string, f: typeof fetch = fetch): ApiClient {
     getQualityGate: (projectId) => json<QualityGateConfig>(`/projects/${projectId}/quality-gate`, { method: "GET" }),
     setQualityGate: (projectId, cfg) =>
       json<QualityGateConfig>(`/projects/${projectId}/quality-gate`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(cfg) }),
+    getRetention: (projectId) => json<RetentionInfo>(`/projects/${projectId}/retention`, { method: "GET" }),
+    setRetention: (projectId, cfg) =>
+      json<RetentionInfo>(`/projects/${projectId}/retention`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(cfg) }),
     listTokens: (projectId) => json<ApiToken[]>(`/projects/${projectId}/tokens`, { method: "GET" }),
     createToken: (projectId, name, expiresInDays) =>
       json<CreatedToken>(`/projects/${projectId}/tokens`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(expiresInDays !== undefined ? { name, expiresInDays } : { name }) }),
