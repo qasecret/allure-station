@@ -177,6 +177,12 @@ export const qualityGateVerdictSchema = z.object({
   checks: z.array(qualityGateCheckSchema),
 });
 
+export const retentionConfigSchema = z.object({
+  retentionDays: z.number().int().min(0).nullable().optional(),
+  retentionMaxRuns: z.number().int().min(0).nullable().optional(),
+});
+export type RetentionConfig = z.infer<typeof retentionConfigSchema>;
+
 export const runSummarySchema = z.object({
   run: runSchema,
   reportPath: z.string(),
@@ -346,12 +352,13 @@ export const auditActionSchema = z.enum([
   "project_visibility_set",
   "quality_gate_set",
   "notification_created", "notification_deleted",
-  "run_deleted",
+  "run_deleted", "run_pruned",
+  "retention_updated",
   "password_changed",
   "password_change_failed",
   "session_revoked",
 ]);
-export const auditActorTypeSchema = z.enum(["user", "token", "anonymous"]);
+export const auditActorTypeSchema = z.enum(["user", "token", "anonymous", "system"]);
 export const auditEntrySchema = z.object({
   id: z.string(),
   at: z.string(),
