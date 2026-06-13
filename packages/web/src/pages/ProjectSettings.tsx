@@ -350,33 +350,52 @@ function RetentionCard({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["retention", projectId], queryFn: () => api.getRetention(projectId) });
   const [form, setForm] = useState<RetentionForm>({ retentionDays: "", retentionMaxRuns: "" });
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingValues, setPendingValues] = useState<{ retentionDays: number | null; retentionMaxRuns: number | null } | null>(null);
   useEffect(() => {
     if (data) setForm({
       retentionDays: data.retentionDays !== null ? String(data.retentionDays) : "",
       retentionMaxRuns: data.retentionMaxRuns !== null ? String(data.retentionMaxRuns) : "",
     });
   }, [data]);
+
+  const parseForm = (): { retentionDays: number | null; retentionMaxRuns: number | null } | null => {
+    const parsedDays = form.retentionDays === "" ? null : parseInt(form.retentionDays, 10);
+    const parsedMaxRuns = form.retentionMaxRuns === "" ? null : parseInt(form.retentionMaxRuns, 10);
+    if (parsedDays !== null && (isNaN(parsedDays) || parsedDays < 0)) { toast.error("Max age must be a non-negative integer"); return null; }
+    if (parsedMaxRuns !== null && (isNaN(parsedMaxRuns) || parsedMaxRuns < 0)) { toast.error("Max runs must be a non-negative integer"); return null; }
+    return { retentionDays: parsedDays, retentionMaxRuns: parsedMaxRuns };
+  };
+
+  const isAggressive = (days: number | null, maxRuns: number | null) =>
+    (days !== null && days >= 1 && days <= 3) || (maxRuns !== null && maxRuns >= 1 && maxRuns <= 3);
+
   const save = useMutation({
-    mutationFn: () => {
-      const cfg: { retentionDays?: number | null; retentionMaxRuns?: number | null } = {};
-      const parsedDays = form.retentionDays === "" ? null : parseInt(form.retentionDays, 10);
-      const parsedMaxRuns = form.retentionMaxRuns === "" ? null : parseInt(form.retentionMaxRuns, 10);
-      if (parsedDays !== null && (isNaN(parsedDays) || parsedDays < 0)) { toast.error("Max age must be a non-negative integer"); return Promise.reject(); }
-      if (parsedMaxRuns !== null && (isNaN(parsedMaxRuns) || parsedMaxRuns < 0)) { toast.error("Max runs must be a non-negative integer"); return Promise.reject(); }
-      cfg.retentionDays = parsedDays;
-      cfg.retentionMaxRuns = parsedMaxRuns;
-      return api.setRetention(projectId, cfg);
-    },
+    mutationFn: (values: { retentionDays: number | null; retentionMaxRuns: number | null }) =>
+      api.setRetention(projectId, values),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["retention", projectId] }); toast.success("Retention saved"); },
     onError: (e) => toast.error(humanizeError(e)),
   });
+
+  const handleSubmit = () => {
+    if (save.isPending) return;
+    const parsed = parseForm();
+    if (!parsed) return;
+    if (isAggressive(parsed.retentionDays, parsed.retentionMaxRuns)) {
+      setPendingValues(parsed);
+      setConfirmOpen(true);
+    } else {
+      save.mutate(parsed);
+    }
+  };
+
   if (isLoading) return <CardSkeleton />;
   if (data === undefined) return null;
   return (
     <Card>
       <CardHeader><CardTitle>Retention</CardTitle></CardHeader>
       <CardContent className="space-y-4">
-        <form onSubmit={(e) => { e.preventDefault(); if (!save.isPending) save.mutate(); }} className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="space-y-4">
           <div className="flex flex-wrap gap-4">
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-muted-foreground">Max age (days)</span>
@@ -391,6 +410,28 @@ function RetentionCard({ projectId }: { projectId: string }) {
         </form>
         <p className="text-xs text-muted-foreground">Leave blank to use the global default. Set 0 to disable that rule for this project. Runs older than the age limit or exceeding the count limit are automatically deleted.</p>
       </CardContent>
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Aggressive retention policy</DialogTitle>
+            <DialogDescription>
+              {(() => {
+                if (!pendingValues) return "";
+                const parts: string[] = [];
+                if (pendingValues.retentionDays !== null && pendingValues.retentionDays >= 1 && pendingValues.retentionDays <= 3)
+                  parts.push(`Runs older than ${pendingValues.retentionDays} day${pendingValues.retentionDays === 1 ? "" : "s"} will be deleted.`);
+                if (pendingValues.retentionMaxRuns !== null && pendingValues.retentionMaxRuns >= 1 && pendingValues.retentionMaxRuns <= 3)
+                  parts.push(`Only the ${pendingValues.retentionMaxRuns} most recent run${pendingValues.retentionMaxRuns === 1 ? "" : "s"} will be kept.`);
+                return parts.join(" ") + " This will take effect within 60 seconds and cannot be undone.";
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+            <Button variant="destructive" disabled={save.isPending} onClick={() => { setConfirmOpen(false); if (pendingValues) save.mutate(pendingValues); }}>Save anyway</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

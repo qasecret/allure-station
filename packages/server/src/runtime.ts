@@ -10,6 +10,8 @@ import { hashPassword } from "./password.js";
 import type { AppConfig } from "./config.js";
 import type { AppDeps } from "./app.js";
 
+export type RuntimeRole = "api" | "worker";
+
 export interface Runtime {
   deps: AppDeps;
   queue: JobQueue;
@@ -20,11 +22,14 @@ export interface Runtime {
 
 /**
  * Construct the shared per-process runtime used by both entrypoints (API `main.ts` + `worker-main.ts`):
- * driver-selected queue + event bus, an open & migrated DB, startup + periodic stale reconciliation,
- * and the assembled AppDeps. The single place the queue/bus driver decision lives. Callers wire the
- * queue processor (`wireQueue`) and — for the API — build & listen the HTTP app.
+ * driver-selected queue + event bus, an open & migrated DB. The single place the queue/bus driver
+ * decision lives. Callers wire the queue processor (`wireQueue`) and — for the API — build & listen
+ * the HTTP app.
+ *
+ * Admin seeding, stale reconciliation, and periodic sweepers only run in the "api" role (exactly one
+ * process) to avoid duplicate work when multiple worker processes are running in BullMQ mode.
  */
-export async function buildRuntime(config: AppConfig): Promise<Runtime> {
+export async function buildRuntime(config: AppConfig, role: RuntimeRole = "api"): Promise<Runtime> {
   // bullmq ⇒ multi-process ⇒ Redis queue + Redis pub/sub bus; otherwise everything in-process.
   // loadConfig validates the bullmq/REDIS_URL invariant, so config.redisUrl is set when bullmq.
   const bullmq = config.queueDriver === "bullmq";
@@ -37,11 +42,15 @@ export async function buildRuntime(config: AppConfig): Promise<Runtime> {
   await migrate();
 
   const deps = buildDeps(config, queue, db, bus);
-  await seedAdmin(deps, config);
-  await reconcileStale(deps.runs, config.generateStaleMs, Date.now());
-  const stopReconciler = startReconciler(deps.runs, config.generateStaleMs);
 
-  const stopRetention = startRetentionSweeper(deps, config);
+  // Startup work and periodic sweepers run only in the API process to avoid
+  // duplicate work (and unnecessary scrypt hashing) when multiple workers boot.
+  if (role === "api") {
+    await seedAdmin(deps, config);
+    await reconcileStale(deps.runs, config.generateStaleMs, Date.now());
+  }
+  const stopReconciler = role === "api" ? startReconciler(deps.runs, config.generateStaleMs) : () => {};
+  const stopRetention = role === "api" ? startRetentionSweeper(deps, config, config.retentionSweepIntervalMs) : () => {};
 
   return { deps, queue, bus, stopReconciler, stopRetention };
 }
